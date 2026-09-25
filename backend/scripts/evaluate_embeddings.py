@@ -50,7 +50,12 @@ def main() -> None:
         print("|---|---|---|---|---|---|---|---|---|---|")
         for label, model_dir in candidates():
             rss0 = process.memory_info().rss / 1e6
-            search, info = build(workdir, model_dir=model_dir)
+            # Each model gets its own store directory. Deleting the previous
+            # model's files instead fails on Windows while their SQLite
+            # handles are still open (WinError 32, 2026-09-25).
+            model_workdir = workdir / label
+            model_workdir.mkdir()
+            search, info = build(model_workdir, model_dir=model_dir)
             model = search.model
             # query embedding latency (median of 20)
             times = []
@@ -65,9 +70,6 @@ def main() -> None:
             rss = process.memory_info().rss / 1e6
             report[label] = {"pooling": model.pooling, "disk_mb": round(disk), "vector_only": vec, "hybrid": hyb, "embed_query_ms_p50": round(times[len(times) // 2], 1), "index_seconds": info["index_seconds"], "rss_mb": round(rss), "rss_delta_mb": round(rss - rss0)}
             print(f"| {label} | {model.pooling} | {disk:.0f} MB | {pct(vec['recall@5'])} | {vec['MRR']:.3f} | {pct(hyb['recall@5'])} | {hyb['MRR']:.3f} | {times[len(times)//2]:.1f} | {info['index_seconds']} | {rss:.0f} |")
-            # each model gets its own stores: drop them so the next one starts clean
-            for p in workdir.glob("*_short_default*"):
-                shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink()
         OUT.parent.mkdir(parents=True, exist_ok=True)
         OUT.write_text(json.dumps(report, indent=2))
         print(f"\nWritten to {OUT}")

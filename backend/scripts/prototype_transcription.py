@@ -2,16 +2,14 @@
 -> correct text, then feed that text into the actual search pipeline and
 confirm the right file surfaces (the full voice-search flow end to end).
 
-Uses macOS's built-in `say` + `afconvert` to generate real speech audio,
-so this specific test only runs on macOS (dev-time only — the feature
-itself has nothing macOS-specific, only this test's audio generation).
+Real speech audio comes from the OS's own speech engine (scripts/
+speech_synth.py): Windows System.Speech, or macOS `say`.
 
 Run with:
-    backend/venv/bin/python backend/scripts/prototype_transcription.py
+    backend\venv\Scripts\python.exe backend\scripts\prototype_transcription.py
 """
 
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -25,22 +23,20 @@ from app.search import SearchService  # noqa: E402
 from app.storage import FileRecordStore, KeywordStore, LanceDBVectorStore  # noqa: E402
 from app.transcription import Transcriber  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import speech_synth  # noqa: E402
+
 MODEL_DIR = default_model_dir(Path(__file__).resolve().parents[1] / "models")
 WHISPER_DIR = Path(__file__).resolve().parents[1] / "models" / "whisper-base.en"
 
 
 def synthesize_speech_wav(text: str, out_path: Path) -> None:
-    aiff_path = out_path.with_suffix(".aiff")
-    subprocess.run(["say", "-o", str(aiff_path), text], check=True)
-    subprocess.run(
-        ["afconvert", "-f", "WAVE", "-d", "LEI16@16000", "-c", "1", str(aiff_path), str(out_path)],
-        check=True,
-    )
+    speech_synth.synthesize_wav(text, out_path)
 
 
 def main():
-    if shutil.which("say") is None or shutil.which("afconvert") is None:
-        print("This test needs macOS's `say`/`afconvert` to generate speech audio — skipping (not a failure).")
+    if not speech_synth.available():
+        print("No OS speech engine (macOS `say`, Windows System.Speech) to generate audio — skipping (not a failure).")
         sys.exit(0)
     if not (WHISPER_DIR / "onnx").exists():
         print("Whisper model not found — run scripts/download_whisper_model.py first.")
@@ -117,13 +113,8 @@ def main():
             "reminder to review the kubernetes deployment configuration before the release",
             voice_memo_path.with_suffix(".wav"),
         )
-        subprocess.run(
-            [
-                "afconvert", "-f", "mp4f", "-d", "aac",
-                str(voice_memo_path.with_suffix(".wav")), str(voice_memo_path),
-            ],
-            check=True,
-        )
+        speech_synth.wav_to_m4a(voice_memo_path.with_suffix(".wav"), voice_memo_path)
+        voice_memo_path.with_suffix(".wav").unlink()  # only the memo itself is under test
 
         discovered = list(discover_files([str(workdir)]))
         assert voice_memo_path in discovered, "discover_files should find .m4a audio files now"

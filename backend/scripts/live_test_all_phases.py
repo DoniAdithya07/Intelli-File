@@ -25,7 +25,6 @@ Prints one line per phase: PASS / FAIL / SKIP, with a reason.
 
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
 import time
@@ -135,6 +134,21 @@ def test_index_folder(tmp: Path) -> bool:
     except Exception as e:
         record("Phase 2/3/4 — Folder indexing", "FAIL", str(e))
         return False
+
+
+def index_demo_corpus(folder: Path) -> None:
+    """Index the Phase 20 demo corpus (the app's bundled sample folder) for
+    the checks that query it by name. Not a phase of its own: a failure
+    here shows up as those checks failing."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from eval_corpus import write_corpus
+
+    write_corpus(folder)
+    try:
+        requests.post(f"{BASE_URL}/index-folder", json={"folder": str(folder)}, timeout=60).raise_for_status()
+        wait_for_job(folder)
+    except Exception as e:
+        print(f"(demo corpus indexing failed: {e})")
 
 
 def test_status_and_forget(tmp: Path) -> None:
@@ -247,16 +261,17 @@ def test_new_file_types() -> None:
 
 
 def test_transcription() -> None:
-    if sys.platform != "darwin":
-        record("Phase 7 — Voice transcription", "SKIP", "live speech synthesis only wired for macOS `say`/`afconvert`")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import speech_synth
+
+    if not speech_synth.available():
+        record("Phase 7 — Voice transcription", "SKIP", "no OS speech engine (macOS `say`, Windows System.Speech) to generate audio")
         return
     tmp_wav = None
     try:
         tmp_dir = Path(tempfile.mkdtemp())
-        aiff = tmp_dir / "voice.aiff"
         wav = tmp_dir / "voice.wav"
-        subprocess.run(["say", "-o", str(aiff), "Find my notes about horizontal scaling"], check=True, capture_output=True)
-        subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16", str(aiff), str(wav)], check=True, capture_output=True)
+        speech_synth.synthesize_wav("Find my notes about horizontal scaling", wav)
         tmp_wav = wav
         with open(wav, "rb") as f:
             r = requests.post(f"{BASE_URL}/transcribe", files={"audio": ("voice.wav", f, "audio/wav")}, timeout=60)
@@ -552,6 +567,7 @@ def main() -> int:
     except Exception:
         original_settings = None
     tmp = Path(tempfile.mkdtemp(prefix="intellifile_live_test_"))
+    demo = Path(tempfile.mkdtemp(prefix="intellifile_live_demo_"))
     try:
         make_sample_folder(tmp)
         indexed_ok = test_index_folder(tmp)
@@ -576,6 +592,12 @@ def main() -> int:
             ]:
                 record(phase, "SKIP", "skipped because indexing failed above")
         test_transcription()
+        # Phases 16-19 query the demo corpus ("gym plan", the invoices, the
+        # sourdough notes). On the Mac dev machine it was already indexed
+        # from ~/Desktop/IntelliFile-Search-Demo, so on any fresh machine
+        # (the Windows port, CI) routing failed with 0 hits everywhere
+        # (2026-09-25). The suite now indexes its own copy and removes it.
+        index_demo_corpus(demo)
         test_activity_memory()
         test_profile_and_recommendations()
         test_routing()
@@ -585,6 +607,12 @@ def main() -> int:
     finally:
         cleanup(tmp)
         shutil.rmtree(tmp, ignore_errors=True)
+        try:
+            requests.post(f"{BASE_URL}/forget-folder", json={"folder": str(demo)}, timeout=60)
+        except Exception:
+            pass
+        cleanup(demo)
+        shutil.rmtree(demo, ignore_errors=True)
         if original_settings is not None:
             try:
                 requests.post(f"{BASE_URL}/settings", json={"remember_activity": original_settings.get("remember_activity", True)}, timeout=10)

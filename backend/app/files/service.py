@@ -20,6 +20,21 @@ from .jobs import Job, JobQueue
 logger = logging.getLogger(__name__)
 
 
+def _real(path) -> str:
+    """os.path.realpath without Windows' extended-length prefix. While a
+    folder is being deleted, realpath() of a path inside it can come back
+    as \\\\?\\C:\\... (the parent is in the delete-pending state, so Python
+    falls back to the raw final-path name); that spelling never matches a
+    watched root, and the deletion was silently dropped. Found on the first
+    Windows run, 2026-09-25, as a timing-dependent Phase 2 failure."""
+    real = os.path.realpath(path)
+    if real.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + real[8:]
+    if real.startswith("\\\\?\\"):
+        return real[4:]
+    return real
+
+
 class _Handler(FileSystemEventHandler):
     def __init__(self, service: "FileWatchService"):
         self._service = service
@@ -158,13 +173,13 @@ class FileWatchService:
     def canonical(self, path: str) -> str:
         """Re-spell a real path under the root (or watched file) as it was
         registered; unchanged when no root matches."""
-        real = os.path.realpath(path)
+        real = _real(path)
         for root in sorted(self._watched, key=len, reverse=True):
-            rr = os.path.realpath(root)
+            rr = _real(root)
             if real == rr or real.startswith(rr + os.sep):
                 return root + real[len(rr):]
         for file in self._watched_files:
-            if os.path.realpath(file) == real:
+            if _real(file) == real:
                 return file
         return path
 
@@ -176,10 +191,10 @@ class FileWatchService:
         # watchdog reports the REAL path (macOS: /private/var/… for a root
         # registered as /var/…), so roots and files are compared by realpath
         # (found 2026-09-21: new files in a symlinked folder were ignored).
-        real = Path(os.path.realpath(path))
-        roots = [Path(os.path.realpath(r)) for r in self._watched if real.is_relative_to(Path(os.path.realpath(r)))]
+        real = Path(_real(path))
+        roots = [Path(_real(r)) for r in self._watched if real.is_relative_to(Path(_real(r)))]
         if not roots:
-            real_files = {os.path.realpath(f) for f in self._watched_files}
+            real_files = {_real(f) for f in self._watched_files}
             return str(real) in real_files and is_indexable(path, self.extensions, must_exist=must_exist)
         root = max(roots, key=lambda r: len(r.parts))
         return is_indexable(real, self.extensions, root=root, must_exist=must_exist)

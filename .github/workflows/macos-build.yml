@@ -1,15 +1,13 @@
-# Builds the macOS app bundle on a real macos-latest runner. Both Windows
-# and macOS are graded/shipping targets (see README's grading constraint).
-# Not wired into the repo's remote yet — this only runs once the repo is
-# pushed to GitHub (see README/Phase 14).
+# Builds the macOS app bundle on a real macos-latest runner. Since
+# 2026-09-25 Windows is the shipping target, so this runs only when started
+# by hand (Actions -> macos-build -> Run workflow): macOS runner minutes
+# cost 10x Windows ones on a private repo.
 #
 # TODO: notarization/code signing — without it Gatekeeper makes the user
 # right-click → Open once (documented in docs/HOW_TO_RUN.md).
 name: macos-build
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch: {}
 
 jobs:

@@ -231,7 +231,7 @@ export function SearchPage({ folderCount, fileCount, onError, compact, onEscape 
                 <span className="material-symbols-outlined mr-1 align-middle" style={{ fontSize: 13 }}>smart_toy</span>Ask
               </button>
               {route && <RouteBadge route={route} />}
-              <span>Model: all-MiniLM-L6-v2{elapsed !== null ? ` · Search: ${elapsed.toFixed(0)} ms` : ""}</span>
+              {elapsed !== null && <span>Search: {elapsed.toFixed(0)} ms</span>}
             </span>
           )}
         </div>

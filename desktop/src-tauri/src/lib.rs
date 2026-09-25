@@ -96,6 +96,9 @@ fn spawn_backend(app: &tauri::AppHandle, token: &str) -> Option<Child> {
         .env("INTELLIFILE_MODELS_DIR", resources.join("models"))
         .env("INTELLIFILE_DATA_DIR", resources.join("data"))
         .env("INTELLIFILE_API_TOKEN", token)
+        // The backend exits on its own when this process is gone (a crash or
+        // a force-close never reaches the kill in RunEvent::Exit).
+        .env("INTELLIFILE_PARENT_PID", std::process::id().to_string())
         .current_dir(exe.parent().unwrap_or(&resources))
         .stdin(Stdio::null())
         .stdout(out)
@@ -121,6 +124,14 @@ fn spawn_backend(app: &tauri::AppHandle, token: &str) -> Option<Child> {
 pub fn run() {
     let token = new_token();
     let app = tauri::Builder::default()
+        // Must be the first plugin: a second launch hands over to this one.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.unminimize();
+                let _ = main.show();
+                let _ = main.set_focus();
+            }
+        }))
         .manage(Backend(Mutex::new(None)))
         .manage(ApiToken(token.clone()))
         .invoke_handler(tauri::generate_handler![api_token])
@@ -151,6 +162,17 @@ pub fn run() {
                 })
                 .build(),
         )
+        .on_window_event(|window, event| {
+            // The hidden Ctrl+Space overlay is a window too, so closing the
+            // main window alone never ended the app: on Windows it lived on
+            // invisibly (no taskbar entry, no tray) with its backend and the
+            // global shortcut. Closing the main window quits.
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { .. } = event {
+                    window.app_handle().exit(0);
+                }
+            }
+        })
         .setup(|app| {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             if let Err(e) = app.global_shortcut().register(OVERLAY_SHORTCUT) {

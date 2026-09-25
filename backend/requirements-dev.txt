@@ -3,3 +3,4 @@
 -r requirements.txt
 fpdf2
 pyflakes
+requests

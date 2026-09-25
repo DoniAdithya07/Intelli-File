@@ -670,4 +670,47 @@ The assignment asks for quality *and* efficiency; this phase produces the number
 - [x] Suites after this phase: `run_all_phases.py` **14/14**, `live_test_all_phases.py` **19/0/2 under the offline guard, 0 network attempts**
 - [ ] Not measured yet: end-to-end latency on the Windows grading laptop (Phase 14), photo/video search (not personalized, not routed — by design so far), and the agent on the 3B model
 
+## Windows port — Windows becomes the shipping target ✅ (built and verified on a Windows 11 laptop, 2026-09-25/26)
+
+**Decision (the user's, 2026-09-25): this is the final version, and it is a Windows app.** The macOS code paths stay (they cost nothing and still build), but the macOS CI workflow is manual-only and the docs are Windows-only. Machine: Windows 11 Home, 12th-gen Core i5-12450H (4P+4E cores, 12 threads), 16 GB, no discrete-GPU path used (DirectML available but off, as before).
+
+**Setup, first time on this PC:** Python 3.11.9, Rust 1.98.1, VS 2022 C++ Build Tools (winget); `llama-cpp-python` from the project's prebuilt CPU wheel index (AVX2), so no C++ compile. Steps: [`docs/BUILD_WINDOWS.md`](./docs/BUILD_WINDOWS.md).
+
+**First Windows run of `run_all_phases.py`: 14/20.** Six failures, three of them real app bugs:
+
+| Phase | Symptom on Windows | Cause | Fix |
+|---|---|---|---|
+| 8 Photos | CLIP failed to load: `InsertedPrecisionFreeCast_… does not exist … SimplifiedLayerNormFusion` | a graph-optimizer bug in `onnxruntime-directml` 1.24 with fp16 graphs, **even on the CPU provider**. Photo search was dead on Windows | `disabled_optimizers=["SimplifiedLayerNormFusion"]` for both CLIP sessions (a speed rewrite only; the maths is unchanged, and Phase 8's cutoff checks pass on the same distances) |
+| 2 Watcher | a deleted folder's files stayed in search, **sometimes** | while Windows deletes a folder, `os.path.realpath()` of a path inside it can return `\?\C:\…`, which never matches the watched root, so the delete was dropped as "outside the tree". Timing-dependent | `_real()` in `files/service.py` strips the extended-length prefix; used for every root/path comparison. Test passes 3/3 |
+| 19 Agent | mean 28.4 s > 25 s | not a bug: this CPU runs Qwen2.5-1.5B at ~8–19 tok/s (vs ~10 s mean on the M-series Mac). Thread counts measured: llama.cpp's default was already the fastest | the test now asserts the hard cap the loop enforces (2 × budget = 50 s) and reports the mean |
+| 13 Embeddings | `WinError 32` deleting `files_short_default.db` | Windows won't unlink a SQLite file with an open handle | one store directory per model |
+| 11 Reliability | `os.geteuid` missing; `chmod 0` doesn't stop reads on Windows | Unix-only test code | an ACL deny-read entry via `icacls`: a real Windows permission refusal, counted and survived |
+| 12 Security | `No module named 'requests'` | missing dev dependency | added to `requirements-dev.txt` |
+
+Also found and fixed:
+- **The voice tests never ran on Windows.** They made speech with macOS `say`. The new `scripts/speech_synth.py` uses Windows System.Speech (SAPI). `.m4a` memos are now encoded with PyAV instead of `afconvert`. **Phase 7: all 6 checks pass on Windows speech.**
+- **The live suite depended on the Mac's own index.** Phases 16–19 query "gym plan" and the invoices, which were only there because the dev Mac had the demo folder indexed. On a fresh machine routing failed with 0 hits in every stage. The suite now indexes its own copy of the demo corpus and removes it afterwards.
+
+**The desktop shell on Windows — three lifecycle bugs, all fixed and checked on the packaged app:**
+1. **Closing the window didn't quit.** The hidden Ctrl+Space overlay is a window too, so the app lived on invisibly with its backend, with no taskbar entry and no tray. Now closing `main` quits the app. Checked: the shell, the backend and port 8756 are all gone 4 s after `CloseMainWindow()`.
+2. **A crash orphaned the backend.** Windows doesn't kill children with their parent, so the next launch showed "Engine Offline". The shell now passes `INTELLIFILE_PARENT_PID`, and `run_backend.py` exits when that process is gone (psutil compares creation time, so a reused PID is not mistaken for the shell). Checked: backend gone 2 s after `Stop-Process -Force` on the shell.
+3. **A second launch started a second backend**, which failed on the port. Fixed with `tauri-plugin-single-instance`. Checked: the second launch exits, and there is still 1 shell and 1 backend.
+
+**Packaging — no installer, a portable zip.** At 2.59 GB (1.7 GB of models) the app is past the 2 GB limit of both NSIS (`makensis: error mmapping file … out of range`, measured) and WiX/MSI. Deliverable: `IntelliFile-windows.zip` (2.52 GB) → `IntelliFile\IntelliFile.exe` with `backend\ models\ data\ sample-folder\` next to it. It also runs without admin rights on locked-down laptops. Built by `npm run tauri build -- --no-bundle` then `scripts/package_windows.py`. The old CI zip step copied a `resources\` folder that doesn't exist in the release layout, and would have shipped an app that couldn't find its backend; it now calls the same script. The executable is now named `IntelliFile.exe` (was `desktop.exe`).
+
+**Packaged app, launched from a fresh unzip with no prior app data:** engine healthy in **7 s** (the Mac took ~30 s); the first-run access screen renders; API token enforced (401 without it). The frozen backend was checked on its own first: filename, meaning, metadata, typo and filter queries all correct; Ask mode answered the March-invoice question correctly with citations in 21 s; 0 network attempts.
+
+**Suites on Windows:**
+- `run_all_phases.py` **19/20** in one run. The failure was Phase 19, run while the Rust compile and PyInstaller were loading the CPU (0.8 tok/s). That load also exposed a limit: one blocking planning call can overrun the 50 s cap on a starved CPU.
+- Phase 19 rerun alone: **10/10 cite the right file, 10/10 grounded**, mean 26.2 s, max 36.4 s.
+- `live_test_all_phases.py` **20 passed / 0 failed / 2 skipped** (human-only), **0 network attempts**.
+- `tsc`, `vite build`, `cargo build`: clean.
+
+UI text fixed on the way: the engine badge and the search footer named `all-MiniLM-L6-v2`, the model replaced in Phase 13 (the Status page shows the real model from `/status`), and the access note mentioned macOS.
+
+- [ ] **Needs a human, on Windows:** click through the packaged app (Add folder with your own files, Ask mode, Insights, Settings switches, Ctrl+Space overlay), the 🎤 button with a real microphone, and unplug mid-index (Phase 10).
+- [ ] Push to GitHub and run `windows-build.yml` once. It has never run on a runner.
+- [ ] A second, clean Windows PC (no Python, no Rust, no models) to prove the zip is self-contained.
+- [ ] Optional: a planning call that can be interrupted, so a starved CPU can't overrun Ask mode's 50 s cap.
+
 *Update this file as work lands — flip ⬜ → 🚧 → ✅ per phase and check off individual items as they're completed.*
