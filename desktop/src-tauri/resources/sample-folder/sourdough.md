@@ -1,0 +1,1 @@
+Feed the sourdough starter with flour and water twice a day. Bulk ferment the dough for five hours at 24 C, then bake at 230 C in a dutch oven, 20 minutes covered and 25 uncovered.

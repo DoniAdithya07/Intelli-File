@@ -1,0 +1,1 @@
+Team meeting 4 April. Decisions: move the release to 22 April, Priya owns the migration runbook, Tom to draft the on-call rota by Friday. Risks: the vendor API rate limit.

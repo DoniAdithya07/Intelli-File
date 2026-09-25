@@ -1,0 +1,1 @@
+API design guidelines: nouns for resources, plural, versioned under /v1, pagination with cursors not offsets, idempotency keys on every POST that creates something.

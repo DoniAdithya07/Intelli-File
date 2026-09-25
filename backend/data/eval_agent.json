@@ -1,0 +1,35 @@
+{
+  "qwen2.5-1.5b-instruct-q4_k_m": {
+    "cited_right": 0.92,
+    "grounded": 1.0,
+    "abstained": 0.8,
+    "false_answers": 1,
+    "figure_warnings": 3,
+    "mean_s": 24.576398495868975,
+    "max_s": 36.57862670900067,
+    "misses": [
+      [
+        "At what temperature do I bake the sourdough, and for how long covered?",
+        [
+          "croissants.txt",
+          "pizza dough.md"
+        ],
+        "To bake sourdough, cover it at 230 C for 20 minutes. For pizza dough, cover it at 65% hydr"
+      ],
+      [
+        "When do I fly to Lisbon, and what is the deposit on my flat?",
+        [
+          "lease agreement.txt"
+        ],
+        "You fly to Lisbon on the 12th and 16th of May. The deposit on your flat is 1,800 euros. [2"
+      ],
+      [
+        "When does my gym membership expire?",
+        [
+          "monthly expenses.csv"
+        ],
+        "FALSE ANSWER: The gym membership for the month of January is noted as 45 in the monthly expens"
+      ]
+    ]
+  }
+}

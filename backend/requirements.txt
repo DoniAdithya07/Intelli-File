@@ -1,0 +1,40 @@
+fastapi
+uvicorn[standard]
+lancedb
+pyarrow
+watchdog
+pypdf
+python-docx
+numpy
+tokenizers
+huggingface_hub
+# DirectML gives GPU acceleration but only exists on Windows; everywhere
+# else (including this Mac dev machine) falls back to plain CPU. Picking
+# the package via an environment marker keeps this the ONE place the
+# Windows/other-OS difference lives — app code just asks onnxruntime what
+# execution providers are available and picks the best one (see
+# app/embeddings/hardware.py).
+onnxruntime; sys_platform != "win32"
+onnxruntime-directml; sys_platform == "win32"
+# Voice search (Phase 7): local speech-to-text via Whisper base.en (ONNX).
+# Since Phase 14 the decoding loop is our own (app/transcription/
+# whisper_onnx.py) on onnxruntime; `transformers` stays only for the
+# log-mel feature extractor and must be installed WITHOUT torch
+# (it is pure Python on that path). optimum and torch are gone: 600 MB
+# that shipped for one greedy loop.
+transformers
+av
+python-multipart
+# Visual search (Phase 8): image decoding/preprocessing/thumbnailing for
+# CLIP-based photo search.
+pillow
+# More file types (2026-09-20): Excel and PowerPoint. CSV/TSV, HTML, code
+# and RTF use the stdlib only. Both are pure Python and work offline.
+openpyxl
+python-pptx
+
+# Phase 19: the local LLM agent (Qwen2.5 GGUF via llama.cpp, CPU, offline).
+llama-cpp-python
+
+# Phase 10: battery / AC / CPU state for power-aware indexing.
+psutil

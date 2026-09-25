@@ -1,0 +1,1 @@
+Lisbon trip, 12 to 16 May. Flights TAP 1234 out at 07:40, back on the 16th at 19:10. Hotel Alfama Suites, booking ref AS-77Q. Day trip to Sintra on the 14th.

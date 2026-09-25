@@ -1,0 +1,1 @@
+Travel insurance certificate TI-2290, covers medical up to 1 million, cancellation up to 3,000 euros, valid 1 May to 31 August. Emergency assistance +44 20 7946 0000.

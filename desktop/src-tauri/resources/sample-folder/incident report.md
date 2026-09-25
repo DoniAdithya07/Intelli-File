@@ -1,0 +1,1 @@
+Incident 2025-02-11: the checkout service ran out of database connections under a flash sale. Root cause: connection pool sized for 50 while 400 workers were running. Fix: pool per worker, plus a circuit breaker.

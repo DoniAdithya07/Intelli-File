@@ -1,0 +1,1 @@
+Swimming drills: catch-up freestyle, fingertip drag, 6-kick switch. Main set 10 x 100 m on 2:00. Breathe every three strokes to balance the stroke.

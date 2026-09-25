@@ -1,0 +1,1 @@
+Wifi setup: router admin at 192.168.1.1, network name HarbourNet, 5 GHz for the office, guest network for visitors. Change the admin password after the engineer visit.

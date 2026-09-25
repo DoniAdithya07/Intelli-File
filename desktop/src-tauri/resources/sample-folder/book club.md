@@ -1,0 +1,1 @@
+Book club meets the first Thursday of the month at Nina's. This month: The Remains of the Day. Bring something to share; I'm on dessert.

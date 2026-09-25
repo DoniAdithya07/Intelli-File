@@ -1,0 +1,5 @@
+# Dev/test-only dependencies — used to generate test fixtures (e.g. real
+# PDFs for extraction tests). Never bundled into the shipped app.
+-r requirements.txt
+fpdf2
+pyflakes
