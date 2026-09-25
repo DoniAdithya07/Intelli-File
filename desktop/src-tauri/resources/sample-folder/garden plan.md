@@ -1,0 +1,1 @@
+Garden plan: tomatoes and basil in the raised bed by the fence, courgettes in the big pots, sow the wildflower strip in April. Compost bin behind the shed.

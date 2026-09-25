@@ -1,0 +1,44 @@
+# Node / frontend
+node_modules/
+dist/
+desktop/dist/
+
+# Rust / Tauri
+target/
+desktop/src-tauri/target/
+
+# Python / backend
+backend/venv/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Local app data / indexes (never commit user data or generated indexes)
+IntelliFile Data/
+*.lance/
+*.db
+
+# Bundled models (large binaries — fetched/pinned via a setup script, not
+# committed; whole directory, since real model repos nest files a level
+# or two deep, e.g. backend/models/all-MiniLM-L6-v2/model.onnx)
+backend/models/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Env / secrets
+.env
+.env.local
+.superpowers/
+
+# Phase 14 build inputs (assembled by scripts/assemble_resources.py — large binaries)
+backend/venv-build/
+backend/build/
+backend/dist/
+desktop/src-tauri/resources/backend/
+desktop/src-tauri/resources/models/

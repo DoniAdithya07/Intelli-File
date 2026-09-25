@@ -1,0 +1,1442 @@
+{
+  "summary": {
+    "off": {
+      "original_first": 0.3888888888888889,
+      "original_above_twin": 0.3888888888888889,
+      "mrr_original": 0.675925925925926,
+      "others_mrr": 0.9404761904761905
+    },
+    "on": {
+      "original_first": 1.0,
+      "original_above_twin": 1.0,
+      "mrr_original": 1.0,
+      "others_mrr": 0.9563492063492063
+    }
+  },
+  "sweep": {
+    "0.003": {
+      "original_first": 1.0,
+      "mrr": 1.0,
+      "others_worse": 0,
+      "others_mrr": 0.9682539682539681
+    },
+    "0.0015": {
+      "original_first": 1.0,
+      "mrr": 1.0,
+      "others_worse": 0,
+      "others_mrr": 0.9682539682539681
+    },
+    "0.001": {
+      "original_first": 1.0,
+      "mrr": 1.0,
+      "others_worse": 0,
+      "others_mrr": 0.9682539682539681
+    },
+    "0.0006": {
+      "original_first": 1.0,
+      "mrr": 1.0,
+      "others_worse": 0,
+      "others_mrr": 0.9563492063492063
+    },
+    "0.0003": {
+      "original_first": 0.8888888888888888,
+      "mrr": 0.925925925925926,
+      "others_worse": 0,
+      "others_mrr": 0.9523809523809523
+    }
+  },
+  "shipped_weight": 0.0006,
+  "ambiguous_off": [
+    {
+      "query": "gym plan",
+      "original_rank": 2,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "lisbon trip",
+      "original_rank": 2,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "insurance policy",
+      "original_rank": 2,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "deploy checklist",
+      "original_rank": 2,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "incident report",
+      "original_rank": 2,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "type:txt insurance",
+      "original_rank": 2,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "type:md scaling",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "sourdough starter",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "autoscaling policies",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "circuit breaker",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "emergency fund",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "how do we add capacity when lots of visitors arrive at once",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "how long does the bread dough need to rise",
+      "original_rank": 3,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "what went wrong during the big sale",
+      "original_rank": 2,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "what is my hotel confirmation for portugal",
+      "original_rank": 2,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "how much do I put aside each month",
+      "original_rank": 3,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "how should the shop's pages be released safely",
+      "original_rank": 2,
+      "twin_rank": 1,
+      "original_first": false,
+      "original_above_twin": false
+    },
+    {
+      "query": "what is the insurance excess, and when is the policy renewal?",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    }
+  ],
+  "ambiguous_on": [
+    {
+      "query": "gym plan",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "lisbon trip",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "insurance policy",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "deploy checklist",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "incident report",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "type:txt insurance",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "type:md scaling",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "sourdough starter",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "autoscaling policies",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "circuit breaker",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "emergency fund",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "how do we add capacity when lots of visitors arrive at once",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "how long does the bread dough need to rise",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "what went wrong during the big sale",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "what is my hotel confirmation for portugal",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "how much do I put aside each month",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "how should the shop's pages be released safely",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    },
+    {
+      "query": "what is the insurance excess, and when is the policy renewal?",
+      "original_rank": 1,
+      "twin_rank": 2,
+      "original_first": true,
+      "original_above_twin": true
+    }
+  ],
+  "others_off": [
+    {
+      "query": "landlord letter",
+      "rank": 1,
+      "top5": [
+        "landlord letter.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "monthly expenses",
+      "rank": 1,
+      "top5": [
+        "monthly expenses.csv"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "kyoto itinerary",
+      "rank": 1,
+      "top5": [
+        "kyoto itinerary.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "packing list",
+      "rank": 1,
+      "top5": [
+        "packing list.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "half marathon plan",
+      "rank": 1,
+      "top5": [
+        "half marathon plan.md"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "rasmalai recipe",
+      "rank": 1,
+      "top5": [
+        "rasmalai recipe.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "march invoice",
+      "rank": 1,
+      "top5": [
+        "march invoice.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "type:csv",
+      "rank": 1,
+      "top5": [
+        "monthly expenses.csv",
+        "running log.csv"
+      ],
+      "tiers": [
+        "strong",
+        "strong"
+      ]
+    },
+    {
+      "query": "in:invoices",
+      "rank": 1,
+      "top5": [
+        "april invoice.txt",
+        "march invoice.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong"
+      ]
+    },
+    {
+      "query": "type:csv expenses",
+      "rank": 1,
+      "top5": [
+        "monthly expenses.csv"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "in:invoices workshop",
+      "rank": 1,
+      "top5": [
+        "april invoice.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "ext:csv river",
+      "rank": 1,
+      "top5": [
+        "running log.csv"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "type:txt dentist",
+      "rank": 1,
+      "top5": [
+        "dentist.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "deposit scheme",
+      "rank": 1,
+      "top5": [
+        "lease agreement.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "dead-letter queue",
+      "rank": 1,
+      "top5": [
+        "queue_design.md"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "cardamom pistachio",
+      "rank": 1,
+      "top5": [
+        "rasmalai recipe.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "midge forecast",
+      "rank": 1,
+      "top5": [
+        "camping trip.md"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "idempotency keys",
+      "rank": 1,
+      "top5": [
+        "api design.md"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "wall sits",
+      "rank": 1,
+      "top5": [
+        "physio exercises.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "bouncy castle",
+      "rank": 1,
+      "top5": [
+        "birthday party.md"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "oat milk",
+      "rank": 1,
+      "top5": [
+        "shopping list.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "guest network",
+      "rank": 1,
+      "top5": [
+        "wifi setup.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "brake pads",
+      "rank": 1,
+      "top5": [
+        "car service.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "what should I do about the leaking tap in the flat",
+      "rank": 1,
+      "top5": [
+        "landlord letter.txt",
+        "caching strategy.txt",
+        "incident report draft.md",
+        "incident report.md"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "which exercises help my knee recover",
+      "rank": 1,
+      "top5": [
+        "physio exercises.txt",
+        "gym plan (old).txt",
+        "gym plan.txt",
+        "swimming drills.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "when is the car due at the mechanic",
+      "rank": 3,
+      "top5": [
+        "insurance policy.txt",
+        "insurance policy 2024.txt",
+        "car service.txt",
+        "march invoice.txt",
+        "landlord letter.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "what do I need to bring for the hike",
+      "rank": 3,
+      "top5": [
+        "camping trip.md",
+        "dentist.txt",
+        "packing list.txt",
+        "book club.md",
+        "gym plan.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "what temperature is the water for the coffee",
+      "rank": 1,
+      "top5": [
+        "coffee notes.txt",
+        "pizza dough.md",
+        "landlord letter.txt",
+        "sourdough_old.md",
+        "sourdough.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "who is responsible for the database move",
+      "rank": 1,
+      "top5": [
+        "meeting notes.txt",
+        "deploy checklist old.md",
+        "deploy checklist.md",
+        "caching strategy.txt",
+        "incident report draft.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "how do we keep old values out of the cache",
+      "rank": 1,
+      "top5": [
+        "caching strategy.txt",
+        "deploy checklist old.md",
+        "deploy checklist.md",
+        "tax notes.md",
+        "pizza dough.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "what am I planting near the fence",
+      "rank": 1,
+      "top5": [
+        "garden plan.md",
+        "deploy checklist.md",
+        "deploy checklist old.md",
+        "camping trip.md",
+        "weeknight curry.md"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "which book is the group reading",
+      "rank": 1,
+      "top5": [
+        "book club.md",
+        "reading list.md",
+        "running log.csv"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "how many guests are coming to the celebration",
+      "rank": 1,
+      "top5": [
+        "birthday party.md",
+        "dentist.txt",
+        "camping trip.md",
+        "lisbon trip draft.md",
+        "kyoto itinerary.txt"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "when is the rent due and how much is the deposit, and what is the notice period?",
+      "rank": 1,
+      "top5": [
+        "lease agreement.txt",
+        "march invoice.txt",
+        "tax notes.md",
+        "monthly expenses.csv",
+        "april invoice.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "what do I train on wednesday, and how long is the long run in the marathon plan?",
+      "rank": 1,
+      "top5": [
+        "half marathon plan.md",
+        "gym plan (old).txt",
+        "gym plan.txt",
+        "running log.csv",
+        "camping trip.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "when do I fly to lisbon and what is the travel insurance certificate number?",
+      "rank": 2,
+      "top5": [
+        "lisbon trip draft.md",
+        "lisbon trip.md",
+        "travel insurance.md",
+        "insurance policy.txt",
+        "insurance policy 2024.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "strong"
+      ]
+    },
+    {
+      "query": "how much is the march invoice and when is the april one due?",
+      "rank": 1,
+      "top5": [
+        "march invoice.txt",
+        "april invoice.txt",
+        "monthly expenses.csv",
+        "tax notes.md",
+        "meeting notes.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "what caused the checkout incident, and what does the deploy checklist say about canaries?",
+      "rank": 3,
+      "top5": [
+        "deploy checklist old.md",
+        "incident report draft.md",
+        "incident report.md",
+        "deploy checklist.md",
+        "april invoice.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "what is the wifi admin address and what should I change after the engineer visit?",
+      "rank": 1,
+      "top5": [
+        "wifi setup.txt",
+        "deploy checklist old.md",
+        "deploy checklist.md",
+        "landlord letter.txt"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "what temperature do I bake the sourdough at, and how long do croissants bake?",
+      "rank": 1,
+      "top5": [
+        "croissants.txt",
+        "sourdough_old.md",
+        "sourdough.md",
+        "pizza dough.md",
+        "weeknight curry.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "who owns the migration runbook, and when is the release date?",
+      "rank": 1,
+      "top5": [
+        "meeting notes.txt",
+        "deploy checklist old.md",
+        "deploy checklist.md",
+        "running log.csv",
+        "reading list.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "what is the tax filing deadline and what percentage of rent can I deduct?",
+      "rank": 1,
+      "top5": [
+        "tax notes.md",
+        "lease agreement.txt",
+        "march invoice.txt",
+        "deploy checklist old.md",
+        "deploy checklist.md"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    }
+  ],
+  "others_on": [
+    {
+      "query": "landlord letter",
+      "rank": 1,
+      "top5": [
+        "landlord letter.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "monthly expenses",
+      "rank": 1,
+      "top5": [
+        "monthly expenses.csv"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "kyoto itinerary",
+      "rank": 1,
+      "top5": [
+        "kyoto itinerary.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "packing list",
+      "rank": 1,
+      "top5": [
+        "packing list.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "half marathon plan",
+      "rank": 1,
+      "top5": [
+        "half marathon plan.md"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "rasmalai recipe",
+      "rank": 1,
+      "top5": [
+        "rasmalai recipe.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "march invoice",
+      "rank": 1,
+      "top5": [
+        "march invoice.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "type:csv",
+      "rank": 1,
+      "top5": [
+        "monthly expenses.csv",
+        "running log.csv"
+      ],
+      "tiers": [
+        "strong",
+        "strong"
+      ]
+    },
+    {
+      "query": "in:invoices",
+      "rank": 1,
+      "top5": [
+        "april invoice.txt",
+        "march invoice.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong"
+      ]
+    },
+    {
+      "query": "type:csv expenses",
+      "rank": 1,
+      "top5": [
+        "monthly expenses.csv"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "in:invoices workshop",
+      "rank": 1,
+      "top5": [
+        "april invoice.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "ext:csv river",
+      "rank": 1,
+      "top5": [
+        "running log.csv"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "type:txt dentist",
+      "rank": 1,
+      "top5": [
+        "dentist.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "deposit scheme",
+      "rank": 1,
+      "top5": [
+        "lease agreement.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "dead-letter queue",
+      "rank": 1,
+      "top5": [
+        "queue_design.md"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "cardamom pistachio",
+      "rank": 1,
+      "top5": [
+        "rasmalai recipe.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "midge forecast",
+      "rank": 1,
+      "top5": [
+        "camping trip.md"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "idempotency keys",
+      "rank": 1,
+      "top5": [
+        "api design.md"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "wall sits",
+      "rank": 1,
+      "top5": [
+        "physio exercises.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "bouncy castle",
+      "rank": 1,
+      "top5": [
+        "birthday party.md"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "oat milk",
+      "rank": 1,
+      "top5": [
+        "shopping list.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "guest network",
+      "rank": 1,
+      "top5": [
+        "wifi setup.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "brake pads",
+      "rank": 1,
+      "top5": [
+        "car service.txt"
+      ],
+      "tiers": [
+        "strong"
+      ]
+    },
+    {
+      "query": "what should I do about the leaking tap in the flat",
+      "rank": 1,
+      "top5": [
+        "landlord letter.txt",
+        "caching strategy.txt",
+        "incident report.md",
+        "incident report draft.md"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "which exercises help my knee recover",
+      "rank": 1,
+      "top5": [
+        "physio exercises.txt",
+        "gym plan.txt",
+        "gym plan (old).txt",
+        "swimming drills.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "when is the car due at the mechanic",
+      "rank": 3,
+      "top5": [
+        "insurance policy.txt",
+        "insurance policy 2024.txt",
+        "car service.txt",
+        "march invoice.txt",
+        "landlord letter.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "what do I need to bring for the hike",
+      "rank": 3,
+      "top5": [
+        "camping trip.md",
+        "dentist.txt",
+        "packing list.txt",
+        "book club.md",
+        "gym plan.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "what temperature is the water for the coffee",
+      "rank": 1,
+      "top5": [
+        "coffee notes.txt",
+        "pizza dough.md",
+        "landlord letter.txt",
+        "sourdough.md",
+        "sourdough_old.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "who is responsible for the database move",
+      "rank": 1,
+      "top5": [
+        "meeting notes.txt",
+        "deploy checklist.md",
+        "deploy checklist old.md",
+        "caching strategy.txt",
+        "incident report.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "how do we keep old values out of the cache",
+      "rank": 1,
+      "top5": [
+        "caching strategy.txt",
+        "deploy checklist old.md",
+        "deploy checklist.md",
+        "tax notes.md",
+        "pizza dough.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "what am I planting near the fence",
+      "rank": 1,
+      "top5": [
+        "garden plan.md",
+        "deploy checklist.md",
+        "deploy checklist old.md",
+        "camping trip.md",
+        "weeknight curry.md"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "which book is the group reading",
+      "rank": 1,
+      "top5": [
+        "book club.md",
+        "reading list.md",
+        "running log.csv"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "how many guests are coming to the celebration",
+      "rank": 1,
+      "top5": [
+        "birthday party.md",
+        "dentist.txt",
+        "camping trip.md",
+        "lisbon trip draft.md",
+        "kyoto itinerary.txt"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "when is the rent due and how much is the deposit, and what is the notice period?",
+      "rank": 1,
+      "top5": [
+        "lease agreement.txt",
+        "march invoice.txt",
+        "tax notes.md",
+        "monthly expenses.csv",
+        "april invoice.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "what do I train on wednesday, and how long is the long run in the marathon plan?",
+      "rank": 1,
+      "top5": [
+        "half marathon plan.md",
+        "gym plan.txt",
+        "gym plan (old).txt",
+        "running log.csv",
+        "camping trip.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "when do I fly to lisbon and what is the travel insurance certificate number?",
+      "rank": 1,
+      "top5": [
+        "lisbon trip.md",
+        "lisbon trip draft.md",
+        "travel insurance.md",
+        "insurance policy.txt",
+        "insurance policy 2024.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "strong"
+      ]
+    },
+    {
+      "query": "how much is the march invoice and when is the april one due?",
+      "rank": 1,
+      "top5": [
+        "march invoice.txt",
+        "april invoice.txt",
+        "monthly expenses.csv",
+        "tax notes.md",
+        "meeting notes.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "what caused the checkout incident, and what does the deploy checklist say about canaries?",
+      "rank": 2,
+      "top5": [
+        "deploy checklist old.md",
+        "incident report.md",
+        "incident report draft.md",
+        "deploy checklist.md",
+        "april invoice.txt"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "what is the wifi admin address and what should I change after the engineer visit?",
+      "rank": 1,
+      "top5": [
+        "wifi setup.txt",
+        "deploy checklist.md",
+        "deploy checklist old.md",
+        "landlord letter.txt"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "what temperature do I bake the sourdough at, and how long do croissants bake?",
+      "rank": 1,
+      "top5": [
+        "croissants.txt",
+        "sourdough.md",
+        "sourdough_old.md",
+        "pizza dough.md",
+        "weeknight curry.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "weak"
+      ]
+    },
+    {
+      "query": "who owns the migration runbook, and when is the release date?",
+      "rank": 1,
+      "top5": [
+        "meeting notes.txt",
+        "deploy checklist.md",
+        "deploy checklist old.md",
+        "running log.csv",
+        "reading list.md"
+      ],
+      "tiers": [
+        "strong",
+        "strong",
+        "strong",
+        "weak",
+        "weak"
+      ]
+    },
+    {
+      "query": "what is the tax filing deadline and what percentage of rent can I deduct?",
+      "rank": 1,
+      "top5": [
+        "tax notes.md",
+        "lease agreement.txt",
+        "march invoice.txt",
+        "deploy checklist old.md",
+        "deploy checklist.md"
+      ],
+      "tiers": [
+        "strong",
+        "weak",
+        "weak",
+        "weak",
+        "weak"
+      ]
+    }
+  ],
+  "same_top5_and_tiers": 41
+}

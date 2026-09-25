@@ -1,0 +1,1 @@
+Tax return notes: home office deduction is 15 percent of rent, keep the invoices folder as evidence, deadline for filing is 31 October. Accountant: Mrs Lindqvist.

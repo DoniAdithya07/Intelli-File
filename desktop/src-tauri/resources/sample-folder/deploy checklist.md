@@ -1,0 +1,1 @@
+Deploy checklist: run the migrations in a transaction, warm the cache, canary 5 percent for 15 minutes, watch p99 latency and error rate, then roll to 100 percent.

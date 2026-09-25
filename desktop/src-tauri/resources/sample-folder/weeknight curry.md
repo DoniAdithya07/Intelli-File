@@ -1,0 +1,1 @@
+Weeknight chickpea curry: onion, garlic, ginger, a tin of tomatoes, a tin of chickpeas, garam masala. Twenty minutes, serves four, freezes well.

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "IntelliFile",
+  "version": "0.1.0",
+  "identifier": "com.intellifile.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "IntelliFile",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true
+      },
+      {
+        "label": "overlay",
+        "title": "IntelliFile Search",
+        "url": "index.html?window=overlay",
+        "width": 680,
+        "height": 460,
+        "center": true,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "skipTaskbar": true,
+        "focus": true
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "entitlements": "entitlements.plist",
+      "signingIdentity": "-",
+      "minimumSystemVersion": "12.0"
+    },
+    "resources": {
+      "resources/backend/": "backend/",
+      "resources/models/": "models/",
+      "resources/data/": "data/",
+      "resources/sample-folder/": "sample-folder/",
+      "resources/HOW_TO_RUN.md": "HOW_TO_RUN.md"
+    }
+  }
+}

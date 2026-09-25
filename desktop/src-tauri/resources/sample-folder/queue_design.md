@@ -1,0 +1,1 @@
+A message queue decouples producers from consumers; consumer groups scale horizontally and partitions preserve ordering. Dead-letter queues hold messages that fail repeatedly.

@@ -1,0 +1,86 @@
+# Builds the macOS app bundle on a real macos-latest runner. Both Windows
+# and macOS are graded/shipping targets (see README's grading constraint).
+# Not wired into the repo's remote yet — this only runs once the repo is
+# pushed to GitHub (see README/Phase 14).
+#
+# TODO: notarization/code signing — without it Gatekeeper makes the user
+# right-click → Open once (documented in docs/HOW_TO_RUN.md).
+name: macos-build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ---- Phase 14: freeze the Python backend and gather the resources ----
+      # The backend has no PyTorch dependency any more (Whisper runs on
+      # onnxruntime alone), so this venv is ~750 MB and freezes cleanly.
+      - name: Backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      # Models are not in the repo (see .gitignore); each script fetches from
+      # Hugging Face and pins the exact files the app expects. This is the
+      # only step in the whole project that touches the network.
+      - name: Download models (~1.7 GB)
+        working-directory: backend
+        run: |
+          python scripts/download_model.py
+          python scripts/download_embedding_model.py
+          python scripts/tune_semantic_thresholds.py bge-small-en-v1.5
+          python scripts/download_whisper_model.py
+          python scripts/download_clip_model.py
+          python scripts/download_reranker_model.py
+          python scripts/download_llm_model.py
+          python scripts/download_wordlist.py
+
+      - name: Freeze backend (PyInstaller)
+        working-directory: backend
+        run: python -m PyInstaller --noconfirm intellifile-backend.spec
+
+      - name: Smoke-test the frozen backend
+        working-directory: backend
+        shell: bash
+        run: |
+          INTELLIFILE_MODELS_DIR="$PWD/models" INTELLIFILE_DATA_DIR="$PWD/data" ./dist/intellifile-backend/intellifile-backend${EXE_SUFFIX:-} --port 8756 &
+          for i in $(seq 1 90); do curl -sf http://127.0.0.1:8756/health && break; sleep 2; done
+          curl -sf http://127.0.0.1:8756/health
+          curl -sf "http://127.0.0.1:8756/search?q=hello" > /dev/null
+          kill %1 || true
+
+      - name: Assemble resources (backend + models + sample folder)
+        working-directory: backend
+        run: python scripts/assemble_resources.py
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm install
+
+      - name: Build Tauri app (.app + .dmg)
+        working-directory: desktop
+        run: npm run tauri build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: intellifile-macos
+          path: |
+            desktop/src-tauri/target/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/release/bundle/macos/*.app

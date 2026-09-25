@@ -1,0 +1,1 @@
+Rahul's birthday party on 7 June at the community hall, 30 guests, order the cake from the bakery on Mill Road, playlist on the shared speaker, bouncy castle from 14:00.
