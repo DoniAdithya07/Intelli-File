@@ -15,6 +15,7 @@ Run with:  backend/venv/bin/python backend/scripts/prototype_reliability.py
 
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -28,6 +29,23 @@ from app.search import SearchService  # noqa: E402
 from app.storage import FileRecordStore, KeywordStore, LanceDBVectorStore  # noqa: E402
 
 MODEL_DIR = default_model_dir(Path(__file__).resolve().parents[1] / "models")
+
+
+def set_readable(path: Path, readable: bool) -> None:
+    """Make a file unreadable to the current user, and back. POSIX: mode 0.
+    Windows: chmod only toggles the read-only flag, so an ACL deny-read
+    entry for the current user does it (a real Windows ACL refusal, which
+    is what the indexer must respect)."""
+    if sys.platform == "win32":
+        user = os.environ.get("USERNAME", "")
+        args = ["/deny", f"{user}:(R)"] if not readable else ["/remove:d", user]
+        subprocess.run(["icacls", str(path), *args], check=True, capture_output=True)
+    else:
+        os.chmod(path, 0o644 if readable else 0)
+
+
+def running_as_root() -> bool:
+    return hasattr(os, "geteuid") and os.geteuid() == 0
 
 
 def main() -> None:
@@ -100,15 +118,15 @@ def main() -> None:
         # --- 3. An unreadable file is a counted failure, then indexed once readable ---
         locked = folder / "locked.txt"
         locked.write_text("secret notes about the venue booking for the reunion " * 3)
-        os.chmod(locked, 0)
+        set_readable(locked, False)
         folder_scan.RECENT_FAILURES.clear()
-        if os.geteuid() == 0:
+        if running_as_root():
             print("3. (running as root — permission check skipped)")
         else:
             index_folder(indexer, str(folder))
             assert any(Path(f["path"]).name == "locked.txt" and "Permission" in f["error"] for f in folder_scan.RECENT_FAILURES), folder_scan.RECENT_FAILURES
             assert record_store.get_by_path(str(locked)) is None or not record_store.get_by_path(str(locked)).indexed
-            os.chmod(locked, 0o644)
+            set_readable(locked, True)
             index_folder(indexer, str(folder))
             assert record_store.get_by_path(str(locked)).indexed
             assert search.search("venue booking reunion", top_k=3)[0]["filename"] == "locked.txt"

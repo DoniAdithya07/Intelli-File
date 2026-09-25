@@ -25,6 +25,34 @@ import uvicorn  # noqa: E402
 _phase("uvicorn imported")
 
 
+def _exit_with_parent() -> None:
+    """Exit when the desktop shell that spawned us is gone. The shell kills
+    the backend on a normal quit, but on Windows a crashed or force-closed
+    parent leaves its children running, and the orphan kept port 8756 so the
+    next launch showed "Engine Offline" (found in the Windows port,
+    2026-09-25). psutil's is_running() compares creation time, so a reused
+    PID is not mistaken for the shell."""
+    pid = os.environ.get("INTELLIFILE_PARENT_PID")
+    if not pid:
+        return
+    import threading
+
+    import psutil
+
+    try:
+        parent = psutil.Process(int(pid))
+    except (ValueError, psutil.Error):
+        return
+
+    def watch() -> None:
+        while parent.is_running():
+            time.sleep(2)
+        print("[shutdown] desktop shell exited — stopping the backend", file=sys.stderr, flush=True)
+        os._exit(0)
+
+    threading.Thread(target=watch, name="parent-watch", daemon=True).start()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=int(os.environ.get("INTELLIFILE_PORT", "8756")))
@@ -33,6 +61,7 @@ def main() -> int:
     # A frozen bundle must not depend on the working directory it was launched from.
     if getattr(sys, "frozen", False):
         os.chdir(os.path.dirname(sys.executable))
+    _exit_with_parent()
     if os.environ.get("INTELLIFILE_IMPORT_TRACE"):
         # Which library's import is slow in the frozen bundle — one at a time.
         import importlib

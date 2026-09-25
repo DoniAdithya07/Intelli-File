@@ -1,10 +1,10 @@
-# Builds the Windows installer on a real windows-latest runner, since the
-# app is developed on macOS and the .exe/.msi can only be built and tested
-# properly on Windows. Not wired into the repo's remote yet — this only
-# runs once the repo is pushed to GitHub (see README/Phase 14).
+# Builds the Windows installer on a real windows-latest runner: runs the
+# regression suite, freezes the backend, bundles the models and builds the
+# NSIS installer + the portable zip. Mirrors docs/BUILD_WINDOWS.md, which is
+# the same steps run by hand on a Windows PC.
 #
-# llama-cpp-python: pip builds it from source on the runner (needs the
-# MSVC toolchain windows-latest already has); CPU only, no CUDA.
+# llama-cpp-python comes as a prebuilt CPU wheel (AVX2) from the project's
+# wheel index, so no C++ compiler step is needed for it.
 name: windows-build
 
 on:
@@ -38,7 +38,7 @@ jobs:
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pyinstaller
+          python -m pip install -r requirements-dev.txt pyinstaller --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
       # Models are not in the repo (see .gitignore); each script fetches from
       # Hugging Face and pins the exact files the app expects. This is the
@@ -54,6 +54,13 @@ jobs:
           python scripts/download_reranker_model.py
           python scripts/download_llm_model.py
           python scripts/download_wordlist.py
+
+      - name: Regression suite (offline guard on)
+        working-directory: backend
+        env:
+          INTELLIFILE_OFFLINE_GUARD: "1"
+          PYTHONIOENCODING: utf-8
+        run: python scripts/run_all_phases.py
 
       - name: Freeze backend (PyInstaller)
         working-directory: backend
@@ -77,26 +84,20 @@ jobs:
         working-directory: desktop
         run: npm install
 
-      - name: Build Tauri app (NSIS .exe + .msi)
+      # No installer: the app is ~2.6 GB (1.7 GB of models) and both NSIS
+      # and WiX/MSI stop at 2 GB ("error mmapping file ... out of range",
+      # measured 2026-09-25). The deliverable is the portable folder, which
+      # also runs without admin rights on locked-down laptops.
+      - name: Build Tauri app (no installer)
         working-directory: desktop
-        run: npm run tauri build
+        run: npm run tauri build -- --no-bundle
 
-      # The portable, no-install fallback: the release folder with the exe
-      # and resources next to it, zipped. Many university laptops block
-      # installers; this one just unzips and runs.
       - name: Portable zip
-        shell: pwsh
-        working-directory: desktop/src-tauri/target/release
-        run: |
-          New-Item -ItemType Directory -Force -Path portable | Out-Null
-          Copy-Item IntelliFile.exe portable/
-          Copy-Item -Recurse resources portable/resources
-          Compress-Archive -Path portable/* -DestinationPath IntelliFile-portable-windows.zip
+        working-directory: backend
+        run: python scripts/package_windows.py
 
       - uses: actions/upload-artifact@v4
         with:
           name: intellifile-windows
-          path: |
-            desktop/src-tauri/target/release/bundle/**/*.exe
-            desktop/src-tauri/target/release/bundle/**/*.msi
-            desktop/src-tauri/target/release/IntelliFile-portable-windows.zip
+          path: desktop/src-tauri/target/release/IntelliFile-windows.zip
+          compression-level: 0

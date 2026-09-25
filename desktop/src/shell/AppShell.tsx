@@ -70,7 +70,7 @@ export function AppShell({ tab, onTab, backendStatus, error, onDismissError, chi
               </span>
             </div>
             <div className="mono text-[10px] leading-tight text-white/45">
-              {backendStatus === "checking" ? "loading the local AI models — about 30 s" : backendStatus === "disconnected" ? "quit IntelliFile fully and open it again" : "100% On-Device · MiniLM + CLIP + Whisper"}
+              {backendStatus === "checking" ? "loading the local AI models — about 30 s" : backendStatus === "disconnected" ? "quit IntelliFile fully and open it again" : "100% On-Device · no internet needed"}
             </div>
           </div>
         </aside>

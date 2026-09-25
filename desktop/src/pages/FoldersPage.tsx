@@ -49,7 +49,7 @@ export function AccessScreen({ onChoose, busy }: { onChoose: (m: Exclude<AccessM
             </button>
           ))}
         </div>
-        <p className="mono mt-5 flex items-center justify-center gap-1 text-[11px] text-white/40"><span className="material-symbols-outlined icon-sm">lock</span>macOS and Windows may show their own permission prompts for protected folders — those are the operating system's, not ours.</p>
+        <p className="mono mt-5 flex items-center justify-center gap-1 text-[11px] text-white/40"><span className="material-symbols-outlined icon-sm">lock</span>Windows may block protected folders (Controlled Folder Access, other users' folders) — that refusal is Windows', not ours, and is shown on the folder's card.</p>
       </div>
     </div>
   );

@@ -67,8 +67,15 @@ class ClipModel:
         # grading laptop). CPU int8 at batch size 1 is deterministic, and
         # costs nothing: 40 ms/image vs 46 ms on CoreML.
         providers = ["CPUExecutionProvider"]
-        self.text_session = ort.InferenceSession(str(text_path), providers=providers)
-        self.vision_session = ort.InferenceSession(str(vision_path), providers=providers)
+        # SimplifiedLayerNormFusion is disabled because onnxruntime-directml
+        # (the Windows wheel, 1.24) crashes loading these fp16 graphs with it
+        # on: the fusion references a Cast node that the fp16->fp32 cast
+        # insertion has already renamed ("InsertedPrecisionFreeCast_...").
+        # Found on the first Windows run, 2026-09-25. The fusion is a speed
+        # rewrite only; turning it off leaves the maths unchanged.
+        disabled = ["SimplifiedLayerNormFusion"]
+        self.text_session = ort.InferenceSession(str(text_path), providers=providers, disabled_optimizers=disabled)
+        self.vision_session = ort.InferenceSession(str(vision_path), providers=providers, disabled_optimizers=disabled)
         self.active_provider = self.text_session.get_providers()[0]
         # Embedding width comes from the export, not a constant: ViT-B/32 and
         # ViT-B/16 are 512-wide, ViT-L/14 is 768. The images table is created
