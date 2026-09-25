@@ -42,3 +42,9 @@ backend/build/
 backend/dist/
 desktop/src-tauri/resources/backend/
 desktop/src-tauri/resources/models/
+
+
+# Local project documentation
+Implimentation_plan.md
+PROJECT_SUMMARY.md
+
