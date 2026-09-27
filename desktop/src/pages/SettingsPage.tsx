@@ -1,330 +1,227 @@
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import pkg from "../../package.json";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { AccessMode, AppSettings, clearEvents, formatAgo, formatBytes, getSettings, listEvents, ResourceMode, setAccess, shortenPath, StatusResponse, updateSettings, UsageEvent } from "../backend";
-import { FILE_MANAGER, MOD_KEY } from "../platform";
+import { AccessMode, AppSettings, askStatus, formatBytes, getSettings, getWindowsRecent, ResourceMode, setAccess, shortenPath, StatusResponse, updateSettings, WindowsRecentStatus } from "../backend";
+import { LegalDoc, PRIVACY, TERMS } from "../legal";
+import { ThemeChoice, useTheme } from "../theme";
+import { PageHeader, Section, Toggle } from "../ui/kit";
 
 interface Props {
   status: StatusResponse | null;
   appDataDir: string | null;
   onError: (m: string | null) => void;
   refresh: () => Promise<void>;
+  onOpen: (page: "index" | "activity") => void;
 }
 
-function Toggle({ on, onChange, disabled, label }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
+/** One setting: its name and what it does on the left, the control on the right. */
+function Row({ title, note, children }: { title: string; note?: ReactNode; children?: ReactNode }) {
   return (
-    <button
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={() => onChange(!on)}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${on ? "bg-accent/70" : "bg-white/15"} ${disabled ? "opacity-50" : ""}`}
-    >
-      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${on ? "left-[22px]" : "left-0.5"}`} />
-    </button>
+    <div className="flex items-center justify-between gap-4 border-b border-rule py-2.5 first:pt-0 last:border-b-0 last:pb-0">
+      <div className="min-w-0">
+        <div className="text-[13.5px]">{title}</div>
+        {note && <div className="mt-0.5 text-[12px] text-ink/60">{note}</div>}
+      </div>
+      {children && <div className="shrink-0">{children}</div>}
+    </div>
   );
 }
 
-const EVENT_LABEL: Record<string, string> = {
-  query: "Searched",
-  result_clicked: "Selected",
-  file_opened: "Opened",
-  file_revealed: `Revealed in ${FILE_MANAGER}`,
-  recommendation_clicked: "Picked a recommendation",
-};
+/** Radio choices drawn as a joined row of rectangular buttons. */
+function Choice<T extends string>({ label, options, value, onChange, disabled }: { label: string; options: { id: T; label: string; hint?: string }[]; value: T | null; onChange: (v: T) => void; disabled?: boolean }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="inline-flex overflow-hidden rounded-md border border-rule-strong">
+      {options.map((o, i) => (
+        <button
+          key={o.id}
+          role="radio"
+          aria-checked={value === o.id}
+          title={o.hint}
+          disabled={disabled}
+          onClick={() => onChange(o.id)}
+          className={`px-3 py-1.5 text-[13px] ${i > 0 ? "border-l border-rule-strong" : ""} ${value === o.id ? "bg-accent text-on-accent" : "text-ink/80 hover:bg-ink/[0.05]"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
-const MODES: { id: ResourceMode; label: string; note: string }[] = [
-  { id: "balanced", label: "Balanced", note: "Index promptly; pause on battery if the switches say so" },
-  { id: "performance", label: "Performance", note: "Never pause for battery or low-power mode" },
-  { id: "battery_saver", label: "Battery Saver", note: "Pause between files and hold live re-indexing while on battery" },
+const THEMES: { id: ThemeChoice; label: string }[] = [
+  { id: "system", label: "Same as Windows" },
+  { id: "day", label: "Day" },
+  { id: "night", label: "Night" },
+];
+const ACCESS: { id: Exclude<AccessMode, "unset">; label: string; hint: string }[] = [
+  { id: "all", label: "Whole computer", hint: "Your folders and drives; system folders skipped" },
+  { id: "limited", label: "Only folders I choose", hint: "Only the folders and files added in Index" },
+  { id: "denied", label: "Nothing", hint: "Nothing is indexed and search is off" },
+];
+const MODES: { id: ResourceMode; label: string; hint: string }[] = [
+  { id: "balanced", label: "Balanced", hint: "Index promptly; pause on battery if the switches say so" },
+  { id: "performance", label: "Performance", hint: "Never pause for battery or power saving" },
+  { id: "battery_saver", label: "Battery saver", hint: "Pause between files and hold live re-indexing on battery" },
 ];
 
-const ACCESS_LABEL: Record<AccessMode, string> = { unset: "not chosen yet", all: "Allow all — whole computer", limited: "Allow limited — chosen folders and files", denied: "Denied — nothing is indexed" };
-
-/** Phase 12 — the file-access policy, changeable after first run. Downgrading asks whether to drop the index. */
-function AccessPanel({ status, onError, refresh }: { status: StatusResponse | null; onError: (m: string | null) => void; refresh: () => Promise<void> }) {
+export function SettingsPage({ status, appDataDir, onError, refresh, onOpen }: Props) {
+  const [theme, setTheme] = useTheme();
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [recent, setRecent] = useState<WindowsRecentStatus | null>(null);
+  const [askModel, setAskModel] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
-  const mode = status?.access?.mode ?? "unset";
-  async function change(next: Exclude<AccessMode, "unset">) {
+  const [legal, setLegal] = useState<LegalDoc | null>(null);
+
+  useEffect(() => {
+    getSettings().then(setSettings).catch((e) => onError(e instanceof Error ? e.message : String(e)));
+    getWindowsRecent().then(setRecent).catch(() => setRecent(null));
+    askStatus().then((s) => setAskModel(s.available ? s.model : null)).catch(() => setAskModel(null));
+  }, [onError]);
+
+  // A setting that fails to save keeps its old value and says so (section 23).
+  async function change(patch: Partial<AppSettings>) {
+    setBusy(true);
+    try {
+      setSettings(await updateSettings(patch));
+      if ("import_windows_recent" in patch) window.setTimeout(() => getWindowsRecent().then(setRecent).catch(() => undefined), 1500);
+    } catch (e) {
+      onError(`The setting could not be saved, so it was left as it was. ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setBusy(false); }
+  }
+
+  const mode = status?.access?.mode ?? null;
+  async function changeAccess(next: Exclude<AccessMode, "unset">) {
     if (next === mode) return;
     let remove = false;
-    if (mode === "all" && next !== "all") {
-      let sure = false;
-      try { sure = await ask("Also remove everything already indexed? Keep = files stay searchable but nothing new is scanned outside what you allow.", { title: "Remove the existing index?", kind: "warning", okLabel: "Remove index", cancelLabel: "Keep" }); }
-      catch { sure = window.confirm("Also remove everything already indexed?"); }
-      remove = sure;
+    if (mode === "all") {
+      try { remove = await ask("Also remove everything already indexed? Keep leaves those files searchable; nothing new is read outside what you allow.", { title: "Remove the existing index?", kind: "warning", okLabel: "Remove index", cancelLabel: "Keep" }); }
+      catch { remove = false; }
     }
     setBusy(true);
     try { const r = await setAccess(next, remove); if (r.error) onError(r.error); await refresh(); }
     catch (e) { onError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
-  return (
-    <div className="panel p-5">
-      <div className="text-[15px] font-semibold">File access</div>
-      <p className="mt-1 text-[13.5px] text-white/60">What IntelliFile is allowed to read. Currently: <b className="text-white/85">{ACCESS_LABEL[mode]}</b>.</p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {(["all", "limited", "denied"] as const).map((m) => (
-          <button key={m} className={`rounded-lg px-3 py-2 text-[13px] transition-colors ${mode === m ? "bg-accent/15 text-accent" : "bg-white/[0.04] text-white/70 hover:text-white"}`} onClick={() => change(m)} disabled={busy}>
-            {ACCESS_LABEL[m].split(" — ")[0]}
-          </button>
-        ))}
-      </div>
-      {mode === "all" && status?.access && <div className="mono mt-2 text-[11px] text-white/40">roots: {status.access.whole_computer_roots.map(shortenPath).join(", ")} · skipped: {status.access.excluded_paths.map(shortenPath).join(", ")}</div>}
-    </div>
-  );
-}
 
-/** Phase 10 — power-aware indexing: the pause switches and the resource mode, applied by the backend at once. */
-function PowerPanel({ status, onError }: { status: StatusResponse | null; onError: (m: string | null) => void }) {
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { getSettings().then(setSettings).catch((e) => onError(e instanceof Error ? e.message : String(e))); }, [onError]);
-
-  async function change(patch: Partial<AppSettings>) {
-    setBusy(true);
-    try { setSettings(await updateSettings(patch)); }
-    catch (e) { onError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
-  }
   const power = status?.power;
-  return (
-    <div className="panel p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-[15px] font-semibold">Indexing & power</div>
-          <p className="mt-1 text-[13.5px] text-white/60">Indexing pauses between files and resumes from the same file when power returns — nothing is rescanned.</p>
-        </div>
-        {power && (
-          <span className={`chip ${power.paused ? "chip-personal" : ""}`}>
-            {power.paused ? `paused — ${power.paused_reason}` : power.has_battery ? (power.on_battery ? `on battery · ${Math.round(power.percent ?? 0)}%` : "plugged in") : "no battery"}
-          </span>
-        )}
-      </div>
-      <div className="mt-3 space-y-2">
-        <div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2.5">
-          <div><div className="text-[13.5px] text-white/85">Pause indexing on battery</div><div className="mt-0.5 text-[12px] text-white/50">Search keeps working; new files wait until you plug in.</div></div>
-          <Toggle on={settings?.pause_on_battery ?? true} onChange={(v) => change({ pause_on_battery: v })} disabled={busy || !settings} label="Pause indexing on battery" />
-        </div>
-        <div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2.5">
-          <div><div className="text-[13.5px] text-white/85">Pause when the system is in Low Power / Battery Saver mode</div><div className="mt-0.5 text-[12px] text-white/50">Follows the OS setting, plugged in or not.</div></div>
-          <Toggle on={settings?.pause_on_low_power ?? true} onChange={(v) => change({ pause_on_low_power: v })} disabled={busy || !settings} label="Pause in low power mode" />
-        </div>
-        <div className="rounded-lg bg-white/[0.03] px-3 py-2.5">
-          <div className="text-[13.5px] text-white/85">Resource mode</div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {MODES.map((m) => (
-              <button
-                key={m.id}
-                className={`rounded-lg px-3 py-2 text-left transition-colors ${settings?.resource_mode === m.id ? "bg-accent/15 text-accent" : "bg-white/[0.04] text-white/70 hover:text-white"}`}
-                onClick={() => change({ resource_mode: m.id })}
-                disabled={busy || !settings}
-                title={m.note}
-              >
-                <div className="text-[13px] font-medium">{m.label}</div>
-                <div className="mt-0.5 max-w-[16rem] text-[11px] text-white/45">{m.note}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-      {power && (
-        <div className="mono mt-3 text-[11px] text-white/40">
-          CPU: machine {Math.round(power.cpu_percent)}% · IntelliFile {power.app_cpu_percent.toFixed(1)}%{power.low_power_mode ? " · OS low power mode on" : ""}{power.pending_jobs ? ` · ${power.pending_jobs} file(s) waiting` : ""}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Phase 16: the activity memory behind personalization — switch, live session, recent events, clear. */
-function ActivityPanel({ status, onError }: { status: StatusResponse | null; onError: (m: string | null) => void }) {
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [personalize, setPersonalize] = useState<boolean | null>(null);
-  const [events, setEvents] = useState<UsageEvent[]>([]);
-  const [total, setTotal] = useState(0);
-  const [busy, setBusy] = useState(false);
-
-  async function load() {
-    try {
-      const [settings, recent] = await Promise.all([getSettings(), listEvents(8)]);
-      setEnabled(settings.remember_activity);
-      setPersonalize(settings.personalize);
-      setEvents(recent.events);
-      setTotal(recent.total);
-    } catch (e) {
-      onError(e instanceof Error ? e.message : String(e));
-    }
-  }
-  useEffect(() => { load(); }, [status?.activity?.events]); // refresh when the count moves
-
-  async function toggle(v: boolean) {
-    setBusy(true);
-    try { setEnabled((await updateSettings({ remember_activity: v })).remember_activity); }
-    catch (e) { onError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
-  }
-  async function togglePersonalize(v: boolean) {
-    setBusy(true);
-    try { setPersonalize((await updateSettings({ personalize: v })).personalize); }
-    catch (e) { onError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
-  }
-  async function clear() {
-    setBusy(true);
-    try { await clearEvents(); await load(); }
-    catch (e) { onError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
-  }
-
-  const session = status?.activity.session;
-  return (
-    <div className="panel p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-[15px] font-semibold">Activity memory</div>
-          <p className="mt-1 text-[13.5px] text-white/60">What you search for and open, kept on this computer, so results and recommendations can learn what matters to you. Nothing is sent anywhere.</p>
-        </div>
-        <Toggle on={enabled ?? true} onChange={toggle} disabled={busy || enabled === null} label="Remember my activity" />
-      </div>
-      <div className="mt-3 flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2.5">
-        <div>
-          <div className="text-[13.5px] text-white/85">Personalize results and recommendations</div>
-          <div className="mt-0.5 text-[12px] text-white/50">Files you use often, at this time of day, of your usual types and topics rank a little higher — each says why. Off = pure retrieval order. See Insights for what has been learned.</div>
-        </div>
-        <Toggle on={personalize ?? true} onChange={togglePersonalize} disabled={busy || personalize === null} label="Personalize results and recommendations" />
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <div className="min-w-0 rounded-lg bg-white/[0.03] px-3 py-2.5">
-          <div className="mono text-[11px] uppercase tracking-wider text-white/45">Remembered</div>
-          <div className="mt-1 text-[20px] font-semibold">{total.toLocaleString()} <span className="text-[12px] font-normal text-white/50">events</span></div>
-        </div>
-        <div className="min-w-0 rounded-lg bg-white/[0.03] px-3 py-2.5">
-          <div className="mono text-[11px] uppercase tracking-wider text-white/45">This session</div>
-          <div className="mt-1 text-[20px] font-semibold">{session?.events ?? 0} <span className="text-[12px] font-normal text-white/50">{session?.session_id ? `since ${formatAgo(session.started_at ?? 0)}` : "idle"}</span></div>
-        </div>
-        <div className="min-w-0 rounded-lg bg-white/[0.03] px-3 py-2.5">
-          <div className="mono text-[11px] uppercase tracking-wider text-white/45">Working on</div>
-          <div className="mt-1 truncate text-[13px] text-white/85">{session?.files.length ? session.files.map((f) => f.split(/[\\/]/).pop()).join(", ") : session?.queries.length ? `“${session.queries[session.queries.length - 1]}”` : "—"}</div>
-        </div>
-      </div>
-      {events.length > 0 && (
-        <div className="mt-3 space-y-1">
-          {events.map((e) => (
-            <div key={e.id} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-3 py-1.5 text-[12.5px]">
-              <span className="chip">{EVENT_LABEL[e.kind] ?? e.kind}</span>
-              <span className="truncate text-white/80">{e.kind === "query" ? `“${e.query}”` : e.path ? shortenPath(e.path) : e.file_id}</span>
-              <span className="mono ml-auto shrink-0 text-[11px] text-white/40">{formatAgo(e.ts)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="mt-3 flex items-center justify-between">
-        <span className="mono text-[11px] text-white/40">{enabled === false ? "Paused — nothing new is recorded" : "Sessions split after 30 minutes of inactivity"}</span>
-        <button className="btn-ghost px-3 py-1.5 text-[13px] hover:text-error" onClick={clear} disabled={busy || total === 0}>
-          <span className="material-symbols-outlined mr-1 align-middle icon-sm">delete_sweep</span>Clear activity
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2.5">
-      <span className="text-[13.5px] text-white/60">{label}</span>
-      <span className="mono text-[13px] text-white/85">{value}</span>
-    </div>
-  );
-}
-
-const SHORTCUTS: [string, string][] = [
-  ["Ctrl+Space", "Open quick search from anywhere"],
-  ["↑ / ↓", "Move between results"],
-  ["Enter", "Open the selected result"],
-  [`${MOD_KEY}+Enter`, `Reveal the selected result in ${FILE_MANAGER}`],
-  ["Escape", "Clear the search box, then close"],
-];
-
-/**
- * Mostly informational: the Activity memory switch (Phase 16) is the first
- * real control; resource-mode (Phase 10), personalization (Phase 17) and
- * reranking (Phase 18) toggles join it as those backend features land.
- */
-export function SettingsPage({ status, appDataDir, onError, refresh }: Props) {
   const models = status?.models;
+  const modelRows: [string, string | null | undefined][] = [
+    ["Text search", models?.text?.name],
+    ["Photos", models?.photos?.name ?? null],
+    ["Speech", models?.speech?.name ?? null],
+    ["Reranker", models?.reranker?.name ?? null],
+    ["Text in images", models?.ocr ? `${models.ocr.name} (${models.ocr.language})` : null],
+    ["Ask", askModel],
+  ];
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
-      <div>
-        <h2 className="text-[26px] font-semibold tracking-tight">Settings</h2>
-        <p className="mt-1 text-[14px] text-white/55">Everything here runs on this computer. There is nothing to sign in to and nothing to configure remotely.</p>
+    <div className="h-full overflow-y-auto pr-1">
+      <PageHeader title="Settings" subtitle="Everything here is saved on this computer. There is nothing to sign in to." />
+      <div className="mt-4 columns-2 gap-4 [&>*]:mb-4 [&>*]:break-inside-avoid">
+        <Section title="Appearance">
+          <Choice label="Theme" options={THEMES} value={theme} onChange={setTheme} />
+        </Section>
+
+        <Section title="Search">
+          <Row title="Personalize results" note="Among results that are nearly tied, files you use more rank higher, and each says why.">
+            <Toggle on={settings?.personalize ?? true} onChange={(v) => change({ personalize: v })} disabled={busy || !settings} label="Personalize results" />
+          </Row>
+        </Section>
+
+        <Section title="File access" note={mode === "all" && status ? <>Reads <span className="mono">{status.access.whole_computer_roots.map(shortenPath).join(", ")}</span>; system folders are skipped.</> : "What IntelliFile may read."}>
+          <Choice label="File access" options={ACCESS} value={mode === "unset" ? null : mode} onChange={changeAccess} disabled={busy || !mode} />
+          <button className="mt-3 block text-[13px] text-ink/70 hover:text-ink hover:underline" onClick={() => onOpen("index")}>Manage indexed folders</button>
+        </Section>
+
+        <Section title="Privacy">
+          <Row title="Remember my activity" note="Searches and opened files, kept on this computer for For You and ranking.">
+            <Toggle on={settings?.remember_activity ?? true} onChange={(v) => change({ remember_activity: v })} disabled={busy || !settings} label="Remember my activity" />
+          </Row>
+          {recent?.available && (
+            <Row
+              title="Learn from files you opened in Windows"
+              note={recent.enabled && recent.last ? `${recent.last.indexed_files} recently opened files are indexed here; ${recent.last.events_added} opens added.` : "Reads Windows' Recent items list so For You can start today. Off by default."}
+            >
+              <Toggle on={recent.enabled} onChange={(v) => change({ import_windows_recent: v })} disabled={busy || !settings?.remember_activity} label="Learn from files you opened in Windows" />
+            </Row>
+          )}
+          <Row title="Activity history" note="See or clear everything that was remembered.">
+            <button className="btn-secondary px-3 py-1 text-[13px]" onClick={() => onOpen("activity")}>Open Activity</button>
+          </Row>
+        </Section>
+
+        <Section title="Indexing" note={power ? (power.paused ? `Paused: ${power.paused_reason}` : power.has_battery ? (power.on_battery ? `On battery, ${Math.round(power.percent ?? 0)}%` : "Plugged in") : "No battery") : undefined}>
+          <Row title="Pause on battery" note="Search keeps working; new files wait until you plug in.">
+            <Toggle on={settings?.pause_on_battery ?? true} onChange={(v) => change({ pause_on_battery: v })} disabled={busy || !settings} label="Pause on battery" />
+          </Row>
+          <Row title="Pause in power-saving mode" note="Follows Windows' battery saver, plugged in or not.">
+            <Toggle on={settings?.pause_on_low_power ?? true} onChange={(v) => change({ pause_on_low_power: v })} disabled={busy || !settings} label="Pause in power-saving mode" />
+          </Row>
+          <div className="pt-2.5">
+            <div className="mb-1.5 text-[13.5px]">Resource mode</div>
+            <Choice label="Resource mode" options={MODES} value={settings?.resource_mode ?? null} onChange={(m) => change({ resource_mode: m })} disabled={busy || !settings} />
+          </div>
+        </Section>
+
+        <Section title="Local models" note="They run on this computer's processor.">
+          <ul className="space-y-1.5 text-[13px]">
+            {modelRows.map(([label, name]) => (
+              <li key={label} className="flex items-center gap-3">
+                <span className="w-28 shrink-0">{label}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-ink/60">{name ?? ""}</span>
+                <span className={`shrink-0 text-[12px] ${name ? "text-ink/75" : name === null ? "text-error" : "text-ink/50"}`}>{name ? "Installed" : name === null ? "Not installed" : "Checking"}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
+        <Section title="Network">
+          <p className="text-[13px] text-ink/80">IntelliFile never connects to the internet. There is no account, no update check and no usage reporting; every model runs on this computer.</p>
+        </Section>
+
+        <Section title="About">
+          <dl className="space-y-1.5 text-[13px]">
+            <div className="flex justify-between gap-3"><dt className="text-ink/65">Version</dt><dd className="mono">{pkg.version}</dd></div>
+            <div className="flex justify-between gap-3"><dt className="shrink-0 text-ink/65">Index location</dt><dd className="mono truncate" title={appDataDir ?? undefined}>{appDataDir ? shortenPath(appDataDir) : "Loading"}</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-ink/65">Index size</dt><dd className="mono">{status ? formatBytes(status.index_size_bytes) : "Loading"}</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-ink/65">Licence</dt><dd>MIT, open source</dd></div>
+          </dl>
+          <div className="mt-3 flex gap-2">
+            <button className="btn-secondary px-3 py-1 text-[13px]" onClick={() => setLegal(PRIVACY)}>Privacy policy</button>
+            <button className="btn-secondary px-3 py-1 text-[13px]" onClick={() => setLegal(TERMS)}>Terms of use</button>
+          </div>
+        </Section>
       </div>
 
-      <AccessPanel status={status} onError={onError} refresh={refresh} />
-      <PowerPanel status={status} onError={onError} />
-      <ActivityPanel status={status} onError={onError} />
+      {legal && <LegalDialog doc={legal} onClose={() => setLegal(null)} />}
+    </div>
+  );
+}
 
-      <div className="panel p-5">
-        <div className="text-[15px] font-semibold">About</div>
-        <div className="mt-3 space-y-1.5">
-          <Row label="Version" value={pkg.version} />
-          <Row label="Index location" value={appDataDir ?? "—"} />
-          <Row label="Index size on disk" value={status ? formatBytes(status.index_size_bytes) : "—"} />
-          <Row label="Indexed files" value={status ? status.totals.files.toLocaleString() : "—"} />
+/** Privacy policy or terms of use, readable in place (text from ../legal.ts). */
+function LegalDialog({ doc, onClose }: { doc: LegalDoc; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-6" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={doc.title} className="anim-dialog panel flex max-h-full w-full max-w-[680px] flex-col shadow-palette" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-baseline justify-between border-b border-rule px-6 py-4">
+          <div>
+            <h3 className="text-[18px] font-semibold">{doc.title}</h3>
+            <div className="text-[12px] text-ink/60">Last updated {doc.updated}</div>
+          </div>
+          <button className="btn-ghost px-2 py-1 text-[13px]" onClick={onClose} autoFocus>Close</button>
         </div>
-      </div>
-
-      <div className="panel p-5">
-        <div className="text-[15px] font-semibold">Active models</div>
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center gap-3 rounded-lg bg-white/[0.03] px-3 py-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.04] text-accent"><span className="material-symbols-outlined icon-sm">notes</span></span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[14px] font-medium">{models?.text.name ?? "—"}</div>
-              <div className="mono mt-0.5 text-[11px] text-white/45">Text semantic search · {models?.text.dimension ?? "—"}-dim · {models?.text.provider ?? "—"}</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-lg bg-white/[0.03] px-3 py-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.04] text-accent"><span className="material-symbols-outlined icon-sm">image</span></span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[14px] font-medium">{models?.photos?.name ?? "Not installed"}</div>
-              <div className="mono mt-0.5 text-[11px] text-white/45">
-                {models?.photos ? `Photo search · ${models.photos.dimension}-dim · ${models.photos.precision}` : "Photo search unavailable without this model"}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-lg bg-white/[0.03] px-3 py-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.04] text-accent"><span className="material-symbols-outlined icon-sm">graphic_eq</span></span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[14px] font-medium">{models?.speech?.name ?? "Not installed"}</div>
-              <div className="mono mt-0.5 text-[11px] text-white/45">
-                {models?.speech ? "Voice search + spoken audio transcripts" : "Voice search unavailable without this model"}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="panel p-5">
-        <div className="text-[15px] font-semibold">Keyboard shortcuts</div>
-        <div className="mt-3 space-y-1.5">
-          {SHORTCUTS.map(([key, desc]) => (
-            <div key={key} className="flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2.5">
-              <span className="text-[13.5px] text-white/60">{desc}</span>
-              <span className="kbd">{key}</span>
-            </div>
+        <div className="overflow-y-auto px-6 py-4">
+          {doc.sections.map((sec) => (
+            <section key={sec.heading} className="mb-4 max-w-[68ch]">
+              <h4 className="text-[14px] font-semibold">{sec.heading}</h4>
+              {sec.body.map((para, i) => <p key={i} className="mt-1.5 text-[14px] leading-relaxed text-ink/80 select-text">{para}</p>)}
+            </section>
           ))}
-        </div>
-      </div>
-
-      <div className="panel flex items-start gap-4 p-5">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/[0.04]"><span className="material-symbols-outlined text-accent">lock</span></div>
-        <div>
-          <div className="flex items-center gap-2 text-[15px] font-semibold">100% on-device privacy<span className="chip chip-accent">local only</span></div>
-          <p className="mt-1 text-[13.5px] text-white/60">No telemetry, no cloud calls, no account. Your activity memory above stays in the index folder on this computer and can be cleared at any time.</p>
         </div>
       </div>
     </div>

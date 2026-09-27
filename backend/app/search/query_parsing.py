@@ -7,6 +7,7 @@ Pulled out of the raw query before it reaches search:
 - Metadata filters (Phase 18 grew these beyond `type:` so the router has
   a real metadata tier to route to):
     type:pdf / ext:pdf      file extension
+    type:document           a kind: document, image, audio or video (the Search tabs)
     after:2025-03-01        modified on/after (also `after:2025`, `after:2025-03`)
     before:2025-03-01       modified before
     size:>10mb  size:<500kb file size (b, kb, mb, gb)
@@ -20,6 +21,17 @@ than not supporting it yet. Deferred, not silently dropped.
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+
+from ..files.discovery import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, TEXT_EXTENSIONS, VIDEO_EXTENSIONS
+
+# The Search tabs (docs/UI_DESIGN.md section 2) filter by kind rather than
+# by one extension: `type:document`, `type:image`, `type:audio`.
+TYPE_GROUPS: dict[str, frozenset[str]] = {
+    "document": frozenset(e.lstrip(".") for e in TEXT_EXTENSIONS),
+    "image": frozenset(e.lstrip(".") for e in IMAGE_EXTENSIONS),
+    "audio": frozenset(e.lstrip(".") for e in AUDIO_EXTENSIONS),
+    "video": frozenset(e.lstrip(".") for e in VIDEO_EXTENSIONS),  # the Photos page's newest-first grid
+}
 
 _QUOTED_PHRASE_RE = re.compile(r'"([^"]+)"')
 _FILTER_RE = re.compile(r"\b(type|ext|after|before|size|in):(\S+)", re.IGNORECASE)
@@ -56,8 +68,10 @@ class QueryFilters:
         return parts
 
     def matches(self, path: str, size: int, modified_time: float) -> bool:
-        if self.file_type and not path.lower().endswith("." + self.file_type):
-            return False
+        if self.file_type:
+            ext = path.lower().rsplit(".", 1)[-1] if "." in path else ""
+            if ext not in TYPE_GROUPS.get(self.file_type, (self.file_type,)):
+                return False
         if self.after is not None and modified_time < self.after:
             return False
         if self.before is not None and modified_time >= self.before:
@@ -116,6 +130,7 @@ def parse_query(raw_query: str) -> ParsedQuery:
         key, value = m.group(1).lower(), m.group(2)
         if key in ("type", "ext"):
             file_type = value.lower().lstrip(".")
+            file_type = {"documents": "document", "images": "image", "videos": "video"}.get(file_type, file_type)
         elif key == "after":
             after = _parse_date(value)
         elif key == "before":

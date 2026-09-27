@@ -1,1 +1,0 @@
-Pizza dough at 65 percent hydration, 00 flour, 48 hour cold ferment in the fridge. Stretch by hand, never roll; bake on a steel at the oven's maximum.

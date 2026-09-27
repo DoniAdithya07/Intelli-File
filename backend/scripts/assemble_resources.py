@@ -63,6 +63,14 @@ def main() -> int:
                 continue
             size = copy_tree(src, RESOURCES / "models" / name, MODEL_SKIP_DIRS)
             print(f"  model {name}: {size / 1e6:.0f} MB")
+    # A model dropped from MODELS_TO_SHIP must not linger from an older build:
+    # all-MiniLM-L6-v2 (90 MB) did until 2026-09-27, and shipped in the zip.
+    models_dir = RESOURCES / "models"
+    if models_dir.exists():
+        for stale in models_dir.iterdir():
+            if stale.is_dir() and stale.name not in MODELS_TO_SHIP:
+                shutil.rmtree(stale)
+                print(f"  removed stale model: {stale.name}")
     size = copy_tree(BACKEND / "data", RESOURCES / "data")
     print(f"data: {size / 1e6:.1f} MB")
 

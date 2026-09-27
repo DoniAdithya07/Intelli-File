@@ -541,16 +541,10 @@
       "query": "what should I do about the leaking tap in the flat",
       "rank": 1,
       "top5": [
-        "landlord letter.txt",
-        "caching strategy.txt",
-        "incident report draft.md",
-        "incident report.md"
+        "landlord letter.txt"
       ],
       "tiers": [
-        "strong",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -559,14 +553,12 @@
       "top5": [
         "physio exercises.txt",
         "gym plan (old).txt",
-        "gym plan.txt",
-        "swimming drills.md"
+        "gym plan.txt"
       ],
       "tiers": [
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -576,14 +568,12 @@
         "insurance policy.txt",
         "insurance policy 2024.txt",
         "car service.txt",
-        "march invoice.txt",
-        "landlord letter.txt"
+        "march invoice.txt"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "weak",
         "weak"
       ]
     },
@@ -594,15 +584,13 @@
         "camping trip.md",
         "dentist.txt",
         "packing list.txt",
-        "book club.md",
-        "gym plan.txt"
+        "book club.md"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -610,17 +598,11 @@
       "rank": 1,
       "top5": [
         "coffee notes.txt",
-        "pizza dough.md",
-        "landlord letter.txt",
-        "sourdough_old.md",
-        "sourdough.md"
+        "pizza dough.md"
       ],
       "tiers": [
         "strong",
-        "strong",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -646,35 +628,21 @@
       "rank": 1,
       "top5": [
         "caching strategy.txt",
-        "deploy checklist old.md",
-        "deploy checklist.md",
-        "tax notes.md",
-        "pizza dough.md"
+        "deploy checklist old.md"
       ],
       "tiers": [
         "strong",
-        "strong",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
       "query": "what am I planting near the fence",
       "rank": 1,
       "top5": [
-        "garden plan.md",
-        "deploy checklist.md",
-        "deploy checklist old.md",
-        "camping trip.md",
-        "weeknight curry.md"
+        "garden plan.md"
       ],
       "tiers": [
-        "strong",
-        "weak",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -695,18 +663,10 @@
       "query": "how many guests are coming to the celebration",
       "rank": 1,
       "top5": [
-        "birthday party.md",
-        "dentist.txt",
-        "camping trip.md",
-        "lisbon trip draft.md",
-        "kyoto itinerary.txt"
+        "birthday party.md"
       ],
       "tiers": [
-        "strong",
-        "weak",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -715,16 +675,12 @@
       "top5": [
         "lease agreement.txt",
         "march invoice.txt",
-        "tax notes.md",
-        "monthly expenses.csv",
-        "april invoice.txt"
+        "tax notes.md"
       ],
       "tiers": [
         "strong",
         "strong",
-        "strong",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -734,15 +690,13 @@
         "half marathon plan.md",
         "gym plan (old).txt",
         "gym plan.txt",
-        "running log.csv",
-        "camping trip.md"
+        "running log.csv"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -770,15 +724,13 @@
         "march invoice.txt",
         "april invoice.txt",
         "monthly expenses.csv",
-        "tax notes.md",
-        "meeting notes.txt"
+        "tax notes.md"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -788,31 +740,23 @@
         "deploy checklist old.md",
         "incident report draft.md",
         "incident report.md",
-        "deploy checklist.md",
-        "april invoice.txt"
+        "deploy checklist.md"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
       "query": "what is the wifi admin address and what should I change after the engineer visit?",
       "rank": 1,
       "top5": [
-        "wifi setup.txt",
-        "deploy checklist old.md",
-        "deploy checklist.md",
-        "landlord letter.txt"
+        "wifi setup.txt"
       ],
       "tiers": [
-        "strong",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -822,15 +766,13 @@
         "croissants.txt",
         "sourdough_old.md",
         "sourdough.md",
-        "pizza dough.md",
-        "weeknight curry.md"
+        "pizza dough.md"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -839,34 +781,22 @@
       "top5": [
         "meeting notes.txt",
         "deploy checklist old.md",
-        "deploy checklist.md",
-        "running log.csv",
-        "reading list.md"
+        "deploy checklist.md"
       ],
       "tiers": [
         "strong",
         "strong",
-        "strong",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
       "query": "what is the tax filing deadline and what percentage of rent can I deduct?",
       "rank": 1,
       "top5": [
-        "tax notes.md",
-        "lease agreement.txt",
-        "march invoice.txt",
-        "deploy checklist old.md",
-        "deploy checklist.md"
+        "tax notes.md"
       ],
       "tiers": [
-        "strong",
-        "weak",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     }
   ],
@@ -1109,16 +1039,10 @@
       "query": "what should I do about the leaking tap in the flat",
       "rank": 1,
       "top5": [
-        "landlord letter.txt",
-        "caching strategy.txt",
-        "incident report.md",
-        "incident report draft.md"
+        "landlord letter.txt"
       ],
       "tiers": [
-        "strong",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1127,14 +1051,12 @@
       "top5": [
         "physio exercises.txt",
         "gym plan.txt",
-        "gym plan (old).txt",
-        "swimming drills.md"
+        "gym plan (old).txt"
       ],
       "tiers": [
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1144,14 +1066,12 @@
         "insurance policy.txt",
         "insurance policy 2024.txt",
         "car service.txt",
-        "march invoice.txt",
-        "landlord letter.txt"
+        "march invoice.txt"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "weak",
         "weak"
       ]
     },
@@ -1162,15 +1082,13 @@
         "camping trip.md",
         "dentist.txt",
         "packing list.txt",
-        "book club.md",
-        "gym plan.txt"
+        "book club.md"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1178,17 +1096,11 @@
       "rank": 1,
       "top5": [
         "coffee notes.txt",
-        "pizza dough.md",
-        "landlord letter.txt",
-        "sourdough.md",
-        "sourdough_old.md"
+        "pizza dough.md"
       ],
       "tiers": [
         "strong",
-        "strong",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1214,35 +1126,21 @@
       "rank": 1,
       "top5": [
         "caching strategy.txt",
-        "deploy checklist old.md",
-        "deploy checklist.md",
-        "tax notes.md",
-        "pizza dough.md"
+        "deploy checklist old.md"
       ],
       "tiers": [
         "strong",
-        "strong",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
       "query": "what am I planting near the fence",
       "rank": 1,
       "top5": [
-        "garden plan.md",
-        "deploy checklist.md",
-        "deploy checklist old.md",
-        "camping trip.md",
-        "weeknight curry.md"
+        "garden plan.md"
       ],
       "tiers": [
-        "strong",
-        "weak",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1263,18 +1161,10 @@
       "query": "how many guests are coming to the celebration",
       "rank": 1,
       "top5": [
-        "birthday party.md",
-        "dentist.txt",
-        "camping trip.md",
-        "lisbon trip draft.md",
-        "kyoto itinerary.txt"
+        "birthday party.md"
       ],
       "tiers": [
-        "strong",
-        "weak",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1283,16 +1173,12 @@
       "top5": [
         "lease agreement.txt",
         "march invoice.txt",
-        "tax notes.md",
-        "monthly expenses.csv",
-        "april invoice.txt"
+        "tax notes.md"
       ],
       "tiers": [
         "strong",
         "strong",
-        "strong",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1302,15 +1188,13 @@
         "half marathon plan.md",
         "gym plan.txt",
         "gym plan (old).txt",
-        "running log.csv",
-        "camping trip.md"
+        "running log.csv"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1338,15 +1222,13 @@
         "march invoice.txt",
         "april invoice.txt",
         "monthly expenses.csv",
-        "tax notes.md",
-        "meeting notes.txt"
+        "tax notes.md"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1356,31 +1238,23 @@
         "deploy checklist old.md",
         "incident report.md",
         "incident report draft.md",
-        "deploy checklist.md",
-        "april invoice.txt"
+        "deploy checklist.md"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
       "query": "what is the wifi admin address and what should I change after the engineer visit?",
       "rank": 1,
       "top5": [
-        "wifi setup.txt",
-        "deploy checklist.md",
-        "deploy checklist old.md",
-        "landlord letter.txt"
+        "wifi setup.txt"
       ],
       "tiers": [
-        "strong",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1390,15 +1264,13 @@
         "croissants.txt",
         "sourdough.md",
         "sourdough_old.md",
-        "pizza dough.md",
-        "weeknight curry.md"
+        "pizza dough.md"
       ],
       "tiers": [
         "strong",
         "strong",
         "strong",
-        "strong",
-        "weak"
+        "strong"
       ]
     },
     {
@@ -1407,34 +1279,22 @@
       "top5": [
         "meeting notes.txt",
         "deploy checklist.md",
-        "deploy checklist old.md",
-        "running log.csv",
-        "reading list.md"
+        "deploy checklist old.md"
       ],
       "tiers": [
         "strong",
         "strong",
-        "strong",
-        "weak",
-        "weak"
+        "strong"
       ]
     },
     {
       "query": "what is the tax filing deadline and what percentage of rent can I deduct?",
       "rank": 1,
       "top5": [
-        "tax notes.md",
-        "lease agreement.txt",
-        "march invoice.txt",
-        "deploy checklist old.md",
-        "deploy checklist.md"
+        "tax notes.md"
       ],
       "tiers": [
-        "strong",
-        "weak",
-        "weak",
-        "weak",
-        "weak"
+        "strong"
       ]
     }
   ],

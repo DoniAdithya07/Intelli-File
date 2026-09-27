@@ -12,6 +12,10 @@ Two kinds of model turn:
   does not exist is dropped, and an answer with no valid citation is
   reported as "not found in your files" rather than trusted.
 
+Before the first planning turn the whole question is searched once with
+the router choosing the tier ("first look"), and the closest sentence of
+the top strong result is sent as a quick answer while the model works.
+
 Limits: MAX_TOOL_CALLS tool calls and BUDGET_SECONDS wall-clock per
 question; the model only ever sees the retrieved snippets, never files.
 Every step is emitted as an event so the UI can show the trace.
@@ -29,6 +33,7 @@ MAX_TOOL_CALLS = 4
 BUDGET_SECONDS = 25.0
 MAX_ANSWER_TOKENS = 350
 MAX_PLAN_TOKENS = 220
+PLAN_DEADLINE_FACTOR = 1.3  # planning stops at 1.3 x budget, leaving time for the answer inside 2 x budget
 
 _CITATION_RE = re.compile(r"\[(\d{1,2})\]")
 
@@ -38,6 +43,7 @@ You cannot read files directly. You have tools:
 - read_more: read more of a numbered source. Arguments: "source" (its number).
 - answer: stop searching and write the answer from the sources found so far.
 Rules: split a multi-part question into separate searches. Prefer "keyword" when the question quotes exact words or names; "smart" for concepts. Use "filters" ONLY when the question itself names a file type, a folder or a date — otherwise leave filters empty. When results contain the answer, choose "answer". After at most {max_calls} tool calls you must answer.
+Keep "thought" under 12 words.
 Respond with ONE JSON object only: {{"thought": "...", "action": "search"|"read_more"|"answer", "query": "...", "mode": "...", "filters": "...", "source": 0}}"""
 
 ANSWER_SYSTEM = """You are IntelliFile's answer step. The numbered sources are excerpts from the user's own files; a source may be a table flattened into one line (column names first, then rows). Answer the question in one or two sentences using the facts in the sources, and end each sentence with the number of the source it came from in brackets, e.g. [2]. Copy numbers, dates and names exactly as they appear. Never answer from memory."""
@@ -49,11 +55,12 @@ ANSWER_SYSTEM = """You are IntelliFile's answer step. The numbered sources are e
 
 
 class Agent:
-    def __init__(self, llm, toolbox_factory: Callable[[], Toolbox], max_tool_calls: int = MAX_TOOL_CALLS, budget_seconds: float = BUDGET_SECONDS):
+    def __init__(self, llm, toolbox_factory: Callable[[], Toolbox], max_tool_calls: int = MAX_TOOL_CALLS, budget_seconds: float = BUDGET_SECONDS, first_look: bool = True):
         self.llm = llm
         self.toolbox_factory = toolbox_factory
         self.max_tool_calls = max_tool_calls
         self.budget_seconds = budget_seconds
+        self.first_look = first_look  # search the whole question before the first planning turn
 
     def _mentions(self, word: str, text: str) -> bool:
         """One-word yes/no from the model: does this source mention or give a <word>?"""
@@ -75,25 +82,54 @@ class Agent:
         context = tools.context()
         yield {"type": "context", "context": context}
 
-        messages = [
-            {"role": "system", "content": PLANNER_SYSTEM.format(max_calls=self.max_tool_calls)},
-            {"role": "user", "content": self._first_user_message(question, context)},
-        ]
         calls = 0       # tool calls actually executed
         turns = 0       # planning turns, including ones that led nowhere
         strategies: list[dict] = []
         seen_searches: set[tuple[str, str, str]] = set()
         fallback_used = False
+        quick_sent = False
+
+        # First look (improvement 3, 2026-09-26): the whole question goes
+        # straight to search with the router choosing the tier — the step it
+        # already gets right (hit@5 100% on the labelled corpus). Measured
+        # before this: the model's first JSON plan alone took ~7.7 s of a
+        # 20.5 s mean, planning 18.1 s in all. The model now plans from real
+        # results: search again with other words, mode or filters, read more,
+        # or answer — the strategy choice stays the model's.
+        first_found: list = []
+        if question and self.first_look and self.budget_seconds > 0:
+            calls += 1
+            seen_searches.add((question.lower(), "auto", ""))
+            yield {"type": "tool_call", "tool": "search", "args": {"query": question, "mode": "auto", "filters": ""}, "call": calls, "first_look": True}
+            first_found, route = tools.search(question, mode="auto")
+            strategies.append({"query": question, "mode": "auto", "filters": "", "route": route["tier"], "results": len(first_found)})
+            yield {"type": "tool_result", "tool": "search", "sources": [s.as_dict() for s in first_found], "route": route, "call": calls}
+            quick = _quick_answer(question, first_found)
+            if quick is not None:
+                quick_sent = True
+                yield {"type": "quick_answer", "text": quick[0], "source": quick[1].as_dict()}
+        messages = [
+            {"role": "system", "content": PLANNER_SYSTEM.format(max_calls=self.max_tool_calls)},
+            {"role": "user", "content": self._first_user_message(question, context, tools.render(first_found) if first_found else None, calls, self.max_tool_calls)},
+        ]
         while True:
             elapsed = time.perf_counter() - t_start
             if calls >= self.max_tool_calls or turns >= self.max_tool_calls + 2 or elapsed > self.budget_seconds:
                 reason = "tool-call limit reached" if calls >= self.max_tool_calls else "time budget reached" if elapsed > self.budget_seconds else "planning limit reached"
-                yield {"type": "thought", "text": f"{reason} — answering with what was found.", "system": True}
+                yield {"type": "thought", "text": f"{reason}, answering with what was found.", "system": True}
                 break
             turns += 1
             t0 = time.perf_counter()
             try:
-                raw = self.llm.chat(messages, max_tokens=MAX_PLAN_TOKENS, json_only=True)
+                # A planning turn may run at most until PLAN_DEADLINE_FACTOR x
+                # the budget; past that the agent answers with what it has, so
+                # the answer still fits inside the 2 x budget hard cap.
+                # No JSON grammar (json_only=False): measured 2026-09-26 on 5
+                # questions, llama.cpp's grammar sampling made each planning
+                # turn 3-4x slower (9.1 s vs 2.0 s, 4.3 s vs 1.3 s) for the
+                # same action and valid JSON every time; _parse_plan tolerates
+                # stray text and anything unparseable means "answer now".
+                raw = self.llm.chat(messages, max_tokens=MAX_PLAN_TOKENS, json_only=False, deadline=t_start + self.budget_seconds * PLAN_DEADLINE_FACTOR, label="plan")
             except Exception as e:  # the model failing must surface, not hang the UI
                 yield {"type": "error", "message": f"The local model failed: {type(e).__name__}: {e}"}
                 return
@@ -116,11 +152,11 @@ class Agent:
                     # words on its own). After that: nudge and let it answer.
                     if not fallback_used and (question.lower(), "auto", "") not in seen_searches:
                         fallback_used = True
-                        yield {"type": "thought", "text": "the plan repeated itself — searching the whole question instead", "system": True}
+                        yield {"type": "thought", "text": "the plan repeated itself, so the whole question is searched instead", "system": True}
                         query, mode, filters = question, "auto", ""
                         signature = (query.lower(), mode, filters)
                     else:
-                        yield {"type": "thought", "text": "that exact search already ran — asking for different words or an answer", "system": True}
+                        yield {"type": "thought", "text": "that exact search already ran; asking for different words or an answer", "system": True}
                         messages.append({"role": "assistant", "content": json.dumps(plan)})
                         messages.append({"role": "user", "content": f"That exact search already ran and its results are above. Either search with DIFFERENT words (or a different mode), or choose \"answer\" if the sources contain the answer. Tool calls used: {calls} of {self.max_tool_calls}. Next JSON:"})
                         continue
@@ -129,17 +165,22 @@ class Agent:
                 yield {"type": "tool_call", "tool": "search", "args": {"query": query, "mode": mode, "filters": filters}, "call": calls}
                 found, route = tools.search(query, mode=mode, filters=filters)
                 if route.get("fallback_from_mode"):
-                    yield {"type": "thought", "text": f"{route['fallback_from_mode']} mode found nothing — retried with auto routing ({route['tier']})", "system": True}
+                    yield {"type": "thought", "text": f"{route['fallback_from_mode']} mode found nothing, retried with automatic routing ({route['tier']})", "system": True}
                 if not found and filters:
                     # A filter the question did justify can still be wrong
                     # for this index (no PDFs at all, say): retry unfiltered
                     # rather than burn the whole budget on empty results.
-                    yield {"type": "thought", "text": f"nothing matched with filters \u201c{filters}\u201d — retrying without them", "system": True}
+                    yield {"type": "thought", "text": f"nothing matched with filters \u201c{filters}\u201d, retrying without them", "system": True}
                     found, route = tools.search(query, mode=mode, filters="")
                     filters = ""
                 strategies.append({"query": query, "mode": mode, "filters": filters, "route": route["tier"], "results": len(found)})
                 observation = tools.render(found)
                 yield {"type": "tool_result", "tool": "search", "sources": [s.as_dict() for s in found], "route": route, "call": calls}
+                if not quick_sent:
+                    quick = _quick_answer(question, found)
+                    if quick is not None:
+                        quick_sent = True
+                        yield {"type": "quick_answer", "text": quick[0], "source": quick[1].as_dict()}
                 messages.append({"role": "assistant", "content": json.dumps(plan)})
                 messages.append({"role": "user", "content": f"Search results:\n{observation}\n\nSources so far: {len(tools.sources)}. Tool calls used: {calls} of {self.max_tool_calls}. Next JSON:"})
                 continue
@@ -154,7 +195,7 @@ class Agent:
                 continue
             # "answer", or anything malformed: stop planning.
             if action != "answer" or plan.get("malformed"):
-                yield {"type": "thought", "text": "the plan was not a valid tool call — answering with what was found.", "system": True}
+                yield {"type": "thought", "text": "the plan was not a valid tool call, answering with what was found.", "system": True}
             break
 
         if not tools.sources:
@@ -198,11 +239,16 @@ class Agent:
         if not valid and not not_found and supported:
             valid = supported
             inferred = True
+        trimmed = _trim_citations(body, valid, tools)
+        if trimmed != valid:
+            dropped_names = ", ".join(tools.get(n).filename for n in valid if n not in trimmed)
+            yield {"type": "thought", "text": f"dropped a citation the answer does not need ({dropped_names})", "system": True}
+            valid = trimmed
         if valid:
             text = f"{body} {' '.join(f'[{n}]' for n in valid)}" if inferred else _CITATION_RE.sub(lambda m: m.group(0) if int(m.group(1)) in valid else "", text)
         if not valid:
             if not not_found:
-                yield {"type": "thought", "text": "the answer could not be traced to any retrieved source — rejected", "system": True}
+                yield {"type": "thought", "text": "the answer could not be traced to any retrieved source, so it was rejected", "system": True}
             text = "I couldn't find that in your files."
             not_found = True
         grounded = bool(valid) and not not_found
@@ -218,7 +264,7 @@ class Agent:
             seen = [s for s in tools.sources if s.number not in valid]  # retrieved but not cited, cited ones first
             problem = _unsupported_premise(question, body, [tools.get(n) for n in valid], judge=self._mentions, retrieved=seen)
             if problem:
-                yield {"type": "thought", "text": f"the sources don't support the question's premise ({problem}) — declining to answer", "system": True}
+                yield {"type": "thought", "text": f"the sources don't support the question's premise ({problem}), so no answer is given", "system": True}
                 text = "I couldn't find that in your files."
                 grounded, valid, not_found = False, [], True
         citations = [tools.get(n).as_dict() for n in valid]
@@ -230,20 +276,26 @@ class Agent:
         if grounded:
             missing = _unverified_numbers(body, [tools.get(n) for n in valid])
             if missing:
-                warnings.append(f"Not in the cited sources — check before relying on it: {', '.join(missing)}")
-                yield {"type": "thought", "text": f"figure(s) {', '.join(missing)} in the answer are not in the cited sources — flagged", "system": True}
+                warnings.append(f"Not in the cited sources, check before relying on it: {', '.join(missing)}")
+                yield {"type": "thought", "text": f"figure(s) {', '.join(missing)} in the answer are not in the cited sources, flagged", "system": True}
         yield {"type": "answer", "text": text, "citations": citations, "grounded": grounded, "citations_inferred": inferred, "warnings": warnings}
         yield {"type": "done", "seconds": round(time.perf_counter() - t_start, 1), "tool_calls": calls, "strategies": strategies, "sources": [s.as_dict() for s in tools.sources]}
 
     @staticmethod
-    def _first_user_message(question: str, context: dict) -> str:
+    def _first_user_message(question: str, context: dict, first_results: str | None = None, calls: int = 0, max_calls: int = MAX_TOOL_CALLS) -> str:
         lines = [f"Question: {question}"]
         session = context.get("session") or {}
         if session.get("files"):
             lines.append("The user is currently working with: " + ", ".join(Path(f).name for f in session["files"][:5]))
         if context.get("topics"):
             lines.append("The user's usual topics: " + "; ".join(context["topics"]))
-        lines.append("Plan the first tool call. JSON only:")
+        if first_results is not None:
+            lines.append(f"A first search of the whole question returned:\n{first_results}\n\nTool calls used: {calls} of {max_calls}.")
+            lines.append("If these sources answer every part of the question, choose \"answer\"; otherwise search with different words, mode or filters. JSON only:")
+        elif calls:
+            lines.append(f"A first search of the whole question found nothing. Tool calls used: {calls} of {max_calls}. Search with different words, mode or filters. JSON only:")
+        else:
+            lines.append("Plan the first tool call. JSON only:")
         return "\n".join(lines)
 
 
@@ -407,6 +459,91 @@ def _ground(text: str, tools: Toolbox) -> list[int]:
             scored.append((score, source.number))
     scored.sort(reverse=True)
     return [n for _, n in scored[:2]]
+
+
+def _answer_words(text: str, source) -> dict[str, int]:
+    """Distinctive answer words this source contains, weighted like _ground
+    (a number counts double)."""
+    hay = source.text.lower() if source is not None else ""
+    return {w: 2 if any(ch.isdigit() for ch in w) else 1 for w in _distinctive(text) if w in hay}
+
+
+def _trim_citations(text: str, numbers: list[int], tools: Toolbox) -> list[int]:
+    """Keep a citation only if its source adds something to the answer
+    (improvement 3, 2026-09-26). The live Windows run cited the April
+    invoice next to the March one for a March-invoice question: both share
+    "invoice", "due", "euros" and the answer's April due date, so both pass
+    _ground. Greedy cover: the source covering the most answer words is
+    kept, then each further one only if it adds weight >= MIN_CITATION_GAIN
+    of answer words the kept ones lack — a two-part answer drawing on two
+    files keeps both. Order follows the answer's own citations."""
+    if len(numbers) < 2:
+        return numbers
+    covers = {n: _answer_words(text, tools.get(n)) for n in numbers}
+    ranked = sorted(numbers, key=lambda n: -sum(covers[n].values()))
+    kept, covered = [ranked[0]], set(covers[ranked[0]])
+    for n in ranked[1:]:
+        gain = sum(weight for w, weight in covers[n].items() if w not in covered)
+        if gain >= MIN_CITATION_GAIN:
+            kept.append(n)
+            covered |= set(covers[n])
+    return [n for n in numbers if n in kept]
+
+
+MIN_CITATION_GAIN = 2
+
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n+")
+_WORD_RE = re.compile(r"[a-z0-9]+")
+QUICK_MIN_OVERLAP = 2  # question words a sentence must share to be shown as the quick answer
+QUICK_SOURCES = 3      # strong sources whose sentences compete for the quick answer
+
+
+def _quick_answer(question: str, found: list) -> tuple[str, object] | None:
+    """The sentence of the best strong source that shares the most words
+    with the question, shown while the model is still thinking (improvement
+    3). No model involved: it is retrieval, labelled as such in the UI, and
+    replaced by the real answer. None when nothing is close enough."""
+    q = {w for w in _WORD_RE.findall(question.lower()) if len(w) >= 3 and w not in _PREMISE_FILLER}  # 3 letters: "due", "fee"
+    q |= {w[:-1] for w in q if w.endswith("s") and len(w) > 4}  # "invoices" ~ "invoice"
+    if not q:
+        return None
+
+    def covered_by_name(source) -> set[str]:
+        named = {n for n in _WORD_RE.findall(Path(source.filename).stem.lower()) if len(n) >= 3}
+        return {w for w in q if any(n.startswith(w) or w.startswith(n) for n in named)}
+
+    # The top strong sources each offer their best sentence; the winner is
+    # the best sentence plus half a point per question word the file's name
+    # covers. Measured 2026-09-26 on the 30-question key: taking only the
+    # first strong source quoted the April invoice for "the March invoice";
+    # sorting by name alone let "monthly expenses.csv" ("month") push out the
+    # savings plan. Weak sources are never quoted: they would mislead.
+    dated = {w for w in q if w in _MONTHS or w in _WEEKDAYS}
+    need = min(QUICK_MIN_OVERLAP, len(q))  # "how much was the deposit" has one distinctive word
+    choice, choice_score = None, 0.0
+    for source in [s for s in found if s.confidence == "strong" and s.text][:QUICK_SOURCES]:
+        # Words the file's name already answers ("march" for march invoice.txt)
+        # need not be repeated in the sentence (packaged-app check 2026-09-26:
+        # "when is the march invoice due" got no quick answer because the
+        # invoice text never says "March"); inside the sentence they count
+        # half, since the name already says them.
+        by_name = covered_by_name(source)
+        for sentence in _SENTENCE_RE.split(source.text):
+            sentence = sentence.strip(" -•\t")
+            if not 3 <= len(sentence.split()) <= 60:
+                continue
+            words = set(_WORD_RE.findall(sentence.lower()))
+            hits = {w for w in q if w in words or any(t.startswith(w) for t in words)}
+            if not hits or len(hits | by_name) < need:  # the sentence itself must say something asked
+                continue
+            if any(d not in hits and d not in by_name for d in dated):
+                continue  # the question's month/weekday ("in September") is not what this sentence is about
+            score = (len(hits - by_name) + 0.5 * len(hits & by_name)
+                     + 0.5 * bool(_NUMBER_RE.search(sentence))  # facts people ask for are mostly figures and dates
+                     + 0.5 * len(by_name))
+            if score > choice_score:
+                choice, choice_score = (sentence, source), score
+    return choice
 
 
 def _parse_plan(raw: str) -> dict:

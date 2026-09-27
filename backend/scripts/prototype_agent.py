@@ -69,7 +69,7 @@ class ScriptedLLM:
         self.absent = absent  # words the premise judge is scripted to deny
         self.calls = 0
 
-    def chat(self, messages, max_tokens=0, json_only=False, temperature=0.0):
+    def chat(self, messages, max_tokens=0, json_only=False, temperature=0.0, deadline=None, label=None):
         if not json_only and "mention or give a" in messages[-1]["content"]:  # the premise judge's yes/no question
             word = messages[-1]["content"].rsplit("mention or give a ", 1)[1].split("?")[0]
             return "no" if word in self.absent else "yes"
@@ -125,7 +125,7 @@ def main() -> None:
             ],
             answer="The kitchen tap has been dripping since March [1]. The deposit of 1,800 euros was paid on 3 January [1]. Unrelated claim [9].",
         )
-        agent = Agent(llm, toolbox)
+        agent = Agent(llm, toolbox, first_look=False)
         events, answer, done = collect(agent, "In the txt letter, what is wrong with the tap and how much was the deposit?")
         calls = [e for e in events if e["type"] == "tool_call"]
         assert [c["tool"] for c in calls] == ["search", "search", "read_more"], calls
@@ -140,22 +140,22 @@ def main() -> None:
 
         llm = ScriptedLLM(plans=[{"thought": "look", "action": "find", "query": "gym plan wednesday", "mode": "auto", "filters": ""}, {"thought": "done", "action": "respond"}],
                           answer="On Wednesday you train back and biceps: deadlifts, pull-ups and barbell rows.")
-        events, answer, done = collect(Agent(llm, toolbox), "what do I train on wednesday")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "what do I train on wednesday")
         assert answer["grounded"] and answer["citations_inferred"] and answer["citations"][0]["filename"] == "gym plan.txt" and answer["text"].endswith("[1]"), answer
         llm = ScriptedLLM(plans=[{"thought": "look", "action": "search", "query": "gym plan wednesday", "mode": "auto", "filters": ""}], answer="The capital of France is Paris and the moon is made of cheese.")
-        events, answer, done = collect(Agent(llm, toolbox), "what do I train on wednesday")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "what do I train on wednesday")
         assert not answer["grounded"] and "couldn't find" in answer["text"], answer
         print("A1b. Action aliases accepted; an uncited but source-backed answer is grounded by overlap; an unrelated answer is rejected: OK")
 
         llm = ScriptedLLM(plans=[{"thought": f"search {i}", "action": "search", "query": f"gym plan {i}", "mode": "auto", "filters": ""} for i in range(10)], answer="Wednesday is back and biceps [1].")
-        agent = Agent(llm, toolbox, max_tool_calls=3)
+        agent = Agent(llm, toolbox, max_tool_calls=3, first_look=False)
         events, answer, done = collect(agent, "what do I train on wednesday")
         assert done["tool_calls"] == 3 and any(e.get("system") and "limit" in e["text"] for e in events), done
         assert answer["grounded"] and answer["citations"][0]["filename"] == "gym plan.txt"
         print("A2. A planner that never stops is cut off at the tool-call limit and still answers from what it found: OK")
 
         llm = ScriptedLLM(plans=[{"thought": "same", "action": "search", "query": "Wednesday training", "mode": "keyword", "filters": ""}] * 6, answer="Wednesday is back and biceps.")
-        events, answer, done = collect(Agent(llm, toolbox), "what do I train on wednesday")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "what do I train on wednesday")
         calls = [e for e in events if e["type"] == "tool_call"]
         assert calls[0]["args"]["mode"] == "keyword" and any(e.get("system") and "keyword mode found nothing" in e["text"] for e in events), "a manual mode that finds nothing must fall back to auto"
         assert any(e.get("system") and "repeated itself" in e["text"] for e in events) and calls[1]["args"]["query"] == "what do I train on wednesday", calls
@@ -163,30 +163,30 @@ def main() -> None:
         print("A2b. Keyword mode that finds nothing falls back to auto; a plan that repeats itself gets one whole-question search, then the planning limit ends it: OK")
 
         llm = ScriptedLLM(plans=[{"thought": "nothing to search", "action": "answer"}], answer="Made-up answer [1].")
-        events, answer, done = collect(Agent(llm, toolbox), "what colour is the moon")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "what colour is the moon")
         assert not answer["grounded"] and answer["citations"] == [] and "couldn't find" in answer["text"]
         assert done["tool_calls"] == 0
         llm = ScriptedLLM(plans=[{"thought": "look", "action": "search", "query": "car insurance premium", "mode": "auto", "filters": ""}], answer="The car insurance premium is 210 euros for six months [1].")
-        events, answer, done = collect(Agent(llm, toolbox), "how much is the car insurance premium")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "how much is the car insurance premium")
         assert answer["grounded"] and answer["warnings"] and "210" in answer["warnings"][0], answer
         llm = ScriptedLLM(plans=[{"thought": "look", "action": "search", "query": "car insurance premium", "mode": "auto", "filters": ""}], answer="The car insurance premium is 610 euros for six months [1].")
-        events, answer, done = collect(Agent(llm, toolbox), "how much is the car insurance premium")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "how much is the car insurance premium")
         assert answer["grounded"] and not answer["warnings"], answer
         print("A2c. A figure the cited sources do not contain (210 vs 610) is flagged; a correct figure passes: OK")
 
         plan = [{"thought": "look", "action": "search", "query": "groceries", "mode": "auto", "filters": ""}]
         llm = ScriptedLLM(plans=list(plan), answer="You spent 340 euros on groceries in September [1].")
-        events, answer, done = collect(Agent(llm, toolbox), "How much did I spend on groceries in September?")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "How much did I spend on groceries in September?")
         assert not answer["grounded"] and "couldn't find" in answer["text"] and any("never mention september" in e.get("text", "") for e in events), answer
         llm = ScriptedLLM(plans=list(plan), answer="You spent 340 euros on groceries in January [1].")
-        events, answer, done = collect(Agent(llm, toolbox), "How much did I spend on groceries in January?")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "How much did I spend on groceries in January?")
         assert answer["grounded"] and answer["citations"][0]["filename"] == "monthly expenses.csv", answer
         plan = [{"thought": "look", "action": "search", "query": "kitchen tap dripping repair visit", "mode": "auto", "filters": ""}]
         llm = ScriptedLLM(plans=list(plan), answer="Your dog's vet is Mr Okafor — the kitchen tap has been dripping since March and a repair visit is arranged [1].", absent=("dog", "vet"))
-        events, answer, done = collect(Agent(llm, toolbox), "What is the name of my dog's vet?")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "What is the name of my dog's vet?")
         assert not answer["grounded"] and any("no source mentions it" in e.get("text", "") for e in events), answer
         llm = ScriptedLLM(plans=[{"thought": "look", "action": "search", "query": "sourdough bake", "mode": "auto", "filters": ""}], answer="Bake the sourdough at 230 C, 20 minutes covered [1].")
-        events, answer, done = collect(Agent(llm, toolbox), "At what temperature do I bake the sourdough, and for how long covered?")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "At what temperature do I bake the sourdough, and for how long covered?")
         assert answer["grounded"] and not any("premise" in e.get("text", "") for e in events), answer
         print("A2d. Premise check: a month no source mentions (September) and a subject no source mentions (dog's vet) both become 'couldn't find'; the same questions on real months/subjects still answer: OK")
 
@@ -194,15 +194,47 @@ def main() -> None:
 
         llm = ScriptedLLM(plans=[{"thought": "broken"}, ], answer="x")
         llm.chat = lambda *a, **k: "this is not json at all {"  # type: ignore
-        events, answer, done = collect(Agent(llm, toolbox), "anything")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "anything")
         assert any(e.get("system") for e in events) and events[-1]["type"] == "done"
         print("A4. Malformed model output ends the plan cleanly instead of crashing: OK")
 
         llm = ScriptedLLM(plans=[{"thought": "search", "action": "search", "query": "sourdough bake temperature", "mode": "auto", "filters": ""}, {"thought": "no", "action": "search", "query": "gym", "mode": "auto", "filters": ""}], answer="Bake at 230 C [1].")
-        agent = Agent(llm, toolbox, budget_seconds=0.0)
+        agent = Agent(llm, toolbox, budget_seconds=0.0, first_look=False)
         events, answer, done = collect(agent, "temperature")
         assert done["tool_calls"] == 0 and any("time budget" in e.get("text", "") for e in events)
         print("A5. Time budget is enforced before every planning turn: OK")
+
+        # Improvement 3 (2026-09-26): first look, quick answer, citation trim.
+        llm = ScriptedLLM(plans=[{"thought": "the first search has it", "action": "answer"}], answer="The deposit of 1,800 euros was paid on 3 January [1].")
+        events, answer, done = collect(Agent(llm, toolbox), "How much was the deposit and when was it paid?")
+        calls = [e for e in events if e["type"] == "tool_call"]
+        assert calls[0].get("first_look") and calls[0]["args"] == {"query": "How much was the deposit and when was it paid?", "mode": "auto", "filters": ""}, calls
+        types = [e["type"] for e in events]
+        quick = next(e for e in events if e["type"] == "quick_answer")
+        assert types.index("quick_answer") < types.index("answer_start"), "the quick answer must come before the model's answer"
+        assert quick["source"]["filename"] == "landlord letter.txt" and "1,800" in quick["text"], quick
+        assert answer["grounded"] and llm.calls == 1 and done["tool_calls"] == 1, (answer, llm.calls)
+        print("A6. First look: the whole question is searched before any planning turn (router picks the tier); the quick answer is the letter's deposit sentence and arrives before the model's answer: OK")
+
+        from app.agent.loop import _trim_citations
+        tb = toolbox()
+        tb.search("car insurance policy premium excess", mode="auto")
+        tb.search("lisbon hotel booking reference", mode="auto")
+        by_name = {s.filename: s.number for s in tb.sources}
+        ins, lis = by_name["insurance policy.txt"], by_name["lisbon trip.md"]
+        both = [ins, lis]
+        assert _trim_citations("The excess is 350 euros and the premium 610 euros.", both, tb) == [ins], "a source that adds nothing to the answer must be dropped"
+        assert _trim_citations("The excess is 350 euros; the Lisbon hotel booking ref is AS-77Q.", both, tb) == both, "a two-part answer keeps both files"
+        # The live Windows run's over-cite, on the sample folder's real texts:
+        # the April invoice shares "invoice", "April", "2025", "amount", "euros".
+        from app.agent.tools import Source
+        inv = Toolbox(None, None)
+        inv.sources = [
+            Source(1, "m", "march invoice.txt", "march invoice.txt", None, "Invoice 2025-03: consulting services, 12 hours. Payment terms net 30, so it is due on 14 April 2025; the amount is 1,440 euros.", "strong"),
+            Source(2, "a", "april invoice.txt", "april invoice.txt", None, "Invoice 2025-04: workshop facilitation, two days. Amount 2,200 euros, due 30 May 2025. Purchase order PO-8812.", "strong"),
+        ]
+        assert _trim_citations("The March invoice is due on 14 April 2025 and the amount is 1,440 euros.", [1, 2], inv) == [1]
+        print("A7. Citation trim: a second source that adds nothing is dropped (the March/April invoice over-cite); a two-part answer keeps both: OK")
 
         # ---------- Part B: the real model ----------
         model_file = find_model_file()

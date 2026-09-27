@@ -1,1 +1,0 @@
-Cache-aside: the application reads the cache first, falls back to the database on a miss and writes the value back with a TTL. Invalidate on write to avoid stale reads.

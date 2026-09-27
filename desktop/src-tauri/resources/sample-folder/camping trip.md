@@ -1,1 +1,0 @@
-Camping at Loch Lomond, 21 to 23 June. Pitch 14 at Cashel campsite booked. Bring the two-person tent, the stove, and check the midge forecast.

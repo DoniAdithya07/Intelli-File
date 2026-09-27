@@ -104,26 +104,47 @@ def main() -> None:
         for llm_file in llm_files:
             llm = LocalLLM(llm_file)
             agent = Agent(llm, lambda: Toolbox(search, vector_store))
-            right = grounded = warnings = 0
-            times, misses = [], []
-            for q, files in ANSWERABLE:
+            right = grounded = warnings = over_cited = 0
+            times, misses, extras = [], [], []
+            split = {"plan": 0.0, "chat": 0.0, "stream": 0.0}  # seconds in planning turns / judge checks / the answer
+            first_result: list[float] = []  # seconds until the first search results exist (what a quick answer could show)
+            quick_right = 0
+
+            def timed_run(q: str) -> list[dict]:
+                llm.calls.clear()
                 t0 = time.perf_counter()
-                events = list(agent.run(q))
+                events, first = [], None
+                for e in agent.run(q):
+                    if e["type"] == "tool_result" and first is None:
+                        first = time.perf_counter() - t0
+                        first_result.append(first)
+                    events.append(e)
                 times.append(time.perf_counter() - t0)
+                for c in llm.calls:
+                    split[c["kind"]] += c["seconds"]
+                return events
+
+            for q, files in ANSWERABLE:
+                events = timed_run(q)
                 ans = next(e for e in events if e["type"] == "answer")
                 cited = {c["filename"] for c in ans["citations"]}
                 want = {Path(f).name for f in files}
                 ok = want <= cited if len(want) > 1 else bool(want & cited)
                 right += ok
+                if ok and cited - want:
+                    over_cited += 1
+                    extras.append((q, sorted(cited - want)))
+                quick = next((e for e in events if e["type"] == "quick_answer"), None)
+                quick_right += bool(quick and quick["source"]["filename"] in want)
                 grounded += ans["grounded"]
                 warnings += bool(ans.get("warnings"))
                 if not ok:
                     misses.append((q, sorted(cited), ans["text"][:90]))
             abstained = false_answers = 0
+            quick_on_unanswerable = 0
             for q in UNANSWERABLE:
-                t0 = time.perf_counter()
-                events = list(agent.run(q))
-                times.append(time.perf_counter() - t0)
+                events = timed_run(q)
+                quick_on_unanswerable += any(e["type"] == "quick_answer" for e in events)
                 ans = next(e for e in events if e["type"] == "answer")
                 if ans["grounded"]:
                     false_answers += 1
@@ -131,9 +152,20 @@ def main() -> None:
                 else:
                     abstained += 1
             n = len(ANSWERABLE)
-            row = {"cited_right": right / n, "grounded": grounded / n, "abstained": abstained / len(UNANSWERABLE), "false_answers": false_answers, "figure_warnings": warnings, "mean_s": sum(times) / len(times), "max_s": max(times)}
-            report[llm.name] = {**row, "misses": misses}
+            total = len(times)
+            row = {"cited_right": right / n, "grounded": grounded / n, "abstained": abstained / len(UNANSWERABLE), "false_answers": false_answers, "figure_warnings": warnings,
+                   "over_cited": over_cited, "mean_s": sum(times) / total, "max_s": max(times),
+                   "mean_plan_s": split["plan"] / total, "mean_judge_s": split["chat"] / total, "mean_answer_s": split["stream"] / total,
+                   "mean_first_results_s": sum(first_result) / len(first_result) if first_result else None, "quick_answer_right_file": quick_right}
+            report[llm.name] = {**row, "misses": misses, "extra_citations": extras}
             print(f"| {llm.name} | {right}/{n} | {grounded}/{n} | {abstained}/{len(UNANSWERABLE)} | {false_answers} | {warnings} | {row['mean_s']:.1f} | {row['max_s']:.1f} |")
+            print(f"\nRight answers that also cited a file the answer does not need: {over_cited}/{n}")
+            for q, extra in extras:
+                print(f"    - {q!r} → also cited {extra}")
+            print(f"Where the time goes (mean per question): planning {row['mean_plan_s']:.1f} s, premise checks {row['mean_judge_s']:.1f} s, "
+                  f"writing the answer {row['mean_answer_s']:.1f} s; first search results after {row['mean_first_results_s']:.1f} s")
+            print(f"Quick answer from the right file: {quick_right}/{n}; quick answer shown on an unanswerable question: {quick_on_unanswerable}/{len(UNANSWERABLE)}")
+            row["quick_on_unanswerable"] = quick_on_unanswerable
             for q, cited, text in misses:
                 print(f"    - {q!r} → cited {cited}: {text!r}")
         OUT.parent.mkdir(parents=True, exist_ok=True)

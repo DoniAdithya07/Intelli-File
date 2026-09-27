@@ -1,90 +1,120 @@
-import { ReactNode } from "react";
+import { ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { Logo } from "../Logo";
+import { resolvedTheme, useTheme } from "../theme";
 
-export type Tab = "search" | "photos" | "insights" | "folders" | "status" | "settings";
+/** One click between Day and Night; Settings > Appearance also offers "follow Windows". */
+function ThemeToggle() {
+  const [choice, setChoice] = useTheme();
+  const night = resolvedTheme(choice) === "night";
+  const label = night ? "Switch to day theme" : "Switch to night theme";
+  return (
+    <button className="btn-ghost grid h-7 w-7 shrink-0 place-items-center" onClick={() => setChoice(night ? "day" : "night")} title={label} aria-label={label}>
+      <span className="material-symbols-outlined icon-sm">{night ? "light_mode" : "dark_mode"}</span>
+    </button>
+  );
+}
 
-const NAV: { id: Tab; label: string; icon: string }[] = [
-  { id: "search", label: "Search", icon: "search" },
-  { id: "photos", label: "Photos & Videos", icon: "image" },
-  { id: "insights", label: "Insights", icon: "insights" },
-  { id: "folders", label: "Folders", icon: "folder" },
-  { id: "status", label: "Status", icon: "memory" },
-  { id: "settings", label: "Settings", icon: "tune" },
+export type Tab = "search" | "photos" | "ask" | "foryou" | "activity" | "index" | "settings" | "help";
+
+// Three groups, divided by rules (docs/UI_DESIGN.md section 1): finding
+// things, what IntelliFile learned, and running it.
+const NAV: { id: Tab; label: string; icon: string }[][] = [
+  [
+    { id: "search", label: "Search", icon: "search" },
+    { id: "photos", label: "Photos", icon: "image" },
+    { id: "ask", label: "Ask", icon: "chat_bubble" },
+  ],
+  [
+    { id: "foryou", label: "For You", icon: "person" },
+    { id: "activity", label: "Activity", icon: "history" },
+  ],
+  [
+    { id: "index", label: "Index", icon: "folder" },
+    { id: "settings", label: "Settings", icon: "tune" },
+    { id: "help", label: "Help", icon: "help" },
+  ],
 ];
 
 interface Props {
   tab: Tab;
   onTab: (t: Tab) => void;
   backendStatus: "checking" | "connected" | "disconnected";
+  fileCount: number | null;
   error: string | null;
   onDismissError: () => void;
   children: ReactNode;
 }
 
-/** The persistent window chrome — header, sidebar nav, error banner — around whichever page is active. */
-export function AppShell({ tab, onTab, backendStatus, error, onDismissError, children }: Props) {
+/** The window chrome around the active page: the sidebar and the error line. The title bar is Windows' own. */
+export function AppShell({ tab, onTab, backendStatus, fileCount, error, onDismissError, children }: Props) {
+  // One blue bar that slides to the current page, as in Windows 11's navigation.
+  const navRef = useRef<HTMLElement>(null);
+  const [barTop, setBarTop] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const item = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    setBarTop(item ? item.offsetTop + (item.offsetHeight - 16) / 2 : null);
+  }, [tab]);
+
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-canvas">
-      <header className="drag flex h-12 shrink-0 items-center justify-between border-b border-white/[0.07] bg-shell/80 px-4 backdrop-blur-xl">
-        <div className="flex items-center gap-3">
+    <div className="flex h-screen overflow-hidden bg-shell">
+      <aside className="sidebar flex w-[200px] shrink-0 flex-col text-ink">
+        <div className="flex items-center gap-2 px-4 pb-2 pt-4">
           <Logo size={26} />
-          <span className="text-[15px] font-semibold tracking-tight">IntelliFile</span>
-          <span className="chip chip-accent">Local AI</span>
+          <span className="text-[16px] font-semibold">IntelliFile</span>
         </div>
-        <div className="no-drag flex items-center gap-2">
-          <span className="mono flex items-center gap-1.5 rounded-md bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/50">
-            <span className="material-symbols-outlined icon-sm">search</span>
-            <span className="kbd">Ctrl+Space</span> Quick Search
-          </span>
-        </div>
-      </header>
+        <nav ref={navRef} aria-label="Pages" className="relative flex flex-col px-2 pt-2">
+          {barTop !== null && <span className="nav-indicator" style={{ transform: `translateY(${barTop}px)` }} aria-hidden />}
+          {NAV.map((group, g) => (
+            <div key={g} className={g > 0 ? "mt-2 border-t border-rule pt-2" : ""}>
+              {group.map((n) => {
+                const active = tab === n.id;
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => onTab(n.id)}
+                    aria-current={active ? "page" : undefined}
+                    className={`nav-item flex w-full items-center gap-2.5 px-3 py-[7px] text-left text-[14px] ${active ? "text-ink" : "text-ink/80 hover:text-ink"}`}
+                  >
+                    <span className={`material-symbols-outlined icon-sm ${active ? "text-ink" : "text-ink/65"}`}>{n.icon}</span>
+                    {n.label}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[220px] shrink-0 flex-col justify-between border-r border-white/[0.07] bg-shell/60 p-2 backdrop-blur-xl">
-          <div className="flex flex-col gap-0.5">
-            <div className="mono px-2 py-2 text-[11px] uppercase tracking-wider text-white/40">Workspace</div>
-            <nav className="flex flex-col gap-0.5">
-              {NAV.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => onTab(n.id)}
-                  className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] transition-colors ${
-                    tab === n.id ? "bg-white/[0.06] font-semibold text-white" : "text-white/55 hover:bg-white/[0.04] hover:text-white"
-                  }`}
-                >
-                  <span className="material-symbols-outlined icon-sm">{n.icon}</span>
-                  {n.label}
-                </button>
-              ))}
-            </nav>
+        <div className="mt-auto border-t border-rule px-3 pb-3 pt-3 text-[12px] leading-snug">
+          <div className="flex items-start justify-between gap-2">
+            <div role="status" className="min-w-0">
+              <div className="font-medium text-ink">
+                {backendStatus === "connected" ? "Works offline" : backendStatus === "checking" ? "Starting" : "Search engine stopped"}
+              </div>
+              <div className="mt-0.5 text-ink/65">
+                {backendStatus === "connected"
+                  ? fileCount === null ? "Your files stay on this computer." : `${fileCount.toLocaleString()} files indexed on this computer`
+                  : backendStatus === "checking"
+                    ? "Loading the search models. This takes a few seconds."
+                    : "Quit IntelliFile fully and open it again."}
+              </div>
+            </div>
+            <ThemeToggle />
           </div>
-          <div className="panel flex flex-col gap-1 p-2.5">
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`inline-block h-2 w-2 rounded-full ${
-                  backendStatus === "connected" ? "bg-accent animate-pulse" : backendStatus === "checking" ? "bg-white/40" : "bg-error"
-                }`}
-              />
-              <span className="mono text-[11px]">
-                {backendStatus === "connected" ? "Engine Online" : backendStatus === "checking" ? "Starting the engine…" : "Engine Offline"}
-              </span>
-            </div>
-            <div className="mono text-[10px] leading-tight text-white/45">
-              {backendStatus === "checking" ? "loading the local AI models — about 30 s" : backendStatus === "disconnected" ? "quit IntelliFile fully and open it again" : "100% On-Device · no internet needed"}
-            </div>
+          <div className="mt-3 text-ink/65">
+            <span className="kbd">Ctrl+Space</span> quick search
           </div>
-        </aside>
-
-        <div className="flex min-h-0 flex-1 flex-col">
-          {error && (
-            <div className="mx-4 mt-3 flex items-center gap-2 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-[13px] text-error">
-              <span className="material-symbols-outlined icon-sm">error</span>
-              <span className="flex-1">{error}</span>
-              <button className="btn-ghost px-2 py-0.5 text-[11px]" onClick={onDismissError}>Dismiss</button>
-            </div>
-          )}
-          <main className="min-h-0 flex-1 overflow-hidden p-4">{children}</main>
         </div>
+      </aside>
+
+      <div className="app-main flex min-h-0 min-w-0 flex-1 flex-col">
+        {error && (
+          <div role="alert" className="mx-4 mt-3 flex items-center gap-2 rounded-md border border-error/40 bg-error-soft px-3 py-2 text-[13px] text-error">
+            <span className="material-symbols-outlined icon-sm">error</span>
+            <span className="flex-1">{error}</span>
+            <button className="btn-ghost px-2 py-0.5 text-[12px]" onClick={onDismissError}>Dismiss</button>
+          </div>
+        )}
+        <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
       </div>
     </div>
   );

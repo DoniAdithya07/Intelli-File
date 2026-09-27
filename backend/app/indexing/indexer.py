@@ -6,13 +6,16 @@ side of tombstone cleanup.
 """
 
 import json
+import re
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..chunking import chunk_document
 from ..embeddings.model import EMBEDDING_DIMENSION, EmbeddingModel
+from ..extraction.blocks import ExtractedBlock
 from ..extraction.extractor import extract_document
+from ..extraction.normalize import normalize_text
 from ..files.discovery import VISUAL_EXTENSIONS
 from ..storage.keyword_store import KeywordStore
 from ..storage.lancedb_store import LanceDBVectorStore
@@ -22,6 +25,10 @@ if TYPE_CHECKING:
     from ..transcription.transcriber import Transcriber
 
 CHUNKS_TABLE = "chunks"
+# An image needs at least this many OCR'd words to get text chunks: a
+# screenshot or a whiteboard has dozens, a holiday photo has none or a
+# stray sign. Measured in prototype_ocr.py.
+OCR_MIN_WORDS = 5
 
 
 class Indexer:
@@ -95,6 +102,26 @@ class Indexer:
             # already cleaned up) — index normally instead.
 
         blocks = extract_document(path, transcriber=self.transcriber)
+        return self._store_blocks(file_id, blocks)
+
+    def index_image_text(self, path: Path, file_id: str) -> int:
+        """Next-round improvement 4: the text in a screenshot, a photographed
+        whiteboard or a scanned receipt, read by Windows' offline OCR and
+        indexed as ordinary text chunks next to the image's CLIP vectors, so
+        text search finds the image by its words. Images with fewer than
+        OCR_MIN_WORDS words (most photos) get no text chunks. Returns the
+        number of chunks stored; 0 when OCR is unavailable."""
+        from ..extraction import ocr
+
+        if not ocr.available():
+            return 0
+        text = normalize_text(ocr.ocr_image(path))
+        if len(re.findall(r"[A-Za-z]{2,}", text)) < OCR_MIN_WORDS:
+            self.delete_file(file_id)  # an edit may have removed the text
+            return 0
+        return self._store_blocks(file_id, [ExtractedBlock(text=text)])
+
+    def _store_blocks(self, file_id: str, blocks: list) -> int:
         chunks = chunk_document(blocks, chunk_size=self.chunk_tokens, overlap=self.chunk_overlap, token_spans=self.embedding_model.token_spans)
         if not chunks:
             self.delete_file(file_id)  # the file is now genuinely empty

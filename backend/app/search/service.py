@@ -136,6 +136,15 @@ SEMANTIC_STRONG_WITH_LITERAL = 1.45
 SEMANTIC_STRONG_MEANING_ONLY = 1.50
 SEMANTIC_STRONG_MAX_GAP_FROM_BEST = 0.08
 
+# How much of the weak tier to show (improvement 2, 2026-09-26). The live
+# Windows run listed 10 "possibly related" files under a server-capacity
+# question, camping notes among them. When a strong result exists, a weak
+# one whose meaning distance is more than this far behind the best strong
+# one is hidden, and at most WEAK_MAX_SHOWN weak results are kept.
+# Measured by scripts/evaluate_weak_results.py on the 60 labelled queries.
+WEAK_MAX_GAP_FROM_STRONG = 0.15
+WEAK_MAX_SHOWN = 3
+
 
 class SearchService:
     def __init__(
@@ -159,6 +168,8 @@ class SearchService:
         self.reranker: Reranker | None = None
         # Optional learned router (Phase 15 improvement 6); rules when None or untrained.
         self.learned_router = None
+        # Improvement 2; the evaluation switches it off to see what it hides.
+        self.weak_pruning = True
 
     def _first_chunk(self, file_id: str) -> dict:
         """Snippet for a file that matched by name only. Photos and audio
@@ -286,7 +297,7 @@ class SearchService:
             results = self._run_plan(plan, query_text, keyword_query_text, parsed, active_records, top_k, stages)
             escalated = True
 
-        results = self._personalize(results)
+        results = self._prune_weak(self._personalize(results))
         report = self._route_report(plan.tier, requested_tier, decision.complexity, decision.reason, decision.features, escalated, stages, t_start,
                                     keyword_query_text if keyword_query_text != query_text else None)
         # The tier above hybrid+rerank is the agent (Phase 19): suggested,
@@ -334,6 +345,7 @@ class SearchService:
             "semantic_score": best_chunk.get("semantic_score"),
             "reranker_score": best_chunk.get("reranker_score"),
             "page": best_chunk.get("page_number"),
+            "chunk_id": agg.best_chunk_id if agg else None,  # the preview asks /passages for the text around it
             "matched_chunk": best_chunk.get("highlighted") or best_chunk.get("content", ""),
             "chunk_text": best_chunk.get("content", ""),  # the whole chunk, for the agent (the snippet is a 20-token window)
             "why": why,
@@ -516,6 +528,22 @@ class SearchService:
             close = distance <= threshold or (best_is_strong and distance <= best_semantic + th["strong_max_gap_from_best"])
             r["confidence"] = "strong" if close else "weak"
         return results
+
+    def _prune_weak(self, results: list[dict]) -> list[dict]:
+        """Keep the weak tier short and only when it is close to the answer:
+        with a strong result present, drop weak ones more than
+        WEAK_MAX_GAP_FROM_STRONG behind the best strong meaning distance
+        (all of them when the strong results matched only literally), then
+        keep at most WEAK_MAX_SHOWN. Strong results are never touched."""
+        if not self.weak_pruning:
+            return results
+        strong = [r for r in results if r["confidence"] != "weak"]
+        weak = [r for r in results if r["confidence"] == "weak"]
+        if strong:
+            distances = [r["semantic_score"] for r in strong if r["semantic_score"] is not None]
+            best = min(distances) if distances else None
+            weak = [r for r in weak if best is not None and r["semantic_score"] is not None and r["semantic_score"] <= best + WEAK_MAX_GAP_FROM_STRONG]
+        return strong + weak[:WEAK_MAX_SHOWN]
 
     def _personalize(self, results: list[dict]) -> list[dict]:
         """Objective 2: re-order within each tier by fused score plus the

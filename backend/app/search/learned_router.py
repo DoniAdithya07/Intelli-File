@@ -112,7 +112,7 @@ class LearnedRouter:
             # The rules would go cheap but the model has seen that fail for
             # queries like this: take hybrid (escalation would get there anyway,
             # at the cost of a wasted cheap pass).
-            return RouteDecision("hybrid", max(rules.complexity, 2), f"learned from {self.trained_on} queries: {rules.tier} tier tends not to suffice here ({probs[rules.tier]:.0%}) — hybrid", {**rules.features, "learned": probs, "rules_said": rules.tier})
+            return RouteDecision("hybrid", max(rules.complexity, 2), f"learned from {self.trained_on} queries: {rules.tier} tier tends not to suffice here ({probs[rules.tier]:.0%}), so hybrid", {**rules.features, "learned": probs, "rules_said": rules.tier})
         rules.features["learned"] = probs
         return rules
 

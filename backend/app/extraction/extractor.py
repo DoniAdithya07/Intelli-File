@@ -45,7 +45,7 @@ def extract_document(path: Path, transcriber: "Transcriber | None" = None) -> li
     if suffix in AUDIO_EXTENSIONS:
         if transcriber is None:
             raise UnsupportedFileType(
-                f"Cannot extract {suffix} — voice/audio model not loaded (run scripts/download_whisper_model.py)"
+                f"Cannot extract {suffix}: the speech model is not installed (run scripts/download_whisper_model.py)"
             )
         blocks = extract_audio(path, transcriber)
     else:

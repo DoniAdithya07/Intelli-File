@@ -39,7 +39,7 @@ def recommend(profile: Profile, usage_store: UsageStore, file_record_store: File
 
     if profile.cold_start:
         newest = sorted(active.values(), key=lambda r: -r.modified_time)[:LIST_SIZE]
-        result["recent"] = [_entry(profile, r.file_id, "Recently modified — the app is still learning what you use", r.path) for r in newest]
+        result["recent"] = [_entry(profile, r.file_id, "Recently changed. IntelliFile is still learning what you use", r.path) for r in newest]
         return result
 
     # likely next: co-occurrence with the current session's files

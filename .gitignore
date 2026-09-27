@@ -40,8 +40,9 @@ Thumbs.db
 backend/venv-build/
 backend/build/
 backend/dist/
-desktop/src-tauri/resources/backend/
-desktop/src-tauri/resources/models/
+# The whole folder is assembled by backend/scripts/assemble_resources.py on every build
+# (copies of backend/data, the sample folder and docs/HOW_TO_RUN.md, plus the large bundles).
+desktop/src-tauri/resources/
 
 
 # Local project documentation

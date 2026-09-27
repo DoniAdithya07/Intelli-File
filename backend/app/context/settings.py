@@ -18,6 +18,10 @@ DEFAULTS: dict = {
     # Phase 17 — let the profile nudge search ranking and drive
     # recommendations. Off = pure retrieval order, no recommendations.
     "personalize": True,
+    # Next-round improvement 1 — seed the activity memory from Windows'
+    # Recent items so personalization works from day one. Off until the
+    # user says yes: it reads their file history, even if only locally.
+    "import_windows_recent": False,
     # Phase 10 — power-aware indexing (the PRD's "pauses on battery by default").
     "pause_on_battery": True,
     "pause_on_low_power": True,

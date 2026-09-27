@@ -38,3 +38,16 @@ llama-cpp-python
 
 # Phase 10: battery / AC / CPU state for power-aware indexing.
 psutil
+
+# Next-round improvement 4: offline OCR with Windows' built-in engine
+# (Windows.Media.Ocr). Only the Python projections are installed — the
+# engine ships with Windows 10/11. (Windows.Data.Pdf is deliberately not
+# used: see app/extraction/ocr.py.)
+winrt-runtime; sys_platform == "win32"
+winrt-Windows.Media.Ocr; sys_platform == "win32"
+winrt-Windows.Graphics.Imaging; sys_platform == "win32"
+winrt-Windows.Storage; sys_platform == "win32"
+winrt-Windows.Storage.Streams; sys_platform == "win32"
+winrt-Windows.Foundation; sys_platform == "win32"
+winrt-Windows.Foundation.Collections; sys_platform == "win32"
+winrt-Windows.Globalization; sys_platform == "win32"
