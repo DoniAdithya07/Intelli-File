@@ -92,6 +92,8 @@ jobs:
         working-directory: desktop
         run: npm run tauri build -- --no-bundle
 
+      # One zip (1.87 GB), under GitHub's 2 GB release-file limit; the
+      # packaging step fails the build if it ever is not.
       - name: Portable zip
         working-directory: backend
         run: python scripts/package_windows.py
@@ -99,5 +101,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: intellifile-windows
-          path: desktop/src-tauri/target/release/IntelliFile-windows.zip
+          path: |
+            desktop/src-tauri/target/release/IntelliFile-windows.zip
           compression-level: 0

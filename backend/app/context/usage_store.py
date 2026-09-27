@@ -91,6 +91,45 @@ class UsageStore:
             self.version += 1
             return self._row_to_event(self._conn.execute("SELECT * FROM usage_events WHERE id = ?", (cursor.lastrowid,)).fetchone())
 
+    def import_events(self, kind: str, events: list[dict], *, source: str, session_gap_seconds: float | None = None) -> int:
+        """Add historical events from outside the app (Windows' Recent
+        items). Sessions are assigned among the imported events by their own
+        gaps, and the live session is left alone — an import from last week
+        must not join what the user is doing now. meta.source marks them."""
+        if kind not in EVENT_KINDS:
+            raise ValueError(f"unknown event kind: {kind}")
+        if not events:
+            return 0
+        gap = self._gap if session_gap_seconds is None else session_gap_seconds
+        rows, session, last = [], None, None
+        for e in sorted(events, key=lambda e: e["ts"]):
+            if session is None or e["ts"] - last > gap:
+                session = str(uuid.uuid4())
+            last = e["ts"]
+            path = e.get("path")
+            file_type = Path(path).suffix.lower().lstrip(".") or None if path else None
+            rows.append((e["ts"], kind, session, e.get("file_id"), path, file_type, None, json.dumps({"source": source})))
+        with self._lock:
+            self._conn.executemany(
+                "INSERT INTO usage_events (ts, kind, session_id, file_id, path, file_type, query, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+            self._conn.commit()
+            self.version += 1
+        return len(rows)
+
+    def imported_keys(self, source: str) -> set[tuple[str, float]]:
+        """(path, ts) of every event already imported from `source`."""
+        with self._lock:
+            rows = self._conn.execute("SELECT path, ts FROM usage_events WHERE meta LIKE ?", (f'%"source": "{source}"%',)).fetchall()
+        return {(r["path"], round(r["ts"], 3)) for r in rows}
+
+    def clear_source(self, source: str) -> int:
+        """Remove every event imported from `source` (the import switched off)."""
+        with self._lock:
+            n = self._conn.execute("DELETE FROM usage_events WHERE meta LIKE ?", (f'%"source": "{source}"%',)).rowcount
+            self._conn.commit()
+            self.version += 1
+        return n
+
     def clear(self) -> int:
         with self._lock:
             n = self._conn.execute("SELECT COUNT(*) FROM usage_events").fetchone()[0]

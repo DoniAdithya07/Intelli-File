@@ -1,1 +1,0 @@
-Twelve-week half marathon plan: three runs a week, long run grows from 10 to 19 km, one tempo session, taper in the last two weeks. Race day 18 May.

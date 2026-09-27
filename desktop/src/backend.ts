@@ -1,7 +1,8 @@
 // Dev-time only: the Python backend is run manually on this port during
 // development. Once the sidecar wiring lands (Phase 14), the port will be
 // resolved dynamically instead of hardcoded.
-export const BACKEND_URL = "http://127.0.0.1:8756";
+// VITE_BACKEND_URL lets a development copy run beside an installed IntelliFile.
+export const BACKEND_URL: string = import.meta.env.VITE_BACKEND_URL ?? "http://127.0.0.1:8756";
 
 // Phase 12: inside the desktop shell every request carries the per-launch
 // API token the shell gave the backend. In a plain browser tab (dev) there
@@ -26,9 +27,9 @@ export async function authHeaders(): Promise<Record<string, string>> {
 /** A connection failure (engine not up yet, or gone) reads as a sentence, not "TypeError: Failed to fetch". */
 export function describeError(e: unknown, path = ""): string {
   if (e instanceof DOMException && e.name === "AbortError") return "";
-  if (e instanceof TypeError) return "The search engine isn't reachable yet — it starts with the app and takes about 30 seconds the first time.";
+  if (e instanceof TypeError) return "The search engine isn't running yet. It starts with the app and is usually ready within 15 seconds.";
   const msg = e instanceof Error ? e.message : String(e);
-  if (/ 401$/.test(msg)) return "The app and its engine don't share a session token — quit IntelliFile fully and open it again.";
+  if (/ 401$/.test(msg)) return "The app lost its connection key to the search engine. Quit IntelliFile fully and open it again.";
   return path ? `${path}: ${msg}` : msg;
 }
 
@@ -84,6 +85,7 @@ export interface SearchResult {
   semantic_score: number | null;
   reranker_score: number | null;
   page: number | null;
+  chunk_id: string | null; // the matched passage; null for a name-only match
   matched_chunk: string;
   why: string[];
   confidence: Confidence;
@@ -92,8 +94,17 @@ export interface SearchResult {
   // Phase 17: null when personalization is off or the profile is still cold.
   personal: { boost: number; signals: Record<string, number>; reasons: string[] } | null;
 }
-export const search = (q: string, mode: SearchMode = "auto", top_k = 20, signal?: AbortSignal) =>
-  getJson<{ results: SearchResult[]; route: RouteReport | null }>("/search", { q, mode, top_k }, signal);
+export const search = (q: string, mode: SearchMode = "auto", top_k = 20, signal?: AbortSignal, remember = true) =>
+  getJson<{ results: SearchResult[]; route: RouteReport | null }>("/search", remember ? { q, mode, top_k } : { q, mode, top_k, remember: "false" }, signal);
+
+// The preview pane: the matched passage and its neighbours, straight from the index.
+export interface Passage { chunk_id: string; chunk_index: number | null; page: number | null; heading: string | null; text: string }
+export interface PassagesResponse { error?: "not_indexed"; path?: string; total: number; match: Passage | null; previous: Passage | null; next: Passage | null }
+export const getPassages = (file_id: string, chunk_id: string | null, signal?: AbortSignal) =>
+  getJson<PassagesResponse>("/passages", chunk_id ? { file_id, chunk_id } : { file_id }, signal);
+// Everything indexed for one file: OCR text for a photo or screenshot, the transcript for audio.
+export const getFileText = (file_id: string, signal?: AbortSignal) =>
+  getJson<{ error?: "not_indexed"; path?: string; text: string; truncated: boolean }>("/file-text", { file_id }, signal);
 
 // What /search would silently correct the query to — null when it runs as typed.
 export const suggest = (q: string) => getJson<{ suggestion: string | null }>("/suggest", { q });
@@ -131,6 +142,8 @@ export function formatTimestamp(seconds: number): string {
 // ---- folders / indexing ----
 export const indexFolder = (folder: string) => postJson<{ queued?: string; error?: string }>("/index-folder", { folder });
 export const forgetFolder = (folder: string) => postJson<{ removed?: number; error?: string }>("/forget-folder", { folder });
+export const getSampleFolder = () => getJson<{ path: string | null }>("/sample-folder");
+export const scanAll = () => postJson<{ folders?: number; files?: number; error?: string }>("/scan-all", {});
 export const reindexFolder = (folder: string) => postJson<{ queued?: string; error?: string }>("/reindex-folder", { folder });
 
 export interface IndexJob {
@@ -204,6 +217,7 @@ export interface StatusResponse {
     photos: { name: string; precision: string; dimension: number } | null;
     speech: { name: string } | null;
     reranker: { name: string } | null;
+    ocr?: { name: string; language: string } | null;
   };
 }
 export const getStatus = () => getJson<StatusResponse>("/status");
@@ -231,7 +245,9 @@ export async function clearEvents(): Promise<{ cleared: number }> {
   if (!res.ok) throw new Error(`/events failed: ${res.status}`);
   return res.json();
 }
-export interface AppSettings { remember_activity: boolean; personalize: boolean; pause_on_battery: boolean; pause_on_low_power: boolean; resource_mode: ResourceMode }
+export interface AppSettings { remember_activity: boolean; personalize: boolean; import_windows_recent: boolean; pause_on_battery: boolean; pause_on_low_power: boolean; resource_mode: ResourceMode }
+export interface WindowsRecentStatus { available: boolean; enabled: boolean; state: "off" | "running" | "done" | "failed"; last: { shortcuts: number; indexed_files: number; events_added: number; at: number } | null }
+export const getWindowsRecent = () => getJson<WindowsRecentStatus>("/windows-recent");
 
 // ---- profile & recommendations (Phase 17) ----
 export interface ProfileTopic { id: number; label: string; terms: string[]; files: { file_id: string; filename: string }[]; file_count: number; weight: number }
@@ -274,6 +290,7 @@ export type AskEvent =
   | { type: "thought"; text: string; system?: boolean; ms?: number }
   | { type: "tool_call"; tool: string; args: Record<string, unknown>; call: number }
   | { type: "tool_result"; tool: string; sources: AskSource[]; route?: RouteReport; call: number }
+  | { type: "quick_answer"; text: string; source: AskSource }
   | { type: "answer_start" }
   | { type: "token"; text: string }
   | { type: "answer"; text: string; citations: AskSource[]; grounded: boolean; citations_inferred?: boolean; warnings?: string[] }
@@ -352,4 +369,9 @@ export function fileKind(filename: string): { badge: string; group: FileGroup } 
 
 export function shortenPath(path: string): string {
   return path.replace(/^\/Users\/[^/]+/, "~").replace(/^C:\\Users\\[^\\]+/, "~");
+}
+
+/** The folder a file is in, shortened: shown next to a file name that is already visible. */
+export function shortenFolder(path: string): string {
+  return shortenPath(path.replace(/[\\/][^\\/]*$/, "") || path);
 }

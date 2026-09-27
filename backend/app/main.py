@@ -18,12 +18,14 @@ from pydantic import BaseModel
 from . import logging_setup, offline_guard
 from .agent import Agent, LocalLLM, Toolbox, find_model_file
 from .context import EVENT_KINDS, ProfileBuilder, Settings, UsageStore, recommend
+from .context import windows_recent
+from .extraction import ocr
 from .embeddings.clip_model import ClipModel
 from .embeddings.model import EmbeddingModel, default_model_dir
 from .files import discovery
 from .files.access import AccessPolicy, excluded_paths, whole_computer_roots
-from .indexing import Indexer, VisualIndexer
-from .paths import data_dir, ensure_app_dirs, models_dir
+from .indexing import CHUNKS_TABLE, Indexer, VisualIndexer
+from .paths import data_dir, ensure_app_dirs, models_dir, sample_folder
 from .power import MODES, PowerMonitor
 from .search import SearchService
 from .search.dictionary import DEFAULT_PATH as DEFAULT_WORDLIST_PATH, Dictionary
@@ -197,6 +199,13 @@ async def lifespan(app: FastAPI):
     app.state.search_service.profile_builder = profile_builder
     app.state.search_service.personalize_enabled = lambda: app.state.settings.get("personalize")
     live.on_index_changed = profile_builder.forget_vectors
+    # Next-round improvement 1: Windows' Recent items seed the activity
+    # memory (consent: `import_windows_recent`). Re-run after each folder
+    # finishes indexing, since only indexed files can be matched.
+    app.state.recent_import = {"state": "off", "last": None}
+    app.state.recent_import_lock = threading.Lock()
+    live.on_folder_indexed = lambda folder: _import_windows_recent_async()
+    _import_windows_recent_async()
 
     # Phase 19: the local LLM agent. The model (~1.1 GB in RAM) is loaded
     # on the first question, not at startup, so search stays light for
@@ -205,7 +214,7 @@ async def lifespan(app: FastAPI):
     app.state.llm_lock = threading.Lock()
     app.state.llm_file = find_model_file()
     if app.state.llm_file is None:
-        logger.warning("Local LLM not found (scripts/download_llm_model.py) — Ask mode is unavailable.")
+        logger.warning("Local LLM not found (models/llm in the app folder, or scripts/download_llm_model.py in dev) — Ask mode is unavailable until it is.")
     # Phase 15 improvement 6: the learned router. Loads the model trained
     # from this user's own queries if there is one; (re)trains in the
     # background at startup once enough queries have been remembered.
@@ -320,7 +329,7 @@ def index_folder_endpoint(body: IndexFolderRequest):
     if not folder.is_dir():
         return {"error": f"Not a folder: {folder}"}
     if not app.state.access.allows_indexing:
-        return {"error": "File access is switched off — allow it in Settings → File access first."}
+        return {"error": "File access is switched off. Allow it first in Settings, under File access."}
     # Indexing runs in the background so a large folder never blocks the UI;
     # progress is read from /status. The folder is watched from now on.
     app.state.live_indexing.watch(str(folder))
@@ -345,7 +354,7 @@ def reindex_folder_endpoint(body: IndexFolderRequest):
     if folder is None or not folder.is_dir():
         return {"error": f"Not a folder: {body.folder}"}
     if not app.state.access.allows_indexing:
-        return {"error": "File access is switched off — allow it in Settings → File access first."}
+        return {"error": "File access is switched off. Allow it first in Settings, under File access."}
     app.state.live_indexing.watch(str(folder))
     app.state.live_indexing.reindex(str(folder))
     return {"queued": str(folder)}
@@ -358,12 +367,91 @@ def index_file_endpoint(body: IndexFolderRequest):
     if path is None or not path.is_file():
         return {"error": f"Not a file: {body.folder}"}
     if not app.state.access.allows_indexing:
-        return {"error": "File access is switched off — allow it in Settings → File access first."}
+        return {"error": "File access is switched off. Allow it first in Settings, under File access."}
     if not discovery.is_indexable(path, app.state.live_indexing.extensions):  # photos/videos count when CLIP is installed
         return {"error": f"IntelliFile does not index this kind of file: {path.name}"}
     app.state.live_indexing.watch_file(str(path))
     app.state.live_indexing.index_single_file(str(path))
     return {"queued": str(path)}
+
+
+@app.post("/scan-all")
+def scan_all_endpoint():
+    """Index > Scan now: every watched folder and file is checked again.
+    Unchanged files are skipped by the usual change detection, so this is
+    cheap when nothing moved."""
+    if not app.state.access.allows_indexing:
+        return {"error": "File access is switched off. Allow it first in Settings, under File access."}
+    live = app.state.live_indexing
+    folders = list(live.watcher.watched_roots)
+    files = list(live.watcher.watched_files)
+    for folder in folders:
+        live.enqueue(folder)
+    for file in files:
+        live.index_single_file(file)
+    return {"folders": len(folders), "files": len(files)}
+
+
+# The preview pane shows real indexed text only (docs/UI_DESIGN.md section 2).
+MAX_PASSAGE_CHARS = 2000
+MAX_FILE_TEXT_CHARS = 20_000
+
+
+def _file_chunks(file_id: str) -> list[dict]:
+    rows = app.state.indexer.vector_store.get_by_file_id(CHUNKS_TABLE, file_id)
+    rows.sort(key=lambda r: r["payload"].get("chunk_index") or 0)
+    return rows
+
+
+def _passage(row: dict) -> dict:
+    payload = row["payload"]
+    return {
+        "chunk_id": row["id"],
+        "chunk_index": payload.get("chunk_index"),
+        "page": payload.get("page_number"),
+        "heading": payload.get("heading"),
+        "text": (payload.get("content") or "")[:MAX_PASSAGE_CHARS],
+    }
+
+
+@app.get("/passages")
+def passages_endpoint(file_id: str, chunk_id: str | None = None):
+    """The matched passage of a file and the ones on either side of it.
+    Without a chunk_id (a file-name match) the file's first passage is the
+    match. A file that is no longer indexed says so instead of guessing."""
+    record = app.state.indexer.file_record_store.get_by_file_id(file_id)
+    if record is None or record.deleted:
+        return {"error": "not_indexed", "match": None, "previous": None, "next": None, "total": 0}
+    rows = _file_chunks(file_id)
+    if not rows:
+        return {"match": None, "previous": None, "next": None, "total": 0, "path": record.path}
+    at = next((i for i, r in enumerate(rows) if r["id"] == chunk_id), 0)
+    return {
+        "path": record.path,
+        "total": len(rows),
+        "match": _passage(rows[at]),
+        "previous": _passage(rows[at - 1]) if at > 0 else None,
+        "next": _passage(rows[at + 1]) if at + 1 < len(rows) else None,
+    }
+
+
+@app.get("/file-text")
+def file_text_endpoint(file_id: str):
+    """All the text IntelliFile holds for one file, in order: for a photo or
+    a screenshot this is its Windows OCR text, for audio the transcript.
+    Empty when the file has none (a photo without words)."""
+    record = app.state.indexer.file_record_store.get_by_file_id(file_id)
+    if record is None or record.deleted:
+        return {"error": "not_indexed", "text": "", "truncated": False}
+    text = "\n\n".join((r["payload"].get("content") or "") for r in _file_chunks(file_id)).strip()
+    return {"path": record.path, "text": text[:MAX_FILE_TEXT_CHARS], "truncated": len(text) > MAX_FILE_TEXT_CHARS}
+
+
+@app.get("/sample-folder")
+def sample_folder_endpoint():
+    """First run and Index offer "Try the sample folder": this is where it is."""
+    path = sample_folder()
+    return {"path": str(path) if path else None}
 
 
 class AccessRequest(BaseModel):
@@ -455,6 +543,7 @@ def status_endpoint():
             ),
             "speech": {"name": WHISPER_MODEL_DIR.name} if app.state.transcriber is not None else None,
             "reranker": {"name": RERANKER_MODEL_DIR.name} if app.state.search_service.reranker is not None else None,
+            "ocr": {"name": "Windows OCR", "language": ocr_language} if (ocr_language := ocr.language()) else None,
         },
     }
 
@@ -471,7 +560,7 @@ def _remember(kind: str, **fields) -> None:
 
 
 @app.get("/search")
-def search_endpoint(q: str, top_k: int = 10, mode: str = "auto"):
+def search_endpoint(q: str, top_k: int = 10, mode: str = "auto", remember: bool = True):
     """`mode=auto` (default since Phase 18) lets the router choose the
     tier; smart / exact / keyword are the manual overrides. The `route`
     block reports what ran and what it cost — Objective 3's evidence."""
@@ -483,11 +572,14 @@ def search_endpoint(q: str, top_k: int = 10, mode: str = "auto"):
     # Queries are remembered here rather than by the UI so every entry
     # point (main window, overlay, tests) counts, with what they returned
     # and which route answered them (Phase 20 evaluates the router from this).
-    _remember("query", query=q.strip(), meta={
-        "mode": mode, "results": [r["file_id"] for r in results[:5]], "count": len(results),
-        "route": route["tier"], "requested_tier": route["requested_tier"], "escalated": route["escalated"],
-        "complexity": route["complexity"], "total_ms": route["total_ms"],
-    })
+    # remember=false is for listings the user did not type, such as the
+    # Photos page's newest-first grid.
+    if remember:
+        _remember("query", query=q.strip(), meta={
+            "mode": mode, "results": [r["file_id"] for r in results[:5]], "count": len(results),
+            "route": route["tier"], "requested_tier": route["requested_tier"], "escalated": route["escalated"],
+            "complexity": route["complexity"], "total_ms": route["total_ms"],
+        })
     return {"results": results, "route": route}
 
 
@@ -587,7 +679,7 @@ def transcribe_endpoint(audio: UploadFile):
         return {"error": "Voice search model not installed. Run scripts/download_whisper_model.py."}
     audio_bytes = audio.file.read()
     if len(audio_bytes) < MIN_AUDIO_BYTES:
-        return {"error": "Recording too short — hold the microphone button and speak, then click it again to stop."}
+        return {"error": "The recording was too short. Click the microphone, speak, then click it again to stop."}
     hints = filename_hints(app.state.indexer.file_record_store)
     try:
         heard = app.state.transcriber.transcribe(audio_bytes, vocabulary_hint=hints)
@@ -595,7 +687,7 @@ def transcribe_endpoint(audio: UploadFile):
         # PyAV's decode errors ("Invalid data found when processing input:
         # '<none>'", "tuple index out of range" for a non-audio upload) mean
         # nothing to a user; the actionable fact is the same for all of them.
-        return {"error": f"Couldn't read that recording as audio — please try again. ({type(e).__name__})"}
+        return {"error": f"That recording could not be read as audio. Please try again. ({type(e).__name__})"}
     # A bare file name Whisper misheard ("Learn Lord letter") is snapped to
     # the name it sounds like — but only APPLIED when what was heard finds
     # nothing on its own, so a coincidental sound-alike can never replace a
@@ -679,9 +771,38 @@ def get_settings_endpoint():
     return app.state.settings.all()
 
 
+def _import_windows_recent() -> None:
+    settings = app.state.settings
+    if not settings.get("import_windows_recent") or not settings.get("remember_activity"):
+        return
+    if not app.state.recent_import_lock.acquire(blocking=False):
+        return  # one import at a time; the running one sees the same index
+    try:
+        app.state.recent_import["state"] = "running"
+        result = windows_recent.import_recent(app.state.usage_store, app.state.indexer.file_record_store)
+        app.state.recent_import = {"state": "done", "last": {**result, "at": time.time()}}
+        logger.info("Windows recent items: %s", result)
+    except Exception:
+        logger.exception("Windows recent items import failed")
+        app.state.recent_import = {"state": "failed", "last": app.state.recent_import.get("last")}
+    finally:
+        app.state.recent_import_lock.release()
+
+
+def _import_windows_recent_async() -> None:
+    threading.Thread(target=_import_windows_recent, daemon=True, name="recent-import").start()
+
+
+@app.get("/windows-recent")
+def windows_recent_endpoint():
+    """Whether Windows' Recent items can be read here, and the last import."""
+    return {"available": windows_recent.recent_dir() is not None, "enabled": app.state.settings.get("import_windows_recent"), **app.state.recent_import}
+
+
 class SettingsRequest(BaseModel):
     remember_activity: bool | None = None
     personalize: bool | None = None
+    import_windows_recent: bool | None = None
     pause_on_battery: bool | None = None
     pause_on_low_power: bool | None = None
     resource_mode: str | None = None
@@ -692,8 +813,15 @@ def update_settings_endpoint(body: SettingsRequest):
     changes = {k: v for k, v in body.model_dump().items() if v is not None}
     if "resource_mode" in changes and changes["resource_mode"] not in MODES:
         return {"error": f"resource_mode must be one of {', '.join(MODES)}"}
+    before = app.state.settings.get("import_windows_recent")
     updated = app.state.settings.update(changes)
     app.state.live_indexing.apply_power()  # a toggle takes effect immediately
+    if changes.get("import_windows_recent") is True and not before:
+        _import_windows_recent_async()
+    elif changes.get("import_windows_recent") is False and before:
+        removed = app.state.usage_store.clear_source(windows_recent.SOURCE)
+        app.state.recent_import = {"state": "off", "last": None}
+        logger.info("Windows recent items switched off: %d imported events removed", removed)
     return updated
 
 
@@ -845,9 +973,17 @@ def router_stats_endpoint():
 # ----- Phase 19: the agent -----
 
 
+def _find_llm_file():
+    # Looked up again while missing, so restoring models/llm
+    # turns Ask on without restarting the app.
+    if app.state.llm_file is None:
+        app.state.llm_file = find_model_file()
+    return app.state.llm_file
+
+
 def _get_llm():
     with app.state.llm_lock:
-        if app.state.llm is None and app.state.llm_file is not None:
+        if app.state.llm is None and _find_llm_file() is not None:
             app.state.llm = LocalLLM(app.state.llm_file)
         return app.state.llm
 
@@ -879,7 +1015,7 @@ def ask_endpoint(q: str):
     agent = _make_agent()
     if agent is None:
         return StreamingResponse(
-            iter([sse({"type": "error", "message": "The local language model is not installed (backend/models/llm). Run scripts/download_llm_model.py."})]),
+            iter([sse({"type": "error", "message": "Ask mode needs its local language model, the models\\llm folder inside the IntelliFile folder, and it is missing. Extract IntelliFile-windows.zip again, completely, then ask again. No restart needed."})]),
             media_type="text/event-stream",
         )
 
@@ -919,6 +1055,7 @@ def ask_endpoint(q: str):
 
 @app.get("/ask/status")
 def ask_status_endpoint():
+    _find_llm_file()
     llm = app.state.llm
     if llm is not None and getattr(llm, "last_benchmark", None) is None:
         llm.last_benchmark = llm.benchmark()  # once per process, not per call (it generates 48 tokens)

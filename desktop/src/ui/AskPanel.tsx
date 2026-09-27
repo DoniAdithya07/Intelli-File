@@ -27,16 +27,18 @@ export function AskPanel({ question, onError, compact }: Props) {
   const [done, setDone] = useState<Extract<AskEvent, { type: "done" }> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showTrace, setShowTrace] = useState(true);
+  const [quick, setQuick] = useState<Extract<AskEvent, { type: "quick_answer" }> | null>(null);
   const answerRef = useRef("");
 
   useEffect(() => {
     const controller = new AbortController();
-    setTrace([]); setAnswer(""); setFinal(null); setDone(null); setError(null); answerRef.current = "";
+    setTrace([]); setAnswer(""); setFinal(null); setDone(null); setError(null); setQuick(null); answerRef.current = "";
     askStream(question, (e) => {
       switch (e.type) {
         case "thought": setTrace((t) => [...t, { kind: "thought", text: e.text, system: e.system }]); break;
         case "tool_call": setTrace((t) => [...t, { kind: "call", tool: e.tool, args: e.args, n: e.call }]); break;
         case "tool_result": setTrace((t) => [...t, { kind: "result", tool: e.tool, sources: e.sources, route: e.route, n: e.call }]); break;
+        case "quick_answer": setQuick(e); break;
         case "token": answerRef.current += e.text; setAnswer(answerRef.current); break;
         case "answer": setFinal(e); setAnswer(e.text); break;
         case "done": setDone(e); setShowTrace(false); break;
@@ -50,20 +52,32 @@ export function AskPanel({ question, onError, compact }: Props) {
   const thinking = !done && !error;
   return (
     <div className={`${compact ? "" : "panel p-4"} flex flex-col gap-3`}>
-      <div className="mono flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/50">
-        <span className={`material-symbols-outlined icon-sm text-accent ${thinking ? "animate-pulse" : ""}`}>smart_toy</span>
+      <div className="flex items-center gap-2 text-[12px] text-ink/60">
+        <span className={`material-symbols-outlined icon-sm text-accent ${thinking ? "" : ""}`}>forum</span>
         {thinking ? (answer ? "Answering…" : "Thinking…") : error ? "Something went wrong" : final?.grounded ? "Answered from your files" : "Not found in your files"}
-        {done && <span className="ml-auto normal-case tracking-normal text-white/35">{done.tool_calls} tool call{done.tool_calls === 1 ? "" : "s"} · {done.seconds}s · local model, on this computer</span>}
+        {done && <span className="ml-auto text-ink/60">{done.tool_calls} search{done.tool_calls === 1 ? "" : "es"} in <span className="mono">{done.seconds} s</span>, written on this computer</span>}
       </div>
 
+      {/* Improvement 3: a verbatim passage from the top file while the model
+          works. Retrieval, not the model: shown as a quotation with its
+          file, and gone as soon as the checked answer starts. */}
+      {quick && !answer && !final && !error && (
+        <figure className="border-l-2 border-rule pl-3">
+          <blockquote className="text-[14px] leading-relaxed text-ink/80">{quick.text}</blockquote>
+          <figcaption className="mt-1 text-[12px] text-ink/60">
+            Closest passage in <span className="text-ink/70">{quick.source.filename}</span>. The checked answer follows.
+          </figcaption>
+        </figure>
+      )}
+
       {(answer || final) && (
-        <div className="rounded-lg bg-white/[0.03] px-4 py-3 text-[15px] leading-relaxed text-white/90">
+        <div className="rounded-lg bg-ink/[0.03] px-4 py-3 text-[15px] leading-relaxed text-ink/90">
           <Cited text={answer} sources={final?.citations ?? []} />
-          {thinking && <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-accent align-middle" />}
+          {thinking && <span className="ml-0.5 inline-block h-4 w-[2px] bg-accent align-middle" />}
         </div>
       )}
       {final?.warnings?.map((w, i) => (
-        <div key={i} className="flex items-start gap-2 rounded-lg bg-[rgba(255,176,94,0.12)] px-3 py-2 text-[12.5px] text-[#ffb05e]">
+        <div key={i} className="flex items-start gap-2 rounded-md bg-amber-soft px-3 py-2 text-[13px] text-amber">
           <span className="material-symbols-outlined icon-sm">warning</span>{w}
         </div>
       ))}
@@ -72,12 +86,12 @@ export function AskPanel({ question, onError, compact }: Props) {
       {final && final.citations.length > 0 && (
         <div className="space-y-1.5">
           {final.citations.map((c) => (
-            <div key={c.file_id} className="group flex items-center gap-3 rounded-lg bg-white/[0.03] px-3 py-2" title={c.snippet}>
-              <span className="mono w-6 shrink-0 text-center text-[11px] text-accent">[{c.number}]</span>
+            <div key={c.file_id} className="group flex items-center gap-3 rounded-lg bg-ink/[0.03] px-3 py-2" title={c.snippet}>
+              <span className="mono w-6 shrink-0 text-center text-[12px] text-accent">[{c.number}]</span>
               <FileBadge filename={c.filename} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[13.5px] font-medium text-white/85">{c.filename}{c.page ? <span className="ml-2 text-[11px] text-white/40">page {c.page}</span> : null}</div>
-                <div className="mono truncate text-[11px] text-white/40">{shortenPath(c.path)}</div>
+                <div className="truncate text-[13.5px] font-medium text-ink/90">{c.filename}{c.page ? <span className="ml-2 text-[12px] text-ink/60">page {c.page}</span> : null}</div>
+                <div className="mono truncate text-[12px] text-ink/60">{shortenPath(c.path)}</div>
               </div>
               {!compact && (
                 <>
@@ -87,30 +101,30 @@ export function AskPanel({ question, onError, compact }: Props) {
               )}
             </div>
           ))}
-          {final.citations_inferred && <div className="mono text-[11px] text-white/35">citations attached by IntelliFile — the model's answer was matched to the sources it drew on</div>}
+          {final.citations_inferred && <div className="text-[12px] text-ink/60">IntelliFile matched the answer to the files it came from.</div>}
         </div>
       )}
 
       {trace.length > 0 && (
         <div>
-          <button className="mono flex items-center gap-1 text-[11px] uppercase tracking-wider text-white/45 hover:text-white/80" onClick={() => setShowTrace((v) => !v)}>
+          <button className="flex items-center gap-1 text-[12px] text-ink/60 hover:text-ink/80" onClick={() => setShowTrace((v) => !v)}>
             <span className="material-symbols-outlined icon-sm">{showTrace ? "expand_more" : "chevron_right"}</span>
-            How it got there · {trace.filter((t) => t.kind === "call").length} tool call{trace.filter((t) => t.kind === "call").length === 1 ? "" : "s"}
+            How it got there ({trace.filter((t) => t.kind === "call").length} search{trace.filter((t) => t.kind === "call").length === 1 ? "" : "es"})
           </button>
           {showTrace && (
-            <div className="mt-2 space-y-1 border-l border-white/10 pl-3">
+            <div className="mt-2 space-y-1 border-l border-rule pl-3">
               {trace.map((t, i) => {
-                if (t.kind === "thought") return <div key={i} className={`text-[12.5px] ${t.system ? "text-white/40 italic" : "text-white/65"}`}>{t.text}</div>;
+                if (t.kind === "thought") return <div key={i} className={`text-[12.5px] ${t.system ? "text-ink/60 italic" : "text-ink/70"}`}>{t.text}</div>;
                 if (t.kind === "call") return (
                   <div key={i} className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
                     <span className="chip chip-accent">{t.tool}</span>
-                    {t.tool === "search" ? (<><span className="text-white/85">“{String(t.args.query)}”</span><span className="chip">{String(t.args.mode)}</span>{t.args.filters ? <span className="chip">{String(t.args.filters)}</span> : null}</>) : <span className="text-white/70">source [{String(t.args.source)}]</span>}
+                    {t.tool === "search" ? (<><span className="text-ink/90">“{String(t.args.query)}”</span><span className="chip">{String(t.args.mode)}</span>{t.args.filters ? <span className="chip">{String(t.args.filters)}</span> : null}</>) : <span className="text-ink/80">source [{String(t.args.source)}]</span>}
                   </div>
                 );
                 return (
-                  <div key={i} className="text-[12px] text-white/50">
-                    → {t.sources.length === 0 ? "nothing" : t.sources.map((s) => `[${s.number}] ${s.filename}`).join(", ")}
-                    {t.route && <span className="mono ml-2 text-white/35">· {t.route.tier} · {t.route.total_ms.toFixed(0)} ms</span>}
+                  <div key={i} className="text-[12px] text-ink/60">
+                    Found {t.sources.length === 0 ? "nothing" : t.sources.map((s) => `[${s.number}] ${s.filename}`).join(", ")}
+                    {t.route && <span className="ml-2 text-ink/60">(by {t.route.tier}, <span className="mono">{t.route.total_ms.toFixed(0)} ms</span>)</span>}
                   </div>
                 );
               })}
@@ -131,7 +145,7 @@ function Cited({ text, sources }: { text: string; sources: AskSource[] }) {
         const m = part.match(/^\[(\d{1,2})\]$/);
         if (!m) return <span key={i}>{part}</span>;
         const src = sources.find((s) => s.number === Number(m[1]));
-        return <span key={i} className="mono mx-0.5 rounded bg-accent/15 px-1 text-[11px] text-accent" title={src ? src.filename : undefined}>{m[1]}</span>;
+        return <span key={i} className="mono mx-0.5 rounded bg-accent/15 px-1 text-[12px] text-accent" title={src ? src.filename : undefined}>{m[1]}</span>;
       })}
     </>
   );

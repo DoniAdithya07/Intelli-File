@@ -75,7 +75,9 @@ cd backend
 .\venv\Scripts\python.exe -m PyInstaller --noconfirm intellifile-backend.spec
 .\venv\Scripts\python.exe scripts\assemble_resources.py
 cd ..\desktop
-npm run tauri build
+npm run tauri build -- --no-bundle
+cd ..\backend
+.\venv\Scripts\python.exe scripts\package_windows.py
 ```
 
-The output is under `desktop\src-tauri\target\release\`. See `docs/HOW_TO_RUN.md` for what to hand to a user.
+The output is one zip, `desktop\src-tauri\target\release\IntelliFile-windows.zip` (1.87 GB), under GitHub's 2 GB limit per release file; the packaging step fails if it ever is not. See `docs/HOW_TO_RUN.md` for what to hand to a user.

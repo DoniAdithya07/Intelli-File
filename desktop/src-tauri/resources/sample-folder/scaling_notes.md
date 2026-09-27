@@ -1,1 +1,0 @@
-Horizontal scaling allows additional server instances to be provisioned when traffic demand increases, distributed by a load balancer. Autoscaling policies react to CPU load and request latency.

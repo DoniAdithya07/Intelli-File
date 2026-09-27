@@ -44,6 +44,10 @@ PHASES = [
     ("Phase 13 — Retrieval / chunking / resource benchmarks", "evaluate_retrieval.py"),
     ("Phase 13 — Embedding model comparison", "evaluate_embeddings.py"),
     ("Improvement 6 — Learned router vs rules (5-fold CV)", "evaluate_learned_router.py"),
+    ("Next round 2 — Weak results: noise removed, no relevant file lost", "evaluate_weak_results.py"),
+    ("Next round 1 — Personalization from day one (Windows Recent items)", "prototype_windows_recent.py"),
+    ("Next round 4 — Offline OCR: scanned PDFs and screenshots (Windows OCR)", "prototype_ocr.py"),
+    ("Feature check — file, photo, video and audio identification end to end over HTTP", "check_features.py"),
 ]
 
 

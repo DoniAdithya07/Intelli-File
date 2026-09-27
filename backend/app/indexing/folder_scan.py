@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from ..files.discovery import SUPPORTED_EXTENSIONS, VISUAL_EXTENSIONS, discover_files, permission_hint
+from ..files.discovery import IMAGE_EXTENSIONS, SUPPORTED_EXTENSIONS, VISUAL_EXTENSIONS, discover_files, permission_hint
 from ..files.identity import build_file_record, compute_file_hash
 from .cleanup import cleanup_tombstones
 from .indexer import Indexer
@@ -142,6 +142,17 @@ def _note_failure(path: Path, error: Exception, content_hash: str | None = None)
         FAILED_HASHES[content_hash] = message
 
 
+def _index_image_text(indexer, path: Path, file_id: str) -> None:
+    """OCR text for an image (improvement 4). Photo search already has
+    the image; an OCR failure must never fail the file."""
+    if path.suffix.lower() not in IMAGE_EXTENSIONS:
+        return
+    try:
+        indexer.index_image_text(path, file_id)
+    except Exception:
+        logger.warning("OCR failed for %s", path, exc_info=True)
+
+
 def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, failed: int, force: bool) -> tuple[int, int]:
     """One file of the scan: skip if unchanged, detect a rename, otherwise
     (re-)index. Returns the updated (count, failed)."""
@@ -195,6 +206,7 @@ def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, fai
     try:
         if visual_indexer is not None and path.suffix.lower() in VISUAL_EXTENSIONS:
             visual_indexer.index_visual_file(path, record.file_id, record.hash)
+            _index_image_text(indexer, path, record.file_id)
         else:
             indexer.index_file(path, record.file_id, record.hash)
         record_store.mark_indexed(record.file_id)

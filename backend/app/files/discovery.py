@@ -207,8 +207,8 @@ def permission_hint(path: str) -> str:
         home = str(Path.home())
         protected = [home + "/Desktop", home + "/Documents", home + "/Downloads", "/Volumes"]
         if any(path == p or path.startswith(p + os.sep) for p in protected):
-            return "macOS blocked access — allow IntelliFile under System Settings › Privacy & Security › Files and Folders (or Full Disk Access), then Re-index"
-        return "macOS blocked access to this folder — check System Settings › Privacy & Security"
+            return "macOS blocked access. Allow IntelliFile under System Settings › Privacy & Security › Files and Folders (or Full Disk Access), then Re-index"
+        return "macOS blocked access to this folder. Check System Settings › Privacy & Security"
     if sys.platform == "win32":
-        return "Windows denied access — check the folder's permissions or run IntelliFile as the folder's owner"
+        return "Windows denied access. Check the folder's permissions, or run IntelliFile as the folder's owner"
     return "permission denied"

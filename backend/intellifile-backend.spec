@@ -26,6 +26,16 @@ for pkg in ("onnxruntime", "lancedb", "pyarrow", "av", "tokenizers", "llama_cpp"
     binaries += b
     hiddenimports += h
 
+# Windows' own OCR + PDF rendering (next-round improvement 4): the pywinrt
+# projections are a namespace package of native modules imported lazily.
+try:
+    d, b, h = collect_all("winrt")
+    datas += d
+    binaries += b
+    hiddenimports += h
+except Exception:
+    pass  # not on Windows: OCR is simply off
+
 # transformers is only used for the Whisper feature extractor (numpy path);
 # collect the package but keep torch out.
 hiddenimports += collect_submodules("transformers.models.whisper")
@@ -40,7 +50,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=["torch", "torchvision", "torchaudio", "optimum", "tensorflow", "jax", "flax", "tkinter", "matplotlib", "IPython", "notebook", "pytest"],
+    excludes=["torch", "torchvision", "torchaudio", "optimum", "tensorflow", "jax", "flax", "tkinter", "matplotlib", "IPython", "notebook", "pytest", "hf_xet"],  # hf_xet only speeds up model downloads, never used offline
     noarchive=False,
 )
 pyz = PYZ(a.pure)

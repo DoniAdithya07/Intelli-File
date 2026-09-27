@@ -21,7 +21,7 @@ from .files.discovery import IMAGE_EXTENSIONS, SUPPORTED_EXTENSIONS, VIDEO_EXTEN
 from .files.jobs import Job, JobQueue
 from .files.service import FileWatchService
 from .indexing import Indexer, VisualIndexer, cleanup_tombstones, index_folder
-from .indexing.folder_scan import RECENT_FAILURES, _note_failure as note_failure
+from .indexing.folder_scan import RECENT_FAILURES, _index_image_text, _note_failure as note_failure
 from .power import PowerMonitor, resource_mode
 
 logger = logging.getLogger(__name__)
@@ -112,6 +112,7 @@ class LiveIndexing:
         # Called after every scan / job so caches derived from chunk
         # vectors (Phase 17's per-file centroids) are dropped.
         self.on_index_changed = lambda: None
+        self.on_folder_indexed = lambda folder: None  # a whole folder job finished
 
     def start(self) -> None:
         self.job_queue.start()
@@ -294,6 +295,7 @@ class LiveIndexing:
                 index_folder(self.indexer, folder, visual_indexer=self.visual_indexer, progress=progress, force=force, lock=self.write_lock, gate=self.gate, throttle=self._throttle)
                 self.job.state = "done"
                 self.on_index_changed()
+                self.on_folder_indexed(folder)
             except Exception as e:
                 logger.exception("Indexing failed for %s", folder)
                 self.job.state, self.job.error = "failed", str(e)
@@ -392,6 +394,7 @@ class LiveIndexing:
             try:
                 if self.visual_indexer is not None and path.suffix.lower() in VISUAL_EXTENSIONS:
                     self.visual_indexer.index_visual_file(path, job.file_id, record.hash)
+                    _index_image_text(self.indexer, path, job.file_id)  # OCR text (improvement 4); never fails the file
                 else:
                     self.indexer.index_file(path, job.file_id, record.hash)
             except Exception as e:

@@ -93,10 +93,10 @@ def route(text: str, has_filters: bool, exact: bool, active_records: list[FileRe
     features: dict = {"words": len(words), "filters": has_filters}
 
     if exact:
-        return RouteDecision("keyword", 1, "quoted phrase — literal match only", features)
+        return RouteDecision("keyword", 1, "quoted phrase, literal match only", features)
     if not words:
         if has_filters:
-            return RouteDecision("metadata", 0, "filters only, no words — list matching files", features)
+            return RouteDecision("metadata", 0, "filters only, no words: list the matching files", features)
         return RouteDecision("keyword", 0, "empty", features)
 
     # A query that names a file needs no models at all. Two words or more:
@@ -119,11 +119,11 @@ def route(text: str, has_filters: bool, exact: bool, active_records: list[FileRe
 
     # A few plain words the index has seen: BM25 answers this directly.
     if len(words) <= KEYWORD_MAX_WORDS and not question and unknown == 0 and content_words:
-        return RouteDecision("keyword", 1, f"{len(words)} known keyword{'s' if len(words) != 1 else ''}, no question — BM25 is enough", features)
+        return RouteDecision("keyword", 1, f"{len(words)} known keyword{'s' if len(words) != 1 else ''}, no question, so keyword search (BM25) is enough", features)
 
     # Everything else is hybrid. Complexity 3 marks the long / multi-part
     # questions (reported, and what the agent is suggested for) but no
     # longer buys the reranker up front — it comes by escalation.
     complex_query = len(content_words) >= 7 or clauses >= 2 or (question and len(content_words) >= 5)
     why = "multi-part question" if clauses >= 2 else "question" if question else "unfamiliar word" if unknown else "natural-language phrase"
-    return RouteDecision("hybrid", 3 if complex_query else 2, f"{why} — keyword + meaning, fused (the reranker only if nothing is confident)", features)
+    return RouteDecision("hybrid", 3 if complex_query else 2, f"{why}: keywords and meaning, fused (the reranker only if nothing is confident)", features)

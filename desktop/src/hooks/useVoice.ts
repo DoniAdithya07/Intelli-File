@@ -40,7 +40,7 @@ export function useVoice(onText: (text: string, heard?: string | null, suggestio
         const res = await transcribeAudio(wav);
         if (res.error) onError(res.error);
         else if (res.text) onText(res.text, res.heard ?? null, res.suggestion ?? null);
-        else onError("Didn't catch any words — try again, a little closer to the microphone.");
+        else onError("No words were heard. Try again a little closer to the microphone.");
       } catch (e) {
         onError(e instanceof Error ? e.message : String(e));
       } finally {

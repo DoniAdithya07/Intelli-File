@@ -1,1 +1,0 @@
-Reading list: Designing Data-Intensive Applications, The Pragmatic Programmer, Salt Fat Acid Heat, and Kitchen Confidential.

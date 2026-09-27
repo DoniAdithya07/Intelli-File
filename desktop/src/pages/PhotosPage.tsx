@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { formatTimestamp, searchVisual, suggestVisual, thumbnailUrl, VisualKind, VisualSearchResult } from "../backend";
+import { formatTimestamp, search, searchVisual, suggestVisual, thumbnailUrl, VisualKind, VisualSearchResult } from "../backend";
 import { useVoice } from "../hooks/useVoice";
 import { FILE_MANAGER } from "../platform";
+import { PageHeader, Tabs } from "../ui/kit";
 import { Omnibox } from "../ui/Omnibox";
 import { openResult, revealResult } from "../ui/ResultCard";
 
@@ -17,53 +18,44 @@ const KINDS: { id: VisualKind; label: string }[] = [
   { id: "video", label: "Videos" },
 ];
 
-// CLIP score in the API is squared L2 (0 = identical, 2 = opposite); show it as a
-// match percentage so it reads like the design ("98% match"): cos = 1 - d/2.
-function matchPercent(distance: number): number {
-  const cos = 1 - distance / 2;
-  // Real CLIP cosines for good matches sit around 0.25-0.35; stretch that band to 60-100.
-  return Math.round(Math.max(0, Math.min(100, 60 + (cos - 0.2) * 250)));
-}
-
-function PhotoCard({ r, strong, onError }: { r: VisualSearchResult; strong: boolean; onError: (m: string) => void }) {
+function PhotoCard({ r, strong, onError, browsing }: { r: VisualSearchResult; strong: boolean; onError: (m: string) => void; browsing?: boolean }) {
   return (
     <div
-      className={`panel group cursor-default overflow-hidden ${strong ? "border-accent/60" : "opacity-60"}`}
+      className={`panel group cursor-default overflow-hidden ${strong || browsing ? "" : "opacity-70"}`}
       onDoubleClick={() => openResult(r.path, onError, r.file_id)}
-      title={`Double-click to open · right-click for ${FILE_MANAGER}`}
+      title={`Double-click to open. Right-click to show in ${FILE_MANAGER}.`}
       onContextMenu={(e) => { e.preventDefault(); revealResult(r.path, onError, r.file_id); }}
     >
-      <div className="relative aspect-[4/3] bg-white/[0.03]">
+      <div className="relative aspect-[4/3] bg-ink/[0.03]">
         {r.path && <img src={thumbnailUrl(r.path, 320, r.timestamp_offset_seconds)} alt={r.filename} className="h-full w-full object-cover" loading="lazy" />}
-        <span className={`mono absolute left-2 top-2 rounded-md px-2 py-0.5 text-[11px] ${strong ? "bg-black/60 text-accent" : "bg-black/60 text-white/60"}`}>
-          {strong && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle" />}
-          {matchPercent(r.score)}% match
-        </span>
+        {!browsing && (
+          <span className="absolute left-2 top-2 rounded bg-black/70 px-2 py-0.5 text-[12px] text-white">{strong ? "Strong match" : "Weaker match"}</span>
+        )}
         {r.kind === "video" && r.timestamp_offset_seconds != null && (
-          <span className="mono absolute right-2 top-2 flex items-center gap-1 rounded-md bg-black/60 px-2 py-0.5 text-[11px] text-secondary" title="The moment that matched — open the video and scrub to this time">
+          <span className="mono absolute right-2 top-2 flex items-center gap-1 rounded-md bg-black/60 px-2 py-0.5 text-[12px] text-white" title="The moment that matched. Open the video and go to this time.">
             <span className="material-symbols-outlined" style={{ fontSize: 13 }}>play_arrow</span>
             {formatTimestamp(r.timestamp_offset_seconds)}
           </span>
         )}
         <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 p-2 opacity-0 transition-opacity group-hover:opacity-100">
-          <button className="kbd bg-black/60 hover:text-white" onClick={() => openResult(r.path, onError, r.file_id)}>Open</button>
-          <button className="kbd bg-black/60 hover:text-white" onClick={() => revealResult(r.path, onError, r.file_id)}>{FILE_MANAGER}</button>
+          <button className="rounded bg-black/65 px-1.5 py-0.5 text-[12px] text-white hover:bg-black/80" onClick={() => openResult(r.path, onError, r.file_id)}>Open</button>
+          <button className="rounded bg-black/65 px-1.5 py-0.5 text-[12px] text-white hover:bg-black/80" onClick={() => revealResult(r.path, onError, r.file_id)}>Show in {FILE_MANAGER}</button>
         </div>
       </div>
       {r.kind === "video" && r.path && r.moments && r.moments.length > 1 && (
-        <div className="flex gap-1 px-2 pt-2" title="The moments that matched — scrub to any of these">
+        <div className="flex gap-1 px-2 pt-2" title="The moments that matched">
           {r.moments.map((m) => (
             <div key={m.t} className="relative min-w-0 flex-1 overflow-hidden rounded-md bg-black/40">
               <img src={thumbnailUrl(r.path!, 160, m.t)} alt="" className="aspect-video w-full object-cover" loading="lazy" />
-              <span className="mono absolute bottom-0.5 right-1 rounded bg-black/70 px-1 text-[10px] text-white/85">{formatTimestamp(m.t)}</span>
+              <span className="mono absolute bottom-0.5 right-1 rounded bg-black/70 px-1 text-[11px] text-white">{formatTimestamp(m.t)}</span>
             </div>
           ))}
         </div>
       )}
       <div className="px-3 py-2">
         <div className="truncate text-[13px] font-medium">{r.filename}</div>
-        <div className="mono mt-0.5 flex justify-between text-[11px] text-white/40">
-          <span>{r.captured_at ? new Date(r.captured_at).toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" }) : "—"}</span>
+        <div className="mono mt-0.5 flex justify-between text-[12px] text-ink/60">
+          <span>{r.captured_at ? new Date(r.captured_at).toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" }) : "No date"}</span>
           <span>{r.kind ?? "photo"}</span>
         </div>
       </div>
@@ -120,67 +112,63 @@ export function PhotosPage({ photoCount, videoCount, onError }: Props) {
   }, [query, kind, searching, onError]);
 
   const voice = useVoice(useCallback((t: string) => setQuery(t), []), useCallback((m: string) => onError(m), [onError]));
+
+  // Before a search: the newest photos and videos in the index, as they are.
+  const [latest, setLatest] = useState<VisualSearchResult[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const words = kind === "photo" ? ["type:image"] : kind === "video" ? ["type:video"] : ["type:image", "type:video"];
+    Promise.all(words.map((w) => search(w, "auto", 40, undefined, false)))
+      .then((all) => {
+        if (cancelled) return;
+        const files = all.flatMap((r) => r.results).sort((a, b) => b.modified_time - a.modified_time).slice(0, 40);
+        setLatest(files.map((f) => ({
+          file_id: f.file_id, path: f.path, filename: f.filename, score: 0, confidence: "strong",
+          kind: /\.(mp4|mov|m4v|mkv|webm|avi)$/i.test(f.filename) ? "video" : "photo",
+          captured_at: new Date(f.modified_time * 1000).toISOString(), timestamp_offset_seconds: null, moments: null,
+        })));
+      })
+      .catch(() => { if (!cancelled) setLatest([]); });
+    return () => { cancelled = true; };
+  }, [kind]);
   const strong = (results ?? []).filter((r) => r.confidence !== "weak");
   const weak = (results ?? []).filter((r) => r.confidence === "weak");
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <div className="panel p-3">
-        <Omnibox value={query} onChange={setQuery} onSubmit={() => run()} placeholder="a cat in the snow · a plane parked on a runway · a birthday cake with candles" icon="image_search" searching={searching} voice={voice} autoFocus />
+      <PageHeader title="Photos and videos" subtitle="Find pictures and video moments by describing what is in them." />
+      <div>
+        <Omnibox value={query} onChange={(v) => { setQuery(v); if (!v.trim()) setResults(null); }} onSubmit={() => run()} placeholder="Describe a photo" icon="image_search" searching={searching} voice={voice} autoFocus />
         {suggestion && voice.state === "idle" && (
-          <div className="mt-2 flex items-center gap-2 text-[13px] text-white/60">
-            <span className="material-symbols-outlined icon-sm text-accent">spellcheck</span>
-            Did you mean:
-            <button
-              className="chip chip-accent hover:brightness-125"
-              onClick={() => { setQuery(suggestion); setSuggestion(null); run(suggestion); }}
-              title="Replace the query with this spelling and search"
-            >
-              {suggestion}
-            </button>
+          <div className="mt-2 flex items-center gap-2 text-[13px] text-ink/70">
+            Did you mean
+            <button className="btn-secondary px-2 py-0.5 text-[13px] font-medium text-accent" onClick={() => { setQuery(suggestion); setSuggestion(null); run(suggestion); }}>{suggestion}</button>
           </div>
         )}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="flex items-center gap-2 text-[13px] text-white/60">
-            <span className="material-symbols-outlined icon-sm text-accent">auto_awesome</span>
-            Describe the scene as a short phrase — <i className="text-white/80">"a person wearing a red shirt"</i> beats <i className="text-white/80">"red shirt"</i>.
-          </p>
-          <div className="flex gap-1 rounded-lg bg-white/[0.03] p-1" role="tablist" aria-label="Photo or video">
-            {KINDS.map((k) => (
-              <button
-                key={k.id}
-                role="tab"
-                aria-selected={kind === k.id}
-                className={`mono rounded-md px-3 py-1 text-[11px] transition-colors ${kind === k.id ? "bg-accent/15 text-accent" : "text-white/55 hover:text-white"}`}
-                onClick={() => { setKind(k.id); if (lastQuery) run(lastQuery, k.id); }}
-              >
-                {k.id === "video" && <span className="material-symbols-outlined mr-1 align-middle" style={{ fontSize: 13 }}>play_arrow</span>}
-                {k.label}
-                {k.id === "video" && videoCount > 0 && <span className="ml-1 text-white/40">{videoCount}</span>}
-              </button>
-            ))}
-          </div>
+        <div className="mt-3 flex items-end justify-between gap-3 border-b border-rule">
+          <Tabs label="Photo or video" tabs={KINDS} value={kind} onChange={(k) => { setKind(k); if (lastQuery && results) run(lastQuery, k); }} />
+          <span className="pb-2 text-[12px] text-ink/60">A short phrase works best: <i>a person in a red shirt</i></span>
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-        {searching && !results && <div className="grid grid-cols-4 gap-3">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton aspect-[4/3]" />)}</div>}
+        {searching && !results && <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton aspect-[4/3]" />)}</div>}
 
         {results && results.length === 0 && unrecognized.length > 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <span className="material-symbols-outlined mb-3 text-white/30" style={{ fontSize: 40 }}>spellcheck</span>
+            <span className="material-symbols-outlined mb-3 text-ink/55" style={{ fontSize: 40 }}>spellcheck</span>
             <p className="text-[15px] font-semibold">
-              No photo matches “{lastQuery}” — check the spelling of {unrecognized.map((w, i) => <span key={w}>{i > 0 && ", "}<i className="text-accent">“{w}”</i></span>)}.
+              No photo matches “{lastQuery}”. Check the spelling of {unrecognized.map((w, i) => <span key={w}>{i > 0 && ", "}<i className="text-accent">“{w}”</i></span>)}.
             </p>
-            <p className="mt-1 text-[13px] text-white/50">That isn't an English word or one of your file names, so the picture search wasn't run on it.</p>
+            <p className="mt-1 text-[13px] text-ink/60">That isn't an English word or one of your file names, so the picture search wasn't run on it.</p>
           </div>
         )}
 
         {results && results.length === 0 && unrecognized.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <span className="material-symbols-outlined mb-3 text-white/30" style={{ fontSize: 40 }}>hide_image</span>
+            <span className="material-symbols-outlined mb-3 text-ink/55" style={{ fontSize: 40 }}>hide_image</span>
             <p className="text-[15px] font-semibold">No {kind === "all" ? "photo or video" : kind} on this computer matches “{lastQuery}”.</p>
-            <p className="mt-1 text-[13px] text-white/50">{(kind === "video" ? videoCount : kind === "photo" ? photoCount : photoCount + videoCount).toLocaleString()} {kind === "all" ? "photos and videos" : kind + "s"} checked by what's in the picture.</p>
+            <p className="mt-1 text-[13px] text-ink/60">{(kind === "video" ? videoCount : kind === "photo" ? photoCount : photoCount + videoCount).toLocaleString()} {kind === "all" ? "photos and videos" : kind + "s"} checked by what's in the picture.</p>
           </div>
         )}
 
@@ -189,23 +177,23 @@ export function PhotosPage({ photoCount, videoCount, onError }: Props) {
             <div className="mb-2 flex items-center gap-2">
               {strong.length > 0 ? (
                 <>
-                  <span className="text-[15px] font-semibold">Top matches (high confidence)</span>
+                  <span className="text-[15px] font-semibold">Best matches</span>
                   <span className="chip chip-accent">{strong.length} {kind === "all" ? "result" : kind}{strong.length === 1 ? "" : "s"}</span>
                 </>
               ) : (
-                <span className="text-[13px] text-white/60"><b className="text-white/85">No confident match for “{lastQuery}”.</b> The photos below are only loosely related.</span>
+                <span className="text-[13px] text-ink/70"><b className="text-ink/90">No confident match for “{lastQuery}”.</b> The photos below are only loosely related.</span>
               )}
-              <span className="mono ml-auto text-[11px] text-white/40">CLIP ViT-B/16 fp16 · {elapsed?.toFixed(0)} ms</span>
+              <span className="ml-auto text-[12px] text-ink/60">Matched on this computer in <span className="mono">{elapsed?.toFixed(0)} ms</span></span>
             </div>
-            <div className="rise grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
               {strong.map((r) => <PhotoCard key={r.file_id} r={r} strong onError={onError} />)}
             </div>
             {weak.length > 0 && (
               <>
-                <div className="mono my-3 flex items-center gap-3 text-[11px] uppercase tracking-wider text-white/40">
-                  Possibly related (weaker matches)<span className="h-px flex-1 bg-white/[0.07]" />
+                <div className="my-3 flex items-center gap-3 text-[12px] text-ink/60">
+                  Possibly related (weaker matches)<span className="h-px flex-1 bg-ink/[0.07]" />
                 </div>
-                <div className="rise grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
                   {weak.map((r) => <PhotoCard key={r.file_id} r={r} strong={false} onError={onError} />)}
                 </div>
               </>
@@ -213,18 +201,26 @@ export function PhotosPage({ photoCount, videoCount, onError }: Props) {
           </>
         )}
 
-        {!results && !searching && (
-          <div className="flex flex-col items-center justify-center py-16 text-center text-white/45">
-            <span className="material-symbols-outlined mb-3 text-white/25" style={{ fontSize: 40 }}>photo_library</span>
-            <p className="text-[14px]">{photoCount.toLocaleString()} photos and {videoCount.toLocaleString()} videos are searchable by what's in them — no tags, no captions, no file names.</p>
-          </div>
+        {!results && !searching && latest && latest.length > 0 && (
+          <>
+            <div className="mb-2 text-[13px] text-ink/65">Newest first. {photoCount.toLocaleString()} photos and {videoCount.toLocaleString()} videos can be found by what is in them.</div>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
+              {latest.map((r) => <PhotoCard key={r.file_id} r={r} strong browsing onError={onError} />)}
+            </div>
+          </>
+        )}
+        {!results && !searching && latest && latest.length === 0 && (
+          <div className="py-16 text-center text-[14px] text-ink/65">No photos indexed yet. Add a folder with photos in Index.</div>
+        )}
+        {!results && !searching && !latest && (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">{Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton aspect-[4/3]" />)}</div>
         )}
       </div>
 
-      <div className="mono flex items-center gap-4 text-[11px] text-white/45">
+      <div className="flex items-center gap-4 text-[12px] text-ink/60">
         <span>double-click <span className="kbd">open</span></span>
         <span>right-click <span className="kbd">reveal in {FILE_MANAGER}</span></span>
-        <span className="ml-auto"><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle" />Local CLIP ViT-B/16 · 512-dim</span>
+        <span className="ml-auto">Pictures are matched by a model on this computer</span>
       </div>
     </div>
   );

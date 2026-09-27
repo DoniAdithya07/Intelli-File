@@ -77,3 +77,11 @@ def models_dir() -> Path:
 
 def data_dir() -> Path:
     return _resolve("INTELLIFILE_DATA_DIR", "data")
+
+
+def sample_folder() -> Path | None:
+    """The small demo folder shipped next to the app (built by
+    scripts/assemble_resources.py), for "Try the sample folder". None in a
+    development checkout, where it is not built."""
+    path = _resolve("INTELLIFILE_SAMPLE_DIR", "sample-folder")
+    return path if path.is_dir() else None

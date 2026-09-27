@@ -1,0 +1,1807 @@
+{
+  "sweep": [
+    {
+      "gap": null,
+      "cap": null,
+      "weak_per_query": 2.25,
+      "noise_per_query": 2.25,
+      "relevant_lost": 0
+    },
+    {
+      "gap": null,
+      "cap": 5,
+      "weak_per_query": 1.7666666666666666,
+      "noise_per_query": 1.7666666666666666,
+      "relevant_lost": 0
+    },
+    {
+      "gap": null,
+      "cap": 3,
+      "weak_per_query": 1.1833333333333333,
+      "noise_per_query": 1.1833333333333333,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.3,
+      "cap": null,
+      "weak_per_query": 1.4833333333333334,
+      "noise_per_query": 1.4833333333333334,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.3,
+      "cap": 5,
+      "weak_per_query": 1.2166666666666666,
+      "noise_per_query": 1.2166666666666666,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.3,
+      "cap": 3,
+      "weak_per_query": 0.8666666666666667,
+      "noise_per_query": 0.8666666666666667,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.2,
+      "cap": null,
+      "weak_per_query": 0.45,
+      "noise_per_query": 0.45,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.2,
+      "cap": 5,
+      "weak_per_query": 0.4,
+      "noise_per_query": 0.4,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.2,
+      "cap": 3,
+      "weak_per_query": 0.3333333333333333,
+      "noise_per_query": 0.3333333333333333,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.15,
+      "cap": null,
+      "weak_per_query": 0.21666666666666667,
+      "noise_per_query": 0.21666666666666667,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.15,
+      "cap": 5,
+      "weak_per_query": 0.21666666666666667,
+      "noise_per_query": 0.21666666666666667,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.15,
+      "cap": 3,
+      "weak_per_query": 0.18333333333333332,
+      "noise_per_query": 0.18333333333333332,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.1,
+      "cap": null,
+      "weak_per_query": 0.03333333333333333,
+      "noise_per_query": 0.03333333333333333,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.1,
+      "cap": 5,
+      "weak_per_query": 0.03333333333333333,
+      "noise_per_query": 0.03333333333333333,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.1,
+      "cap": 3,
+      "weak_per_query": 0.03333333333333333,
+      "noise_per_query": 0.03333333333333333,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.05,
+      "cap": null,
+      "weak_per_query": 0.0,
+      "noise_per_query": 0.0,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.05,
+      "cap": 5,
+      "weak_per_query": 0.0,
+      "noise_per_query": 0.0,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.05,
+      "cap": 3,
+      "weak_per_query": 0.0,
+      "noise_per_query": 0.0,
+      "relevant_lost": 0
+    }
+  ],
+  "shipped": {
+    "gap": null,
+    "cap": null,
+    "weak_per_query": 0.18333333333333332,
+    "noise_per_query": 0.18333333333333332,
+    "relevant_lost": 0
+  },
+  "queries": [
+    {
+      "query": "gym plan",
+      "results": [
+        {
+          "name": "gym plan.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "lisbon trip",
+      "results": [
+        {
+          "name": "lisbon trip.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "landlord letter",
+      "results": [
+        {
+          "name": "landlord letter.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "monthly expenses",
+      "results": [
+        {
+          "name": "monthly expenses.csv",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "kyoto itinerary",
+      "results": [
+        {
+          "name": "kyoto itinerary.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "insurance policy",
+      "results": [
+        {
+          "name": "insurance policy.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "packing list",
+      "results": [
+        {
+          "name": "packing list.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "deploy checklist",
+      "results": [
+        {
+          "name": "deploy checklist.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "incident report",
+      "results": [
+        {
+          "name": "incident report.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "half marathon plan",
+      "results": [
+        {
+          "name": "half marathon plan.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "rasmalai recipe",
+      "results": [
+        {
+          "name": "rasmalai recipe.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "march invoice",
+      "results": [
+        {
+          "name": "march invoice.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "type:csv",
+      "results": [
+        {
+          "name": "monthly expenses.csv",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        },
+        {
+          "name": "running log.csv",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "in:invoices",
+      "results": [
+        {
+          "name": "april invoice.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "type:csv expenses",
+      "results": [
+        {
+          "name": "monthly expenses.csv",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "in:invoices workshop",
+      "results": [
+        {
+          "name": "april invoice.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "type:txt insurance",
+      "results": [
+        {
+          "name": "insurance policy.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        },
+        {
+          "name": "dentist.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "type:md scaling",
+      "results": [
+        {
+          "name": "scaling_notes.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "ext:csv river",
+      "results": [
+        {
+          "name": "running log.csv",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "type:txt dentist",
+      "results": [
+        {
+          "name": "dentist.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "sourdough starter",
+      "results": [
+        {
+          "name": "sourdough.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "deposit scheme",
+      "results": [
+        {
+          "name": "lease agreement.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "autoscaling policies",
+      "results": [
+        {
+          "name": "scaling_notes.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "dead-letter queue",
+      "results": [
+        {
+          "name": "queue_design.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "circuit breaker",
+      "results": [
+        {
+          "name": "incident report.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "cardamom pistachio",
+      "results": [
+        {
+          "name": "rasmalai recipe.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "midge forecast",
+      "results": [
+        {
+          "name": "camping trip.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "idempotency keys",
+      "results": [
+        {
+          "name": "api design.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "wall sits",
+      "results": [
+        {
+          "name": "physio exercises.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "bouncy castle",
+      "results": [
+        {
+          "name": "birthday party.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "oat milk",
+      "results": [
+        {
+          "name": "shopping list.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "guest network",
+      "results": [
+        {
+          "name": "wifi setup.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "brake pads",
+      "results": [
+        {
+          "name": "car service.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "emergency fund",
+      "results": [
+        {
+          "name": "savings plan.txt",
+          "tier": "strong",
+          "distance": null,
+          "relevant": true
+        }
+      ]
+    },
+    {
+      "query": "how do we add capacity when lots of visitors arrive at once",
+      "results": [
+        {
+          "name": "scaling_notes.md",
+          "tier": "strong",
+          "distance": 0.6386124491691589,
+          "relevant": true
+        },
+        {
+          "name": "queue_design.md",
+          "tier": "weak",
+          "distance": 0.7706729173660278,
+          "relevant": false
+        },
+        {
+          "name": "deploy checklist.md",
+          "tier": "weak",
+          "distance": 0.773876965045929,
+          "relevant": false
+        },
+        {
+          "name": "incident report.md",
+          "tier": "weak",
+          "distance": 0.7807565927505493,
+          "relevant": false
+        },
+        {
+          "name": "camping trip.md",
+          "tier": "weak",
+          "distance": 0.8412890434265137,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.8702053427696228,
+          "relevant": false
+        },
+        {
+          "name": "api design.md",
+          "tier": "weak",
+          "distance": 0.8868156671524048,
+          "relevant": false
+        },
+        {
+          "name": "savings plan.txt",
+          "tier": "weak",
+          "distance": 0.9002544283866882,
+          "relevant": false
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "weak",
+          "distance": 0.9010791778564453,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what should I do about the leaking tap in the flat",
+      "results": [
+        {
+          "name": "landlord letter.txt",
+          "tier": "strong",
+          "distance": 0.6702245473861694,
+          "relevant": true
+        },
+        {
+          "name": "caching strategy.txt",
+          "tier": "weak",
+          "distance": 0.8303072452545166,
+          "relevant": false
+        },
+        {
+          "name": "incident report.md",
+          "tier": "weak",
+          "distance": 0.8885797262191772,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "how long does the bread dough need to rise",
+      "results": [
+        {
+          "name": "pizza dough.md",
+          "tier": "strong",
+          "distance": 0.5290401577949524,
+          "relevant": false
+        },
+        {
+          "name": "sourdough.md",
+          "tier": "strong",
+          "distance": 0.5300296545028687,
+          "relevant": true
+        },
+        {
+          "name": "croissants.txt",
+          "tier": "strong",
+          "distance": 0.5724725723266602,
+          "relevant": false
+        },
+        {
+          "name": "deploy checklist.md",
+          "tier": "weak",
+          "distance": 0.8084627389907837,
+          "relevant": false
+        },
+        {
+          "name": "coffee notes.txt",
+          "tier": "weak",
+          "distance": 0.8213417530059814,
+          "relevant": false
+        },
+        {
+          "name": "physio exercises.txt",
+          "tier": "weak",
+          "distance": 0.8365997672080994,
+          "relevant": false
+        },
+        {
+          "name": "landlord letter.txt",
+          "tier": "weak",
+          "distance": 0.8383145928382874,
+          "relevant": false
+        },
+        {
+          "name": "weeknight curry.md",
+          "tier": "weak",
+          "distance": 0.871263325214386,
+          "relevant": false
+        },
+        {
+          "name": "half marathon plan.md",
+          "tier": "weak",
+          "distance": 0.8856871128082275,
+          "relevant": false
+        },
+        {
+          "name": "tax notes.md",
+          "tier": "weak",
+          "distance": 0.9052800536155701,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what went wrong during the big sale",
+      "results": [
+        {
+          "name": "incident report.md",
+          "tier": "strong",
+          "distance": 0.6103249192237854,
+          "relevant": true
+        },
+        {
+          "name": "queue_design.md",
+          "tier": "weak",
+          "distance": 0.826947808265686,
+          "relevant": false
+        },
+        {
+          "name": "landlord letter.txt",
+          "tier": "weak",
+          "distance": 0.8397938013076782,
+          "relevant": false
+        },
+        {
+          "name": "deploy checklist.md",
+          "tier": "weak",
+          "distance": 0.8900338411331177,
+          "relevant": false
+        },
+        {
+          "name": "tax notes.md",
+          "tier": "weak",
+          "distance": 0.8935385942459106,
+          "relevant": false
+        },
+        {
+          "name": "monthly expenses.csv",
+          "tier": "weak",
+          "distance": 0.896593451499939,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "which exercises help my knee recover",
+      "results": [
+        {
+          "name": "physio exercises.txt",
+          "tier": "strong",
+          "distance": 0.5850286483764648,
+          "relevant": true
+        },
+        {
+          "name": "gym plan.txt",
+          "tier": "strong",
+          "distance": 0.7195502519607544,
+          "relevant": false
+        },
+        {
+          "name": "swimming drills.md",
+          "tier": "strong",
+          "distance": 0.7595400810241699,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what is my hotel confirmation for portugal",
+      "results": [
+        {
+          "name": "lisbon trip.md",
+          "tier": "strong",
+          "distance": 0.518972635269165,
+          "relevant": true
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "weak",
+          "distance": 0.7517638206481934,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.7740272283554077,
+          "relevant": false
+        },
+        {
+          "name": "kyoto itinerary.txt",
+          "tier": "weak",
+          "distance": 0.7924591302871704,
+          "relevant": false
+        },
+        {
+          "name": "travel insurance.md",
+          "tier": "weak",
+          "distance": 0.805657684803009,
+          "relevant": false
+        },
+        {
+          "name": "lease agreement.txt",
+          "tier": "weak",
+          "distance": 0.817274808883667,
+          "relevant": false
+        },
+        {
+          "name": "camping trip.md",
+          "tier": "weak",
+          "distance": 0.8303291201591492,
+          "relevant": false
+        },
+        {
+          "name": "dentist.txt",
+          "tier": "weak",
+          "distance": 0.8317229151725769,
+          "relevant": false
+        },
+        {
+          "name": "meeting notes.txt",
+          "tier": "weak",
+          "distance": 0.8406289219856262,
+          "relevant": false
+        },
+        {
+          "name": "wifi setup.txt",
+          "tier": "weak",
+          "distance": 0.8846426606178284,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "how much do I put aside each month",
+      "results": [
+        {
+          "name": "monthly expenses.csv",
+          "tier": "strong",
+          "distance": 0.5222834348678589,
+          "relevant": false
+        },
+        {
+          "name": "savings plan.txt",
+          "tier": "strong",
+          "distance": 0.5617109537124634,
+          "relevant": true
+        },
+        {
+          "name": "tax notes.md",
+          "tier": "strong",
+          "distance": 0.6650285720825195,
+          "relevant": false
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "strong",
+          "distance": 0.7114721536636353,
+          "relevant": false
+        },
+        {
+          "name": "lease agreement.txt",
+          "tier": "strong",
+          "distance": 0.7351022958755493,
+          "relevant": false
+        },
+        {
+          "name": "travel insurance.md",
+          "tier": "strong",
+          "distance": 0.7490217089653015,
+          "relevant": false
+        },
+        {
+          "name": "insurance policy.txt",
+          "tier": "weak",
+          "distance": 0.7637736797332764,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.8042110204696655,
+          "relevant": false
+        },
+        {
+          "name": "running log.csv",
+          "tier": "weak",
+          "distance": 0.8210405111312866,
+          "relevant": false
+        },
+        {
+          "name": "incident report.md",
+          "tier": "weak",
+          "distance": 0.8240580558776855,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "when is the car due at the mechanic",
+      "results": [
+        {
+          "name": "insurance policy.txt",
+          "tier": "strong",
+          "distance": 0.727177083492279,
+          "relevant": false
+        },
+        {
+          "name": "car service.txt",
+          "tier": "strong",
+          "distance": 0.6280128955841064,
+          "relevant": true
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "weak",
+          "distance": 0.7397572994232178,
+          "relevant": false
+        },
+        {
+          "name": "landlord letter.txt",
+          "tier": "weak",
+          "distance": 0.7834057807922363,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.7925882935523987,
+          "relevant": false
+        },
+        {
+          "name": "dentist.txt",
+          "tier": "weak",
+          "distance": 0.8087000846862793,
+          "relevant": false
+        },
+        {
+          "name": "monthly expenses.csv",
+          "tier": "weak",
+          "distance": 0.8471976518630981,
+          "relevant": false
+        },
+        {
+          "name": "incident report.md",
+          "tier": "weak",
+          "distance": 0.8880580067634583,
+          "relevant": false
+        },
+        {
+          "name": "running log.csv",
+          "tier": "weak",
+          "distance": 0.9058853983879089,
+          "relevant": false
+        },
+        {
+          "name": "travel insurance.md",
+          "tier": "weak",
+          "distance": 0.9065250158309937,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what do I need to bring for the hike",
+      "results": [
+        {
+          "name": "camping trip.md",
+          "tier": "strong",
+          "distance": 0.6787443161010742,
+          "relevant": false
+        },
+        {
+          "name": "dentist.txt",
+          "tier": "strong",
+          "distance": 0.8455426692962646,
+          "relevant": false
+        },
+        {
+          "name": "packing list.txt",
+          "tier": "strong",
+          "distance": 0.6127859354019165,
+          "relevant": true
+        },
+        {
+          "name": "book club.md",
+          "tier": "strong",
+          "distance": null,
+          "relevant": false
+        },
+        {
+          "name": "gym plan.txt",
+          "tier": "weak",
+          "distance": 0.8241406679153442,
+          "relevant": false
+        },
+        {
+          "name": "running log.csv",
+          "tier": "weak",
+          "distance": 0.8415731191635132,
+          "relevant": false
+        },
+        {
+          "name": "swimming drills.md",
+          "tier": "weak",
+          "distance": 0.8461757302284241,
+          "relevant": false
+        },
+        {
+          "name": "kyoto itinerary.txt",
+          "tier": "weak",
+          "distance": 0.8585790395736694,
+          "relevant": false
+        },
+        {
+          "name": "lisbon trip.md",
+          "tier": "weak",
+          "distance": 0.8824876546859741,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "how should the shop's pages be released safely",
+      "results": [
+        {
+          "name": "deploy checklist.md",
+          "tier": "strong",
+          "distance": 0.7445869445800781,
+          "relevant": true
+        },
+        {
+          "name": "meeting notes.txt",
+          "tier": "weak",
+          "distance": 0.8384225368499756,
+          "relevant": false
+        },
+        {
+          "name": "api design.md",
+          "tier": "weak",
+          "distance": 0.8565791845321655,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.8635408878326416,
+          "relevant": false
+        },
+        {
+          "name": "incident report.md",
+          "tier": "weak",
+          "distance": 0.8668291568756104,
+          "relevant": false
+        },
+        {
+          "name": "queue_design.md",
+          "tier": "weak",
+          "distance": 0.8724559545516968,
+          "relevant": false
+        },
+        {
+          "name": "caching strategy.txt",
+          "tier": "weak",
+          "distance": 0.8977302312850952,
+          "relevant": false
+        },
+        {
+          "name": "tax notes.md",
+          "tier": "weak",
+          "distance": 0.9001957774162292,
+          "relevant": false
+        },
+        {
+          "name": "croissants.txt",
+          "tier": "weak",
+          "distance": 0.9073964357376099,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what temperature is the water for the coffee",
+      "results": [
+        {
+          "name": "coffee notes.txt",
+          "tier": "strong",
+          "distance": 0.5119093060493469,
+          "relevant": true
+        },
+        {
+          "name": "pizza dough.md",
+          "tier": "strong",
+          "distance": 0.7479784488677979,
+          "relevant": false
+        },
+        {
+          "name": "landlord letter.txt",
+          "tier": "weak",
+          "distance": 0.7591716051101685,
+          "relevant": false
+        },
+        {
+          "name": "sourdough.md",
+          "tier": "weak",
+          "distance": 0.7832112908363342,
+          "relevant": false
+        },
+        {
+          "name": "rasmalai recipe.txt",
+          "tier": "weak",
+          "distance": 0.7893558740615845,
+          "relevant": false
+        },
+        {
+          "name": "running log.csv",
+          "tier": "weak",
+          "distance": 0.8554623126983643,
+          "relevant": false
+        },
+        {
+          "name": "camping trip.md",
+          "tier": "weak",
+          "distance": 0.8789893388748169,
+          "relevant": false
+        },
+        {
+          "name": "croissants.txt",
+          "tier": "weak",
+          "distance": 0.8799381256103516,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "who is responsible for the database move",
+      "results": [
+        {
+          "name": "meeting notes.txt",
+          "tier": "strong",
+          "distance": 0.6527953147888184,
+          "relevant": true
+        },
+        {
+          "name": "deploy checklist.md",
+          "tier": "strong",
+          "distance": 0.6803205013275146,
+          "relevant": false
+        },
+        {
+          "name": "caching strategy.txt",
+          "tier": "weak",
+          "distance": 0.7519261837005615,
+          "relevant": false
+        },
+        {
+          "name": "incident report.md",
+          "tier": "weak",
+          "distance": 0.7855257391929626,
+          "relevant": false
+        },
+        {
+          "name": "reading list.md",
+          "tier": "weak",
+          "distance": 0.8091175556182861,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.8299126625061035,
+          "relevant": false
+        },
+        {
+          "name": "api design.md",
+          "tier": "weak",
+          "distance": 0.8599318265914917,
+          "relevant": false
+        },
+        {
+          "name": "scaling_notes.md",
+          "tier": "weak",
+          "distance": 0.8601531386375427,
+          "relevant": false
+        },
+        {
+          "name": "queue_design.md",
+          "tier": "weak",
+          "distance": 0.8788074851036072,
+          "relevant": false
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "weak",
+          "distance": 0.8818587064743042,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "how do we keep old values out of the cache",
+      "results": [
+        {
+          "name": "caching strategy.txt",
+          "tier": "strong",
+          "distance": 0.6047378778457642,
+          "relevant": true
+        },
+        {
+          "name": "deploy checklist.md",
+          "tier": "weak",
+          "distance": 0.776833176612854,
+          "relevant": false
+        },
+        {
+          "name": "tax notes.md",
+          "tier": "weak",
+          "distance": 0.8608547449111938,
+          "relevant": false
+        },
+        {
+          "name": "pizza dough.md",
+          "tier": "weak",
+          "distance": 0.890844464302063,
+          "relevant": false
+        },
+        {
+          "name": "incident report.md",
+          "tier": "weak",
+          "distance": 0.9009561538696289,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what am I planting near the fence",
+      "results": [
+        {
+          "name": "garden plan.md",
+          "tier": "strong",
+          "distance": 0.5711537599563599,
+          "relevant": true
+        },
+        {
+          "name": "deploy checklist.md",
+          "tier": "weak",
+          "distance": 0.8499523997306824,
+          "relevant": false
+        },
+        {
+          "name": "camping trip.md",
+          "tier": "weak",
+          "distance": 0.8938426375389099,
+          "relevant": false
+        },
+        {
+          "name": "weeknight curry.md",
+          "tier": "weak",
+          "distance": 0.9028918147087097,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "which book is the group reading",
+      "results": [
+        {
+          "name": "book club.md",
+          "tier": "strong",
+          "distance": 0.7499308586120605,
+          "relevant": true
+        },
+        {
+          "name": "reading list.md",
+          "tier": "weak",
+          "distance": 0.8545884490013123,
+          "relevant": false
+        },
+        {
+          "name": "running log.csv",
+          "tier": "weak",
+          "distance": 0.8686615228652954,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "how many guests are coming to the celebration",
+      "results": [
+        {
+          "name": "birthday party.md",
+          "tier": "strong",
+          "distance": 0.6514172554016113,
+          "relevant": true
+        },
+        {
+          "name": "dentist.txt",
+          "tier": "weak",
+          "distance": 0.8384010791778564,
+          "relevant": false
+        },
+        {
+          "name": "camping trip.md",
+          "tier": "weak",
+          "distance": 0.8466141223907471,
+          "relevant": false
+        },
+        {
+          "name": "kyoto itinerary.txt",
+          "tier": "weak",
+          "distance": 0.8718481063842773,
+          "relevant": false
+        },
+        {
+          "name": "lisbon trip.md",
+          "tier": "weak",
+          "distance": 0.877591609954834,
+          "relevant": false
+        },
+        {
+          "name": "book club.md",
+          "tier": "weak",
+          "distance": 0.8842235207557678,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "when is the rent due and how much is the deposit, and what is the notice period?",
+      "results": [
+        {
+          "name": "lease agreement.txt",
+          "tier": "strong",
+          "distance": 0.5787572860717773,
+          "relevant": true
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "strong",
+          "distance": 0.6857411861419678,
+          "relevant": false
+        },
+        {
+          "name": "tax notes.md",
+          "tier": "strong",
+          "distance": 0.6919432282447815,
+          "relevant": false
+        },
+        {
+          "name": "monthly expenses.csv",
+          "tier": "weak",
+          "distance": 0.7575352191925049,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.790287435054779,
+          "relevant": false
+        },
+        {
+          "name": "insurance policy.txt",
+          "tier": "weak",
+          "distance": 0.8922653794288635,
+          "relevant": false
+        },
+        {
+          "name": "landlord letter.txt",
+          "tier": "weak",
+          "distance": 0.8943195343017578,
+          "relevant": false
+        },
+        {
+          "name": "savings plan.txt",
+          "tier": "weak",
+          "distance": 0.8998709917068481,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what do I train on wednesday, and how long is the long run in the marathon plan?",
+      "results": [
+        {
+          "name": "half marathon plan.md",
+          "tier": "strong",
+          "distance": 0.5218531489372253,
+          "relevant": true
+        },
+        {
+          "name": "gym plan.txt",
+          "tier": "strong",
+          "distance": 0.6317126750946045,
+          "relevant": true
+        },
+        {
+          "name": "running log.csv",
+          "tier": "strong",
+          "distance": 0.7048506736755371,
+          "relevant": false
+        },
+        {
+          "name": "camping trip.md",
+          "tier": "weak",
+          "distance": 0.8203533291816711,
+          "relevant": false
+        },
+        {
+          "name": "swimming drills.md",
+          "tier": "weak",
+          "distance": 0.8713142275810242,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "when do I fly to lisbon and what is the travel insurance certificate number?",
+      "results": [
+        {
+          "name": "lisbon trip.md",
+          "tier": "strong",
+          "distance": 0.42387741804122925,
+          "relevant": true
+        },
+        {
+          "name": "travel insurance.md",
+          "tier": "strong",
+          "distance": 0.547789990901947,
+          "relevant": true
+        },
+        {
+          "name": "insurance policy.txt",
+          "tier": "strong",
+          "distance": 0.7074010372161865,
+          "relevant": false
+        },
+        {
+          "name": "dentist.txt",
+          "tier": "strong",
+          "distance": 0.7452497482299805,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.8146705627441406,
+          "relevant": false
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "weak",
+          "distance": 0.822376012802124,
+          "relevant": false
+        },
+        {
+          "name": "meeting notes.txt",
+          "tier": "weak",
+          "distance": 0.8511700630187988,
+          "relevant": false
+        },
+        {
+          "name": "camping trip.md",
+          "tier": "weak",
+          "distance": 0.8559597730636597,
+          "relevant": false
+        },
+        {
+          "name": "lease agreement.txt",
+          "tier": "weak",
+          "distance": 0.8579599857330322,
+          "relevant": false
+        },
+        {
+          "name": "kyoto itinerary.txt",
+          "tier": "weak",
+          "distance": 0.8791140913963318,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "how much is the march invoice and when is the april one due?",
+      "results": [
+        {
+          "name": "march invoice.txt",
+          "tier": "strong",
+          "distance": 0.5576764345169067,
+          "relevant": true
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "strong",
+          "distance": 0.5646551847457886,
+          "relevant": true
+        },
+        {
+          "name": "monthly expenses.csv",
+          "tier": "strong",
+          "distance": 0.6692902445793152,
+          "relevant": false
+        },
+        {
+          "name": "tax notes.md",
+          "tier": "strong",
+          "distance": 0.732250452041626,
+          "relevant": false
+        },
+        {
+          "name": "meeting notes.txt",
+          "tier": "weak",
+          "distance": 0.7501431107521057,
+          "relevant": false
+        },
+        {
+          "name": "travel insurance.md",
+          "tier": "weak",
+          "distance": 0.773212194442749,
+          "relevant": false
+        },
+        {
+          "name": "lease agreement.txt",
+          "tier": "weak",
+          "distance": 0.7833252549171448,
+          "relevant": false
+        },
+        {
+          "name": "savings plan.txt",
+          "tier": "weak",
+          "distance": 0.7976021766662598,
+          "relevant": false
+        },
+        {
+          "name": "dentist.txt",
+          "tier": "weak",
+          "distance": 0.8232062458992004,
+          "relevant": false
+        },
+        {
+          "name": "insurance policy.txt",
+          "tier": "weak",
+          "distance": 0.8321022987365723,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what caused the checkout incident, and what does the deploy checklist say about canaries?",
+      "results": [
+        {
+          "name": "incident report.md",
+          "tier": "strong",
+          "distance": 0.5965818166732788,
+          "relevant": true
+        },
+        {
+          "name": "deploy checklist.md",
+          "tier": "strong",
+          "distance": 0.6017029881477356,
+          "relevant": true
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.8121014833450317,
+          "relevant": false
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "weak",
+          "distance": 0.8219896554946899,
+          "relevant": false
+        },
+        {
+          "name": "meeting notes.txt",
+          "tier": "weak",
+          "distance": 0.8302172422409058,
+          "relevant": false
+        },
+        {
+          "name": "monthly expenses.csv",
+          "tier": "weak",
+          "distance": 0.8397484421730042,
+          "relevant": false
+        },
+        {
+          "name": "caching strategy.txt",
+          "tier": "weak",
+          "distance": 0.849075198173523,
+          "relevant": false
+        },
+        {
+          "name": "travel insurance.md",
+          "tier": "weak",
+          "distance": 0.8496864438056946,
+          "relevant": false
+        },
+        {
+          "name": "queue_design.md",
+          "tier": "weak",
+          "distance": 0.8580251932144165,
+          "relevant": false
+        },
+        {
+          "name": "landlord letter.txt",
+          "tier": "weak",
+          "distance": 0.8609392046928406,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what is the wifi admin address and what should I change after the engineer visit?",
+      "results": [
+        {
+          "name": "wifi setup.txt",
+          "tier": "strong",
+          "distance": 0.39534899592399597,
+          "relevant": true
+        },
+        {
+          "name": "deploy checklist.md",
+          "tier": "weak",
+          "distance": 0.8876678347587585,
+          "relevant": false
+        },
+        {
+          "name": "landlord letter.txt",
+          "tier": "weak",
+          "distance": 0.8965601921081543,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what is the insurance excess, and when is the policy renewal?",
+      "results": [
+        {
+          "name": "insurance policy.txt",
+          "tier": "strong",
+          "distance": 0.5525766015052795,
+          "relevant": true
+        },
+        {
+          "name": "travel insurance.md",
+          "tier": "strong",
+          "distance": 0.6771209239959717,
+          "relevant": false
+        },
+        {
+          "name": "monthly expenses.csv",
+          "tier": "weak",
+          "distance": 0.775111973285675,
+          "relevant": false
+        },
+        {
+          "name": "dentist.txt",
+          "tier": "weak",
+          "distance": 0.8225009441375732,
+          "relevant": false
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "weak",
+          "distance": 0.8358418941497803,
+          "relevant": false
+        },
+        {
+          "name": "savings plan.txt",
+          "tier": "weak",
+          "distance": 0.8707302808761597,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.8874359726905823,
+          "relevant": false
+        },
+        {
+          "name": "incident report.md",
+          "tier": "weak",
+          "distance": 0.8886229991912842,
+          "relevant": false
+        },
+        {
+          "name": "tax notes.md",
+          "tier": "weak",
+          "distance": 0.8904290199279785,
+          "relevant": false
+        },
+        {
+          "name": "lease agreement.txt",
+          "tier": "weak",
+          "distance": 0.8922176957130432,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what temperature do I bake the sourdough at, and how long do croissants bake?",
+      "results": [
+        {
+          "name": "croissants.txt",
+          "tier": "strong",
+          "distance": 0.3693195879459381,
+          "relevant": true
+        },
+        {
+          "name": "sourdough.md",
+          "tier": "strong",
+          "distance": 0.44316744804382324,
+          "relevant": true
+        },
+        {
+          "name": "pizza dough.md",
+          "tier": "strong",
+          "distance": 0.6686830520629883,
+          "relevant": false
+        },
+        {
+          "name": "weeknight curry.md",
+          "tier": "weak",
+          "distance": 0.7969710826873779,
+          "relevant": false
+        },
+        {
+          "name": "rasmalai recipe.txt",
+          "tier": "weak",
+          "distance": 0.8033663034439087,
+          "relevant": false
+        },
+        {
+          "name": "coffee notes.txt",
+          "tier": "weak",
+          "distance": 0.8289458751678467,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "who owns the migration runbook, and when is the release date?",
+      "results": [
+        {
+          "name": "meeting notes.txt",
+          "tier": "strong",
+          "distance": 0.4076577425003052,
+          "relevant": true
+        },
+        {
+          "name": "deploy checklist.md",
+          "tier": "strong",
+          "distance": 0.6696041822433472,
+          "relevant": false
+        },
+        {
+          "name": "running log.csv",
+          "tier": "weak",
+          "distance": 0.8512242436408997,
+          "relevant": false
+        },
+        {
+          "name": "reading list.md",
+          "tier": "weak",
+          "distance": 0.8636459112167358,
+          "relevant": false
+        },
+        {
+          "name": "camping trip.md",
+          "tier": "weak",
+          "distance": 0.8897192478179932,
+          "relevant": false
+        },
+        {
+          "name": "half marathon plan.md",
+          "tier": "weak",
+          "distance": 0.8941345810890198,
+          "relevant": false
+        }
+      ]
+    },
+    {
+      "query": "what is the tax filing deadline and what percentage of rent can I deduct?",
+      "results": [
+        {
+          "name": "tax notes.md",
+          "tier": "strong",
+          "distance": 0.30064165592193604,
+          "relevant": true
+        },
+        {
+          "name": "lease agreement.txt",
+          "tier": "weak",
+          "distance": 0.7412039637565613,
+          "relevant": false
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "weak",
+          "distance": 0.7420122027397156,
+          "relevant": false
+        },
+        {
+          "name": "deploy checklist.md",
+          "tier": "weak",
+          "distance": 0.8340487480163574,
+          "relevant": false
+        },
+        {
+          "name": "monthly expenses.csv",
+          "tier": "weak",
+          "distance": 0.8455358147621155,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.85673588514328,
+          "relevant": false
+        },
+        {
+          "name": "travel insurance.md",
+          "tier": "weak",
+          "distance": 0.8695122599601746,
+          "relevant": false
+        },
+        {
+          "name": "insurance policy.txt",
+          "tier": "weak",
+          "distance": 0.8761788606643677,
+          "relevant": false
+        }
+      ]
+    }
+  ]
+}

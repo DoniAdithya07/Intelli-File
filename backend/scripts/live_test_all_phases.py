@@ -193,6 +193,30 @@ def test_semantic_search() -> None:
         record("Phase 5 — Semantic search", "FAIL", str(e))
 
 
+def test_preview_passages() -> None:
+    """UI stage A: the preview pane's passages and a file's full text come
+    from the index (the matched chunk, then the ones around it)."""
+    phase = "UI — Preview passages (/passages, /file-text)"
+    try:
+        results = search("handling sudden increases in traffic")
+        hit = next((r for r in results if r["filename"] == "scaling_notes.md"), None)
+        if hit is None:
+            record(phase, "FAIL", "scaling_notes.md not found")
+            return
+        p = requests.get(f"{BASE_URL}/passages", params={"file_id": hit["file_id"], "chunk_id": hit.get("chunk_id")}, timeout=10).json()
+        t = requests.get(f"{BASE_URL}/file-text", params={"file_id": hit["file_id"]}, timeout=10).json()
+        missing = requests.get(f"{BASE_URL}/passages", params={"file_id": "no-such-file"}, timeout=10).json()
+        ok = (
+            p.get("match") and "load balancer" in p["match"]["text"]
+            and (hit.get("chunk_id") is None or p["match"]["chunk_id"] == hit["chunk_id"])
+            and "load balancer" in t.get("text", "")
+            and missing.get("error") == "not_indexed"
+        )
+        record(phase, "PASS" if ok else "FAIL", f"passages={p.get('total')}, file-text {len(t.get('text', ''))} chars")
+    except Exception as e:
+        record(phase, "FAIL", str(e))
+
+
 def test_keyword_search() -> None:
     try:
         results = search("sourdough")
@@ -574,6 +598,7 @@ def main() -> int:
         if indexed_ok:
             time.sleep(0.5)  # let the index settle
             test_semantic_search()
+            test_preview_passages()
             test_keyword_search()
             test_exact_phrase()
             test_punctuation_safety()

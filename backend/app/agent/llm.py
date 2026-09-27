@@ -19,12 +19,27 @@ MODEL_DIR = models_dir() / "llm"
 CONTEXT_TOKENS = 4096
 
 
+def _llm_dirs() -> list[Path]:
+    """Where the model can be after unzipping. The app ships as two zips
+    (IntelliFile-part1/-part2, before the single zip of 2026-09-27) that
+    both hold IntelliFile/…. Unzipped to the same place they merge into
+    models/llm; but Windows' "Extract All" defaults each zip to its own
+    folder (Downloads\\IntelliFile-part2\\IntelliFile\\models\\llm), and a
+    user may unzip part 2 *inside* the app folder — look there too."""
+    models = models_dir()
+    root = models.parent  # the IntelliFile folder in the packaged app
+    dirs = [models / "llm", root / "IntelliFile" / "models" / "llm"]
+    for base in (root.parent, root.parent.parent):
+        dirs += [p / "IntelliFile" / "models" / "llm" for p in sorted(base.glob("IntelliFile-part2*"))]
+    return dirs
+
+
 def find_model_file(model_dir: Path | None = None) -> Path | None:
-    model_dir = model_dir or (models_dir() / "llm")
-    if not model_dir.exists():
-        return None
-    candidates = sorted(model_dir.glob("*.gguf"))
-    return candidates[0] if candidates else None
+    for d in [model_dir] if model_dir else _llm_dirs():
+        candidates = sorted(d.glob("*.gguf")) if d.is_dir() else []
+        if candidates:
+            return candidates[0]
+    return None
 
 
 class LocalLLM:
@@ -47,19 +62,50 @@ class LocalLLM:
         self._lock = threading.Lock()
         self.name = model_path.stem
         self.load_seconds = round(time.perf_counter() - t0, 1)
+        # One entry per model call ({"kind", "seconds", "prompt_tokens",
+        # "completion_tokens"}) so the evaluation can see where Ask's time
+        # goes; the caller clears it.
+        self.calls: list[dict] = []
 
-    def chat(self, messages: list[dict], max_tokens: int = 300, json_only: bool = False, temperature: float = 0.0) -> str:
+    def chat(self, messages: list[dict], max_tokens: int = 300, json_only: bool = False, temperature: float = 0.0, deadline: float | None = None, label: str | None = None) -> str:
+        """One completion. With `deadline` (a time.perf_counter() value) the
+        call streams internally and stops generating once it passes, so a
+        starved CPU cannot hold Ask past its cap (the live Windows run hit
+        67 s against a 50 s cap); the partial text is returned and the
+        caller treats unparseable output as "answer now"."""
         kwargs = {"response_format": {"type": "json_object"}} if json_only else {}
+        t0 = time.perf_counter()
+        usage: dict = {}
         with self._lock:
-            out = self.llm.create_chat_completion(messages=messages, max_tokens=max_tokens, temperature=temperature, **kwargs)
-        return out["choices"][0]["message"]["content"] or ""
+            if deadline is None:
+                out = self.llm.create_chat_completion(messages=messages, max_tokens=max_tokens, temperature=temperature, **kwargs)
+                usage = out.get("usage") or {}
+                text = out["choices"][0]["message"]["content"] or ""
+            else:
+                pieces: list[str] = []
+                for chunk in self.llm.create_chat_completion(messages=messages, max_tokens=max_tokens, temperature=temperature, stream=True, **kwargs):
+                    pieces.append(chunk["choices"][0].get("delta", {}).get("content") or "")
+                    if time.perf_counter() > deadline:
+                        usage["stopped_at_deadline"] = True
+                        break
+                text = "".join(pieces)
+        self.calls.append({"kind": label or ("plan" if json_only else "chat"), "seconds": time.perf_counter() - t0,
+                           "prompt_tokens": usage.get("prompt_tokens"), "completion_tokens": usage.get("completion_tokens"),
+                           "stopped_at_deadline": bool(usage.get("stopped_at_deadline"))})
+        return text
 
     def stream(self, messages: list[dict], max_tokens: int = 400, temperature: float = 0.0) -> Iterator[str]:
-        with self._lock:
-            for chunk in self.llm.create_chat_completion(messages=messages, max_tokens=max_tokens, temperature=temperature, stream=True):
-                delta = chunk["choices"][0].get("delta", {})
-                if delta.get("content"):
-                    yield delta["content"]
+        t0 = time.perf_counter()
+        n = 0
+        try:
+            with self._lock:
+                for chunk in self.llm.create_chat_completion(messages=messages, max_tokens=max_tokens, temperature=temperature, stream=True):
+                    delta = chunk["choices"][0].get("delta", {})
+                    if delta.get("content"):
+                        n += 1
+                        yield delta["content"]
+        finally:
+            self.calls.append({"kind": "stream", "seconds": time.perf_counter() - t0, "prompt_tokens": None, "completion_tokens": n})
 
     def benchmark(self, prompt: str = "Write one sentence about file search.", max_tokens: int = 48) -> dict:
         t0 = time.perf_counter()
