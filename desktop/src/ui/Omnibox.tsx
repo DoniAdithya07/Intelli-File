@@ -27,7 +27,8 @@ export function Omnibox({ value, onChange, onSubmit, onEscape, onArrow, placehol
   const busy = v === "warming" || v === "recording" || v === "transcribing";
 
   function onKey(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") { e.preventDefault(); onSubmit(); }
+    // Ctrl+Enter belongs to the page ("show in Explorer"); it must not also search or open.
+    if (e.key === "Enter") { e.preventDefault(); if (!(e.ctrlKey || e.metaKey)) onSubmit(); }
     else if (e.key === "Escape") { e.preventDefault(); if (value) onChange(""); else onEscape?.(); }
     else if (e.key === "ArrowDown") { e.preventDefault(); onArrow?.(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); onArrow?.(-1); }

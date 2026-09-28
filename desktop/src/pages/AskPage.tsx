@@ -5,7 +5,7 @@ import { AskAnswer } from "../ui/AskAnswer";
 import { PageHeader } from "../ui/kit";
 
 interface Props {
-  question: string | null; // handed over from Search ("?" or "Ask instead")
+  request: { q: string } | null; // handed over from Search ("?" or "Ask instead"); a new object each time
   onError: (m: string | null) => void;
 }
 
@@ -32,21 +32,27 @@ async function suggestions(): Promise<string[]> {
   return out.slice(0, 4);
 }
 
-export function AskPage({ question, onError }: Props) {
+export function AskPage({ request, onError }: Props) {
   const [draft, setDraft] = useState("");
-  const [asked, setAsked] = useState<string | null>(question);
-  const [session, setSession] = useState<string[]>(question ? [question] : []);
+  // `run` numbers each ask, so asking the same words again (a retry) runs again.
+  const [asked, setAsked] = useState<{ q: string; run: number } | null>(null);
+  const [session, setSession] = useState<string[]>([]);
   const [suggested, setSuggested] = useState<string[]>([]);
   const [model, setModel] = useState<boolean | null>(null);
 
+  const ask = useCallback((q: string) => {
+    setAsked((prev) => ({ q, run: (prev?.run ?? 0) + 1 }));
+    setSession((s) => [q, ...s.filter((x) => x !== q)]);
+  }, []);
+
   useEffect(() => { suggestions().then(setSuggested); askStatus().then((s) => setModel(s.available)).catch(() => setModel(null)); }, []);
-  useEffect(() => { if (question) { setAsked(question); setSession((s) => [question, ...s.filter((q) => q !== question)]); } }, [question]);
+  // A question handed over from Search: answered once per hand-over.
+  useEffect(() => { if (request?.q) ask(request.q); }, [request, ask]);
 
   const submit = (text?: string) => {
     const q = (text ?? draft).trim().replace(/^\?/, "").trim();
     if (!q) return;
-    setAsked(q);
-    setSession((s) => [q, ...s.filter((x) => x !== q)]);
+    ask(q);
     setDraft("");
   };
   const voice = useVoice(useCallback((t: string) => setDraft(t), []), useCallback((m: string) => onError(m), [onError]));
@@ -119,7 +125,7 @@ export function AskPage({ question, onError }: Props) {
           </div>
         ) : (
           <div className="mx-auto max-w-[860px] space-y-4">
-            <AskAnswer key={asked} question={asked} onError={onError} />
+            <AskAnswer key={asked.run} question={asked.q} onError={onError} />
             {box}
           </div>
         )}
@@ -134,7 +140,7 @@ export function AskPage({ question, onError }: Props) {
           <ul className="mt-2 space-y-1">
             {session.map((q) => (
               <li key={q}>
-                <button className={`w-full rounded-md px-2 py-1.5 text-left text-[13px] ${q === asked ? "bg-content font-medium" : "text-ink/75 hover:bg-ink/[0.05]"}`} onClick={() => setAsked(q)}>
+                <button className={`w-full rounded-md px-2 py-1.5 text-left text-[13px] ${q === asked?.q ? "bg-content font-medium" : "text-ink/75 hover:bg-ink/[0.05]"}`} onClick={() => ask(q)}>
                   <span className="line-clamp-2">{q}</span>
                 </button>
               </li>

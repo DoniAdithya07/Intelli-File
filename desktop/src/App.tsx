@@ -15,6 +15,7 @@ import "./App.css";
 function App() {
   const [tab, setTab] = useState<Tab>("search");
   // A question handed from Search to Ask (a leading "?" or "Ask instead").
+  // Each hand-over is a new object, so Ask runs it exactly once, even when the same words are handed over again.
   const [askQuestion, setAskQuestion] = useState<{ q: string } | null>(null);
   const onAsk = useCallback((q: string) => { setAskQuestion({ q }); setTab("ask"); }, []);
   const [backendStatus, setBackendStatus] = useState<"checking" | "connected" | "disconnected">("checking");
@@ -69,9 +70,12 @@ function App() {
       <div className={tab === "search" ? "anim-page h-full" : "hidden"}>
         <SearchPage active={tab === "search"} folderCount={folderCount} fileCount={fileCount} onError={setError} onAsk={onAsk} onSeeAll={() => setTab("foryou")} />
       </div>
-      {tab !== "search" && (
+      {/* Ask stays mounted too: its session list survives, and a hand-over is answered only once. */}
+      <div className={tab === "ask" ? "anim-page h-full overflow-hidden px-6 py-5" : "hidden"}>
+        <AskPage request={askQuestion} onError={setError} />
+      </div>
+      {tab !== "search" && tab !== "ask" && (
         <div key={tab} className="anim-page h-full overflow-hidden px-6 py-5">
-          {tab === "ask" && <AskPage question={askQuestion?.q ?? null} onError={setError} />}
           {tab === "photos" && <PhotosPage photoCount={photoCount} videoCount={videoCount} onError={setError} />}
           {tab === "foryou" && <ForYouPage onError={setError} onSettings={() => setTab("settings")} />}
           {tab === "activity" && <ActivityPage onError={setError} />}

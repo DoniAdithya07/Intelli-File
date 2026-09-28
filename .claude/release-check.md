@@ -11,8 +11,9 @@ Windows desktop app: Tauri 2 (Rust) + React/TypeScript/Vite front end, Python 3.
 - Every feature of the previous release must still be present (search, voice, photos and videos, Ask, For You, Activity, Index, Settings, OCR, Windows Recent import, Ctrl+Space quick search, privacy and terms pages).
 
 ## Environment
-- Virtual env / toolchain: `backend\venv` (Python 3.11); Node LTS for `desktop`; Rust stable (`%USERPROFILE%\.cargo\bin` on PATH for the Tauri build)
+- Virtual env / toolchain: `backend\venv` (Python 3.11); Node LTS for `desktop`; Rust stable, with `cargo` on PATH for the Tauri build (on this PC Rust lives on drive D: `CARGO_HOME=D:\DevTools\cargo`, `RUSTUP_HOME=D:\DevTools\rustup`, so put `D:\DevTools\cargo\bin` on PATH)
 - Required env vars: `INTELLIFILE_OFFLINE_GUARD=1`, `PYTHONIOENCODING=utf-8`
+- Working files: everything the check creates (temporary test folders, logs, reports, screenshots, test extractions of the zip) goes in `.local\` inside the project, on drive D. Nothing goes to drive C or outside the project folder.
 - Before builds and full runs: close Edge and Chrome (16 GB laptop), stop any running IntelliFile (it locks the release folder and port 8756). Run long suites in foreground chunks.
 
 ## Commands

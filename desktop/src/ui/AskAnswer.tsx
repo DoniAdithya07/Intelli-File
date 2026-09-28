@@ -62,7 +62,7 @@ export function AskAnswer({ question, onError }: Props) {
         case "thought":
           if (!e.system) break; // the model's reasoning stays out of the interface
           if (CHECK_NOTES.some((re) => re.test(e.text))) setCheckNotes((c) => [...c, e.text]);
-          else setSteps((s) => (s.length && s[s.length - 1].kind === "note" && (s[s.length - 1] as { text: string }).text === e.text ? s : [...s, { kind: "note", text: e.text }]));
+          // Other notes are the agent's own bookkeeping, not tool calls: Search activity lists tool calls only (UI_DESIGN section 26).
           break;
         case "quick_answer": setQuick(e); break;
         case "token": answerRef.current += e.text; setAnswer(answerRef.current); break;
@@ -79,8 +79,8 @@ export function AskAnswer({ question, onError }: Props) {
   const citations = final?.citations ?? [];
   const usedFilters = steps.some((s) => s.kind === "search" && s.filters);
   const passed: string[] = [];
-  if (final?.grounded) passed.push("Citations support the answer");
-  if (final && !final.warnings?.length && final.grounded) passed.push("All figures found in the cited sources");
+  if (final?.grounded && !final.from_index) passed.push("Citations support the answer");
+  if (final && !final.warnings?.length && final.grounded && !final.from_index) passed.push("All figures found in the cited sources");
   if (final && usedFilters && !checkNotes.some((n) => n.startsWith("ignored filters"))) passed.push("Filters respected");
 
   return (
@@ -91,9 +91,9 @@ export function AskAnswer({ question, onError }: Props) {
         <div className="flex items-center gap-2 text-[13px]">
           <span className="font-semibold">IntelliFile</span>
           <span className="text-ink/60">
-            {error ? "Could not answer" : working ? (answer ? "Writing the answer..." : "Searching your files...") : final?.grounded ? "Answered from your files" : "Not found in your files"}
+            {error ? "Could not answer" : working ? (answer ? "Writing the answer..." : "Searching your files...") : final?.from_index ? "Counted from the index" : final?.grounded ? "Answered from your files" : "Not found in your files"}
           </span>
-          {done && <span className="ml-auto text-[12px] text-ink/60">{done.tool_calls} tool call{done.tool_calls === 1 ? "" : "s"}, <span className="mono">{done.seconds} s</span>, on this computer</span>}
+          {done && !final?.from_index && <span className="ml-auto text-[12px] text-ink/60">{done.tool_calls} tool call{done.tool_calls === 1 ? "" : "s"}, <span className="mono">{done.seconds} s</span>, on this computer</span>}
         </div>
 
         {working && !answer && <div className="progress-indeterminate mt-3" role="progressbar" aria-label="Searching your files" />}
@@ -110,6 +110,7 @@ export function AskAnswer({ question, onError }: Props) {
             <Cited text={answer} sources={citations} />
           </p>
         )}
+        {final?.from_index && <p className="mt-2 text-[12px] text-ink/60">Counted exactly from the index, not from the contents of a file.</p>}
         {final?.warnings?.map((w, i) => (
           <div key={i} className="mt-3 flex items-start gap-2 rounded-md border border-rule-strong bg-amber-soft px-3 py-2 text-[13px] text-[rgb(var(--c-amber-text))]">
             <span className="material-symbols-outlined icon-sm" aria-hidden>warning</span>{w}
@@ -118,7 +119,7 @@ export function AskAnswer({ question, onError }: Props) {
         {error && (
           <div role="alert" className="mt-3 rounded-md border border-error/40 bg-error-soft px-3 py-2 text-[13px] text-error">
             {error} Your question is kept: ask again to retry.
-            <button className="btn-ghost ml-2 px-2 py-0.5 text-[12px]" onClick={() => onError(null)}>Dismiss</button>
+            <button className="btn-ghost ml-2 px-2 py-0.5 text-[12px]" onClick={() => { setError(null); onError(null); }}>Dismiss</button>
           </div>
         )}
 

@@ -48,9 +48,21 @@ export function IndexPage({ status, onError, refresh }: Props) {
     finally { setBusy(null); }
   }
   const chooseAccess = (mode: Exclude<AccessMode, "unset">) => run("access", async () => { const r = await setAccess(mode); if (r.error) onError(r.error); });
+  // Several folders can be picked at once (Ctrl+click in the Windows folder
+  // window). Each is queued and watched; one that is refused does not stop
+  // the others, and every refusal is reported by name.
   const addFolder = async () => {
-    const selected = await open({ directory: true, multiple: false }).catch(() => null);
-    if (typeof selected === "string") await run(selected, async () => { const r = await indexFolder(selected); if (r.error) onError(r.error); });
+    const selected = await open({ directory: true, multiple: true }).catch(() => null);
+    const folders = Array.isArray(selected) ? selected : selected ? [selected] : [];
+    if (!folders.length) return;
+    await run("folders", async () => {
+      const problems: string[] = [];
+      for (const folder of folders) {
+        const r = await indexFolder(folder);
+        if (r.error) problems.push(`${folder.split(/[\\/]/).filter(Boolean).pop()}: ${r.error}`);
+      }
+      if (problems.length) onError(problems.join(" "));
+    });
   };
   const addFile = async () => {
     const selected = await open({ directory: false, multiple: true }).catch(() => null);

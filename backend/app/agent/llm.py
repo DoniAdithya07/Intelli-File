@@ -5,6 +5,7 @@ the answer — so the model file can be swapped (1.5B ↔ 3B, another family)
 without touching the loop, and so tests can substitute a scripted stand-in.
 """
 
+from collections import deque
 import logging
 import threading
 import time
@@ -65,7 +66,7 @@ class LocalLLM:
         # One entry per model call ({"kind", "seconds", "prompt_tokens",
         # "completion_tokens"}) so the evaluation can see where Ask's time
         # goes; the caller clears it.
-        self.calls: list[dict] = []
+        self.calls: deque[dict] = deque(maxlen=200)  # bounded: a long session must not grow memory (code review 2026-09-27)
 
     def chat(self, messages: list[dict], max_tokens: int = 300, json_only: bool = False, temperature: float = 0.0, deadline: float | None = None, label: str | None = None) -> str:
         """One completion. With `deadline` (a time.perf_counter() value) the

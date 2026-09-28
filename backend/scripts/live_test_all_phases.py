@@ -32,6 +32,10 @@ from pathlib import Path
 
 import requests
 
+# Temporary folders inside the project (.local/tmp), not the system temp folder.
+tempfile.tempdir = str(Path(__file__).resolve().parents[2] / ".local" / "tmp")
+Path(tempfile.tempdir).mkdir(parents=True, exist_ok=True)
+
 BASE_URL = "http://127.0.0.1:8756"
 RESULTS: list[tuple[str, str, str]] = []  # (phase, status, detail)
 

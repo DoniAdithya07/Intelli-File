@@ -236,6 +236,18 @@ def main() -> None:
         assert _trim_citations("The March invoice is due on 14 April 2025 and the amount is 1,440 euros.", [1, 2], inv) == [1]
         print("A7. Citation trim: a second source that adds nothing is dropped (the March/April invoice over-cite); a two-part answer keeps both: OK")
 
+        # --- A8. Questions about the collection itself are counted from the
+        # index, exactly; questions about content still go to the agent. ---
+        from app.agent.library import library_answer
+        lib = ["C:/docs/a.json", "C:/docs/b.pdf", "C:/pics/cat.jpg", "C:/pics/dog.png", "C:/videos/trip.mp4"]
+        assert library_answer("how many files are there", lib).startswith("IntelliFile has indexed 5 files")
+        assert library_answer("are there any video files?", lib).startswith("Yes: 1 video (trip.mp4)")
+        assert library_answer("do I have any audio files", lib).startswith("No. None of the 5 indexed files")
+        assert library_answer("how many photos do I have", lib).startswith("2 photos")
+        for content_question in ("are there any notes about zebras", "zebra notes", "What do my files say about bleach?", "how many hours did I work in March"):
+            assert library_answer(content_question, lib) is None, content_question
+        print("A8. Collection questions (how many files, any videos, any audio, how many photos) are counted from the index; content questions still go to the agent: OK")
+
         # ---------- Part B: the real model ----------
         model_file = find_model_file()
         if model_file is None:

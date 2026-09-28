@@ -288,13 +288,13 @@
       "query": "in:invoices",
       "results": [
         {
-          "name": "april invoice.txt",
+          "name": "march invoice.txt",
           "tier": "strong",
           "distance": null,
           "relevant": true
         },
         {
-          "name": "march invoice.txt",
+          "name": "april invoice.txt",
           "tier": "strong",
           "distance": null,
           "relevant": true

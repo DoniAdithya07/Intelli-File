@@ -196,6 +196,27 @@ def main():
         assert long_text.count("parking") == 12, f"expected 12 'parking', heard {long_text.count('parking')} — words lost or doubled at a cut"
         print(f"6. {duration:.0f} s recording transcribed in full across 30 s windows ({len(long_text.split())} words, nothing lost at the cuts): OK")
 
+        # --- 7. A silent recording gets no transcript at any length. Whisper
+        # invents a word on silence ("you", "Thank you."); until 2026-09-27
+        # only windows of recordings over 30 s were checked for silence, so
+        # a short silent voice note was indexed as "you" (found by
+        # check_features.py --fault silent-recording). ---
+        import io
+        import wave
+
+        def silent_wav(seconds: float) -> bytes:
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(16000)
+                w.writeframes(b"\x00\x00" * int(16000 * seconds))
+            return buf.getvalue()
+
+        heard_on_silence = {s: transcriber.transcribe(silent_wav(s)) for s in (1, 4, 20, 45)}
+        assert all(t == "" for t in heard_on_silence.values()), f"silence was transcribed as text: {heard_on_silence}"
+        print(f"7. Silent recordings of {', '.join(f'{s} s' for s in heard_on_silence)} give no transcript (no invented words): OK")
+
         print("\nPhase 7 voice search OK: real speech transcribed accurately, the transcribed text correctly drives search end to end, and audio FILES are now indexed by their spoken content too.")
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
