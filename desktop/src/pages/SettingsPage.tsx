@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import pkg from "../../package.json";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { AccessMode, AppSettings, askStatus, formatBytes, getSettings, getWindowsRecent, ResourceMode, setAccess, shortenPath, StatusResponse, updateSettings, WindowsRecentStatus } from "../backend";
+import { AccessMode, AppSettings, askStatus, clearEvents, formatBytes, getSettings, getWindowsRecent, ResourceMode, setAccess, shortenPath, StatusResponse, updateSettings, WindowsRecentStatus } from "../backend";
 import { LegalDoc, PRIVACY, TERMS } from "../legal";
 import { ThemeChoice, useTheme } from "../theme";
 import { PageHeader, Section, Toggle } from "../ui/kit";
@@ -89,6 +89,18 @@ export function SettingsPage({ status, appDataDir, onError, refresh, onOpen }: P
     } finally { setBusy(false); }
   }
 
+  // Clear activity (UI_DESIGN section 12): asks first; nothing is cleared without the desktop dialog.
+  async function clearActivity() {
+    let sure = false;
+    try { sure = await ask("Remove every remembered search and opened file? For You starts learning again from nothing.", { title: "Clear activity", kind: "warning", okLabel: "Clear", cancelLabel: "Keep" }); }
+    catch { sure = false; }
+    if (!sure) return;
+    setBusy(true);
+    try { await clearEvents(); }
+    catch (e) { onError(`Activity could not be cleared. ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setBusy(false); }
+  }
+
   const mode = status?.access?.mode ?? null;
   async function changeAccess(next: Exclude<AccessMode, "unset">) {
     if (next === mode) return;
@@ -146,7 +158,10 @@ export function SettingsPage({ status, appDataDir, onError, refresh, onOpen }: P
             </Row>
           )}
           <Row title="Activity history" note="See or clear everything that was remembered.">
-            <button className="btn-secondary px-3 py-1 text-[13px]" onClick={() => onOpen("activity")}>Open Activity</button>
+            <div className="flex gap-2">
+              <button className="btn-secondary px-3 py-1 text-[13px]" onClick={() => onOpen("activity")}>Open Activity</button>
+              <button className="btn-secondary px-3 py-1 text-[13px]" onClick={clearActivity} disabled={busy}>Clear activity</button>
+            </div>
           </Row>
         </Section>
 

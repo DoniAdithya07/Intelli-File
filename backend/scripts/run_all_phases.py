@@ -12,6 +12,7 @@ Run with:
 Exits non-zero if any phase fails, so it's CI-friendly too.
 """
 
+import os
 import subprocess
 import sys
 import time
@@ -23,6 +24,13 @@ PYTHON = sys.executable
 # (phase label, script filename). Order matches the README's phase order.
 # prototype_transcription.py is macOS-only and skips itself gracefully
 # elsewhere (see its own docstring) — it still counts as a normal pass.
+# Temporary test folders go to .local/tmp inside the project, not to the
+# system temp folder (drive C on Windows): the whole project, its tests
+# included, then lives on one drive and cleans up with one folder.
+LOCAL_TMP = SCRIPTS_DIR.parents[1] / ".local" / "tmp"
+LOCAL_TMP.mkdir(parents=True, exist_ok=True)
+TEMP_ENV = {**os.environ, "TMP": str(LOCAL_TMP), "TEMP": str(LOCAL_TMP), "TMPDIR": str(LOCAL_TMP)}
+
 PHASES = [
     ("Phase 1 — LanceDB storage", "prototype_lancedb.py"),
     ("Phase 2 — File discovery & watching", "prototype_file_watch.py"),
@@ -48,6 +56,7 @@ PHASES = [
     ("Next round 1 — Personalization from day one (Windows Recent items)", "prototype_windows_recent.py"),
     ("Next round 4 — Offline OCR: scanned PDFs and screenshots (Windows OCR)", "prototype_ocr.py"),
     ("Feature check — file, photo, video and audio identification end to end over HTTP", "check_features.py"),
+    ("Photo and video search accuracy on real pictures (Windows' own photos)", "evaluate_visual_real.py"),
 ]
 
 
@@ -57,7 +66,7 @@ def main() -> int:
         script_path = SCRIPTS_DIR / filename
         print(f"\n{'=' * 70}\n{label}  ({filename})\n{'=' * 70}")
         start = time.monotonic()
-        proc = subprocess.run([PYTHON, str(script_path)], cwd=SCRIPTS_DIR.parent)
+        proc = subprocess.run([PYTHON, str(script_path)], cwd=SCRIPTS_DIR.parent, env=TEMP_ENV)
         elapsed = time.monotonic() - start
         passed = proc.returncode == 0
         results.append((label, passed, elapsed))

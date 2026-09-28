@@ -28,5 +28,7 @@ export default defineConfig(() => ({
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
+    // 4. the Help page bundles ../docs/USER_MANUAL.md, outside this folder
+    fs: { allow: [".."] },
   },
 }));

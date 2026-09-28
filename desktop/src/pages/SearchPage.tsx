@@ -213,7 +213,7 @@ function SearchHome({ onRun, onSeeAll, onError }: { onRun: (q: string) => void; 
           </ul>
         </section>
       )}
-      {recent && recent.length === 0 && (
+      {recent !== null && (
         <section>
           <h2 className="text-[15px] font-semibold">Try a search</h2>
           <ul className="mt-2 overflow-hidden rounded-lg border border-rule bg-content">

@@ -45,6 +45,10 @@ backend/dist/
 desktop/src-tauri/resources/
 
 
+# Local working folder: test scratch space, logs and design references,
+# kept inside the project (on the same drive) and never committed.
+.local/
+
 # Local project documentation
 Implimentation_plan.md
 PROJECT_SUMMARY.md

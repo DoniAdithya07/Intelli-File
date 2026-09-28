@@ -1,6 +1,6 @@
 [package]
 name = "desktop"
-version = "0.1.0"
+version = "1.0.0"
 description = "IntelliFile - search your files by meaning, offline"
 authors = ["A. Doni Adithya"]
 edition = "2021"

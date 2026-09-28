@@ -106,7 +106,7 @@ def read_recent(folder: Path | None = None) -> list[tuple[str, float]]:
         try:
             stat = lnk.stat()
             target = lnk_target(lnk.read_bytes()[:65536])
-        except OSError:
+        except Exception:  # noqa: BLE001 — an odd shortcut (bad bytes, a decode error) is skipped, never the whole import
             continue
         if not target:
             continue

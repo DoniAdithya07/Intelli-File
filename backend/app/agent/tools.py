@@ -114,14 +114,14 @@ class Toolbox:
     def get(self, number: int) -> Source | None:
         return self.sources[number - 1] if 1 <= number <= len(self.sources) else None
 
-    def render(self, sources: list[Source]) -> str:
-        """How sources are shown to the model."""
+    def render(self, sources: list[Source], chars: int = SNIPPET_CHARS) -> str:
+        """How sources are shown to the model; `chars` per source."""
         if not sources:
             return "No matching files."
         lines = []
         for s in sources:
             where = f", page {s.page}" if s.page else ""
-            lines.append(f"[{s.number}] {s.filename}{where} ({s.confidence} match): {s.text[:SNIPPET_CHARS]}")
+            lines.append(f"[{s.number}] {s.filename}{where} ({s.confidence} match): {s.text[:chars]}")
         return "\n".join(lines)
 
 

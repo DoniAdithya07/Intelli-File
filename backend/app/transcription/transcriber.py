@@ -70,6 +70,14 @@ class Transcriber:
             return ""
         prompt_ids = self._prompt_ids(vocabulary_hint)
         window = WINDOW_SECONDS * WHISPER_SAMPLE_RATE
+        # Silence is never sent to Whisper: it invents a word ("you") that
+        # would be stored as the recording's transcript. Longer recordings
+        # are checked window by window below; until 2026-09-27 a short one
+        # was not checked at all, so a silent voice note was indexed as "you".
+        # (Only short ones are judged whole: a long, mostly quiet lecture
+        # with some speech must keep its speech.)
+        if audio.size <= window and _rms(audio) < SILENCE_RMS:
+            return ""
         if audio.size <= window:
             # A recording that fits one window (every voice-search clip) is
             # transcribed exactly as before.

@@ -27,6 +27,7 @@ import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
+from .library import library_answer
 from .tools import Toolbox
 
 MAX_TOOL_CALLS = 4
@@ -34,6 +35,19 @@ BUDGET_SECONDS = 25.0
 MAX_ANSWER_TOKENS = 350
 MAX_PLAN_TOKENS = 220
 PLAN_DEADLINE_FACTOR = 1.3  # planning stops at 1.3 x budget, leaving time for the answer inside 2 x budget
+ANSWER_MAX_SOURCES = 6            # sources the answering model reads (strong matches first)
+ANSWER_SOURCE_CHARS = 700         # per source, normally (= SNIPPET_CHARS)
+ANSWER_SOURCE_CHARS_TIGHT = 350   # per source when little time is left
+ANSWER_TIGHT_SECONDS = 22.0       # "little time left": under this many seconds before the 2 x budget cap
+
+
+def _answer_sources(sources: list, remaining_seconds: float) -> list:
+    """The sources the answer is written from: strong matches before weak
+    ones, in the order they were found, at most ANSWER_MAX_SOURCES, and
+    half as many when time is short."""
+    limit = ANSWER_MAX_SOURCES if remaining_seconds > ANSWER_TIGHT_SECONDS else ANSWER_MAX_SOURCES // 2
+    ranked = sorted(sources, key=lambda s: (s.confidence != "strong", s.number))
+    return sorted(ranked[:limit], key=lambda s: s.number)
 
 _CITATION_RE = re.compile(r"\[(\d{1,2})\]")
 
@@ -68,8 +82,15 @@ class Agent:
             {"role": "system", "content": "You check whether a text is about something. Answer with one word: yes or no."},
             {"role": "user", "content": f"Text:\n{text[:PREMISE_JUDGE_CHARS]}\n\nDoes this text mention or give a {word}? Answer yes or no."},
         ]
+        # Past the hard cap (2 x budget) the judge is not asked at all: the
+        # premise check runs after the answer, and up to 12 of these calls
+        # used to run with no deadline, pushing Ask past 50 s (code review
+        # 2026-09-27). Like a judge failure, that keeps the answer.
+        deadline = getattr(self, "_hard_deadline", None)
+        if deadline is not None and time.perf_counter() >= deadline:
+            return True
         try:
-            return self.llm.chat(messages, max_tokens=3).strip().lower().startswith("yes")
+            return self.llm.chat(messages, max_tokens=3, deadline=deadline).strip().lower().startswith("yes")
         except Exception:  # noqa: BLE001 — a judge failure must never block an answer
             return True
 
@@ -77,10 +98,23 @@ class Agent:
         """Yields trace events: {"type": ...}. Types: context, thought,
         tool_call, tool_result, answer_start, token, answer, done, error."""
         t_start = time.perf_counter()
+        self._hard_deadline = t_start + self.budget_seconds * 2  # nothing after this asks the model
         tools = self.toolbox_factory()
         question = question.strip()
         context = tools.context()
         yield {"type": "context", "context": context}
+
+        # "How many files are there?", "Are there any video files?": the
+        # answer is a count the index already has, not text inside a file.
+        records = tools.search_service.file_record_store.list_active()
+        facts = library_answer(question, [r.path for r in records])
+        if facts is not None:
+            yield {"type": "thought", "text": "counted the files in the index: this question is about the collection, not the contents of a file", "system": True}
+            yield {"type": "answer_start"}
+            yield {"type": "token", "text": facts}
+            yield {"type": "answer", "text": facts, "citations": [], "grounded": True, "from_index": True}
+            yield {"type": "done", "seconds": round(time.perf_counter() - t_start, 1), "tool_calls": 0, "strategies": [], "sources": []}
+            return
 
         calls = 0       # tool calls actually executed
         turns = 0       # planning turns, including ones that led nowhere
@@ -207,9 +241,19 @@ class Agent:
             yield {"type": "done", "seconds": round(time.perf_counter() - t_start, 1), "tool_calls": calls, "strategies": strategies, "sources": [s.as_dict() for s in tools.sources]}
             return
 
+        # The model reads every source before it writes a word, and that
+        # reading is not interruptible. With up to 20 sources (4 searches x
+        # 5) it took over 25 s on a busy laptop, and Ask ran past its 50 s
+        # cap (56.3 s and 51.7 s, 2026-09-27). So the answer gets the best
+        # sources only, strong matches first, and shorter passages when
+        # little time is left.
+        remaining = self.budget_seconds * 2 - (time.perf_counter() - t_start)
+        shown = _answer_sources(tools.sources, remaining)
+        shown_numbers = {s.number for s in shown}
+        chars = ANSWER_SOURCE_CHARS if remaining > ANSWER_TIGHT_SECONDS else ANSWER_SOURCE_CHARS_TIGHT
         answer_messages = [
             {"role": "system", "content": ANSWER_SYSTEM},
-            {"role": "user", "content": f"Question: {question}\n\nSources:\n{tools.render(tools.sources)}\n\nAnswer with citations:"},
+            {"role": "user", "content": f"Question: {question}\n\nSources:\n{tools.render(shown, chars)}\n\nAnswer with citations:"},
         ]
         yield {"type": "answer_start"}
         pieces: list[str] = []
@@ -232,7 +276,7 @@ class Agent:
         # sheet, which merely also says "insurance"). The sources the
         # answer's own words trace to (_ground) are the judge; the model's
         # numbers are kept when they agree, replaced when they do not.
-        supported = _ground(body, tools)
+        supported = [n for n in _ground(body, tools) if n in shown_numbers]  # only what the model was shown
         valid = [n for n in dict.fromkeys(cited_numbers) if n in supported]
         not_found = "couldn't find that" in text.lower() or len(body.split()) < 3
         inferred = False

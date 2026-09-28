@@ -29,7 +29,9 @@ cd backend
 .\venv\Scripts\python.exe scripts\check_features.py --packaged <IntelliFile>  # an unzipped release
 ```
 
-In Claude Code, the `feature-checker` agent (`.claude/agents/feature-checker.md`) runs both, narrows down any failure with the matching phase script, and reports in plain words.
+When a check fails, the evidence for its cause is printed under it: whether the file is in the index, the text IntelliFile extracted from it, the results with their scores, the search route, the models and the backend's errors. `--fault corrupt-pdf`, `--fault blank-screenshot` or `--fault silent-recording` breaks one test file on purpose, to show that the check fails and names the cause.
+
+In Claude Code (started inside this folder), the `feature-checker` agent (`.claude/agents/feature-checker.md`) runs the check on the source and on a release, uses the diagnosis and a playbook of likely causes to find why anything failed, confirms it in the code, and reports in plain words. It never changes code or tests.
 
 ## Writing and design
 

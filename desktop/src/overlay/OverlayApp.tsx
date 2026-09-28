@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useStatus } from "../hooks/useStatus";
 import { OverlaySearch } from "./OverlaySearch";
 import "../App.css";
 
 /**
- * Ctrl+Space popup — SearchPage in compact mode inside the overlay window
+ * Ctrl+Space popup: OverlaySearch inside the overlay window
  * (transparent/frameless/always-on-top, declared in src-tauri/tauri.conf.json).
  * The Rust side toggles this window's visibility and emits "overlay-shown" on
  * each open so the box resets instead of showing the last search.
@@ -14,7 +13,6 @@ import "../App.css";
 export function OverlayApp() {
   const [resetKey, setResetKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const { status } = useStatus();
 
   useEffect(() => {
     const unlisten = listen("overlay-shown", () => {
@@ -37,14 +35,7 @@ export function OverlayApp() {
         style={{ background: "var(--overlay)" }}
       >
         <div className="min-h-0 flex-1 p-3">
-          <OverlaySearch
-            key={resetKey}
-            folderCount={status?.folders.length ?? 0}
-            fileCount={status?.totals.files ?? 0}
-            onError={setError}
-            compact
-            onEscape={hide}
-          />
+          <OverlaySearch key={resetKey} onError={setError} onEscape={hide} />
         </div>
         {error && <div className="shrink-0 border-t border-rule px-3 py-2 text-[12px] text-error">{error}</div>}
       </div>

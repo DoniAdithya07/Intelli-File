@@ -1,0 +1,23 @@
+# Line endings: text files are stored with LF and checked out with LF on
+# every system, so Git never rewrites them (and stops warning that it
+# will). Windows-only scripts keep CRLF.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files: never converted or diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.icns binary
+*.gif binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.onnx binary
+*.gguf binary
+*.wav binary
+*.mp3 binary
+*.mp4 binary

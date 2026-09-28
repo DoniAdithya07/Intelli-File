@@ -20,7 +20,7 @@ Closing the main window quits IntelliFile completely, including its background e
 
 ## 2. Index a folder
 
-Open **Index**, then click **Add folder**. To try it in under a minute, click **Try the sample folder**: it indexes `sample-folder`, which ships inside the `IntelliFile` folder next to `IntelliFile.exe`.
+Open **Index**, then click **Add folder** (hold **Ctrl** to pick several folders at once). To try it in under a minute, click **Try the sample folder**: it indexes `sample-folder`, which ships inside the `IntelliFile` folder next to `IntelliFile.exe`.
 
 It holds 39 short documents (recipes, a gym plan, invoices, trip notes, engineering notes…) and three test images. Indexing it takes a few seconds. Your own folders work the same way. Documents, spreadsheets, slides, code, audio notes, photos and videos are all indexed.
 
@@ -30,25 +30,27 @@ Type these in **Search** and press Enter:
 
 | Try | What it shows |
 |---|---|
-| `gym plan` | a file named in the query is found instantly; the line under the search box says *Searched by filename, 3 ms* |
-| `how do we add capacity when lots of visitors arrive` | no shared words with the file, found by meaning (*hybrid*) |
-| `type:csv` | metadata filters alone list matching files |
+| `gym plan` | a file named in the query is found at once; the line under the box says *Searched by file name* |
+| `how do we add capacity when lots of visitors arrive` | no shared words with the file: found by meaning (*keywords + meaning*); the preview on the right shows the matching passage and *Why this file?* |
+| `type:csv` | filter words alone list matching files (also under **Filters**) |
 | `in:invoices workshop` | filters narrow a text search |
-| `? when is the march invoice due, and how much is it` | **Ask mode**: the local language model plans searches, reads the results and answers with citations. The closest passage appears at once; open "How it got there" to see each step. It takes 10–30 seconds depending on the CPU. |
+| `? when is the march invoice due, and how much is it` | **Ask**: the closest passage appears at once, then an answer that names its sources, with **Search activity** and **Checks** below it. It takes 10 to 30 seconds. |
 
 Then:
 
-- The **microphone button** in the search box: say a file name ("gym plan"). This is voice search, transcribed locally.
-- **Photos and videos**: type `a red circle`.
-- **Insights**: what the app has learned from your use: files you open most, topics, when you work, and how your searches were routed.
-- **Settings**: switch "Personalize results" or "Remember my activity" off and on. "Clear activity" wipes the memory.
-- **Ctrl+Space** anywhere on the desktop opens the quick-search overlay.
+- The **microphone button** in the search box: say a file name ("gym plan"). This is voice search, transcribed on this computer.
+- **Photos**: type `a red circle`.
+- **For You** and **Activity**: what IntelliFile has learned from your use, and everything it remembered.
+- **Index**: counts, folders, **Scan now**, and how your searches were routed.
+- **Settings**: Day or Night, personalization, privacy and indexing switches, and the privacy policy and terms.
+- **Help**: the full user manual, also in `docs/USER_MANUAL.md`.
+- **Ctrl+Space** anywhere in Windows opens quick search.
 
-Open any result with **Enter**. Show it in File Explorer with **Ctrl+Enter**.
+Open a result with **Enter** (pressed again on the same words) or **Open**. Show it in File Explorer with **Ctrl+Enter**.
 
 ## 4. If something looks wrong
 
-- **The sidebar says "Not running" for more than a minute:** close IntelliFile and open it again. If it stays offline, another program is using port 8756. Run `netstat -ano | findstr 8756` in a terminal to see which one.
+- **The sidebar says "Search engine stopped":** close IntelliFile and open it again. If it stays offline, another program is using port 8756. Run `netstat -ano | findstr 8756` in a terminal to see which one.
 - **Logs** (useful for a bug report) are in `%LOCALAPPDATA%\IntelliFile\logs\`: `backend.log`, `backend-console.log` and `shell.log`. Paste that path into the File Explorer address bar.
 - **A folder indexed 0 files and shows a red note about access:** Windows refused to let IntelliFile read it, for example a folder owned by another user or protected by Controlled Folder Access. Allow it in **Windows Security, then Virus & threat protection, then Ransomware protection**, then use Re-index.
 - **Voice search** needs microphone permission: **Settings, then Privacy & security, then Microphone, then Let desktop apps access your microphone**.

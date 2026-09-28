@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatTimestamp, search, searchVisual, suggestVisual, thumbnailUrl, VisualKind, VisualSearchResult } from "../backend";
 import { useVoice } from "../hooks/useVoice";
 import { FILE_MANAGER } from "../platform";
@@ -19,15 +19,20 @@ const KINDS: { id: VisualKind; label: string }[] = [
 ];
 
 function PhotoCard({ r, strong, onError, browsing }: { r: VisualSearchResult; strong: boolean; onError: (m: string) => void; browsing?: boolean }) {
+  const [broken, setBroken] = useState(false);
   return (
     <div
+      tabIndex={0}
+      aria-label={`${r.filename}${browsing ? "" : strong ? ", strong match" : ", weaker match"}. Enter opens it.`}
       className={`panel group cursor-default overflow-hidden ${strong || browsing ? "" : "opacity-70"}`}
+      onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) openResult(r.path, onError, r.file_id); }}
       onDoubleClick={() => openResult(r.path, onError, r.file_id)}
       title={`Double-click to open. Right-click to show in ${FILE_MANAGER}.`}
       onContextMenu={(e) => { e.preventDefault(); revealResult(r.path, onError, r.file_id); }}
     >
       <div className="relative aspect-[4/3] bg-ink/[0.03]">
-        {r.path && <img src={thumbnailUrl(r.path, 320, r.timestamp_offset_seconds)} alt={r.filename} className="h-full w-full object-cover" loading="lazy" />}
+        {r.path && !broken && <img src={thumbnailUrl(r.path, 320, r.timestamp_offset_seconds)} alt={r.filename} className="h-full w-full object-cover" loading="lazy" onError={() => setBroken(true)} />}
+        {broken && <div className="grid h-full place-items-center px-3 text-center text-[12px] text-ink/60">No preview for {r.filename}</div>}
         {!browsing && (
           <span className="absolute left-2 top-2 rounded bg-black/70 px-2 py-0.5 text-[12px] text-white">{strong ? "Strong match" : "Weaker match"}</span>
         )}
@@ -37,7 +42,7 @@ function PhotoCard({ r, strong, onError, browsing }: { r: VisualSearchResult; st
             {formatTimestamp(r.timestamp_offset_seconds)}
           </span>
         )}
-        <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 p-2 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 p-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           <button className="rounded bg-black/65 px-1.5 py-0.5 text-[12px] text-white hover:bg-black/80" onClick={() => openResult(r.path, onError, r.file_id)}>Open</button>
           <button className="rounded bg-black/65 px-1.5 py-0.5 text-[12px] text-white hover:bg-black/80" onClick={() => revealResult(r.path, onError, r.file_id)}>Show in {FILE_MANAGER}</button>
         </div>
@@ -89,14 +94,17 @@ export function PhotosPage({ photoCount, videoCount, onError }: Props) {
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [query]);
 
+  const latestRun = useRef(0);
   const run = useCallback(async (q?: string, k?: VisualKind) => {
     const text = (q ?? query).trim();
-    if (!text || searching) return;
+    if (!text) return;
+    const mine = ++latestRun.current;  // a newer search wins; an older reply is ignored
     setSearching(true);
     onError(null);
     const t0 = performance.now();
     try {
       const res = await searchVisual(text, k ?? kind);
+      if (mine !== latestRun.current) return;
       if (res.error) { onError(res.error); setResults(null); }
       else {
         setResults(res.results ?? []);
@@ -107,14 +115,15 @@ export function PhotosPage({ photoCount, videoCount, onError }: Props) {
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
     } finally {
-      setSearching(false);
+      if (mine === latestRun.current) setSearching(false);
     }
-  }, [query, kind, searching, onError]);
+  }, [query, kind, onError]);
 
   const voice = useVoice(useCallback((t: string) => setQuery(t), []), useCallback((m: string) => onError(m), [onError]));
 
   // Before a search: the newest photos and videos in the index, as they are.
   const [latest, setLatest] = useState<VisualSearchResult[] | null>(null);
+  const [latestFailed, setLatestFailed] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const words = kind === "photo" ? ["type:image"] : kind === "video" ? ["type:video"] : ["type:image", "type:video"];
@@ -122,13 +131,14 @@ export function PhotosPage({ photoCount, videoCount, onError }: Props) {
       .then((all) => {
         if (cancelled) return;
         const files = all.flatMap((r) => r.results).sort((a, b) => b.modified_time - a.modified_time).slice(0, 40);
+        setLatestFailed(false);
         setLatest(files.map((f) => ({
           file_id: f.file_id, path: f.path, filename: f.filename, score: 0, confidence: "strong",
           kind: /\.(mp4|mov|m4v|mkv|webm|avi)$/i.test(f.filename) ? "video" : "photo",
           captured_at: new Date(f.modified_time * 1000).toISOString(), timestamp_offset_seconds: null, moments: null,
         })));
       })
-      .catch(() => { if (!cancelled) setLatest([]); });
+      .catch(() => { if (!cancelled) setLatestFailed(true); });
     return () => { cancelled = true; };
   }, [kind]);
   const strong = (results ?? []).filter((r) => r.confidence !== "weak");
@@ -209,10 +219,13 @@ export function PhotosPage({ photoCount, videoCount, onError }: Props) {
             </div>
           </>
         )}
+        {!results && !searching && latestFailed && !latest && (
+          <div className="py-16 text-center text-[14px] text-ink/65">Photos could not be listed: the search engine is not answering yet. It starts with the app; try again in a few seconds.</div>
+        )}
         {!results && !searching && latest && latest.length === 0 && (
           <div className="py-16 text-center text-[14px] text-ink/65">No photos indexed yet. Add a folder with photos in Index.</div>
         )}
-        {!results && !searching && !latest && (
+        {!results && !searching && !latest && !latestFailed && (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">{Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton aspect-[4/3]" />)}</div>
         )}
       </div>

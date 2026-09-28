@@ -7,8 +7,8 @@
         "hit@5": 1.0,
         "MRR": 0.9638888888888889,
         "both@5": 1.0,
-        "mean_ms": 21.64059833691378,
-        "median_ms": 19.53450001019519,
+        "mean_ms": 20.097250000022388,
+        "median_ms": 18.197100000065802,
         "embedded": 0.9666666666666667,
         "escalated": 0.0
       },
@@ -18,13 +18,13 @@
         "hit@5": 1.0,
         "MRR": 0.9638888888888889,
         "both@5": 1.0,
-        "mean_ms": 16.58864166723409,
-        "median_ms": 11.140700007672422,
+        "mean_ms": 15.219323333311271,
+        "median_ms": 9.940349999965292,
         "embedded": 0.43333333333333335,
         "escalated": 0.0
       },
       "mrr_retained": 1.0,
-      "latency_saved": 0.23344810485494938
+      "latency_saved": 0.24271612617177385
     },
     "per_tier": {
       "filename": {
@@ -34,8 +34,8 @@
           "hit@5": 1.0,
           "MRR": 1.0,
           "both@5": 1.0,
-          "mean_ms": 23.348833337270964,
-          "median_ms": 18.76434999576304,
+          "mean_ms": 19.916541666664973,
+          "median_ms": 16.980999999987034,
           "embedded": 1.0,
           "escalated": 0.0
         },
@@ -45,8 +45,8 @@
           "hit@5": 1.0,
           "MRR": 1.0,
           "both@5": 1.0,
-          "mean_ms": 10.306991670707552,
-          "median_ms": 10.453700000653043,
+          "mean_ms": 9.05854999998231,
+          "median_ms": 8.9720999999372,
           "embedded": 0.0,
           "escalated": 0.0
         }
@@ -58,8 +58,8 @@
           "hit@5": 1.0,
           "MRR": 1.0,
           "both@5": 1.0,
-          "mean_ms": 15.53095001145266,
-          "median_ms": 15.53095001145266,
+          "mean_ms": 14.160150000179783,
+          "median_ms": 14.160150000179783,
           "embedded": 0.0,
           "escalated": 0.0
         },
@@ -69,8 +69,8 @@
           "hit@5": 1.0,
           "MRR": 1.0,
           "both@5": 1.0,
-          "mean_ms": 16.036299988627434,
-          "median_ms": 16.036299988627434,
+          "mean_ms": 13.57604999986961,
+          "median_ms": 13.57604999986961,
           "embedded": 0.0,
           "escalated": 0.0
         }
@@ -82,8 +82,8 @@
           "hit@5": 1.0,
           "MRR": 1.0,
           "both@5": 1.0,
-          "mean_ms": 17.413475003559142,
-          "median_ms": 16.871600004378706,
+          "mean_ms": 16.471735000015997,
+          "median_ms": 16.19685000014215,
           "embedded": 1.0,
           "escalated": 0.0
         },
@@ -93,8 +93,8 @@
           "hit@5": 1.0,
           "MRR": 1.0,
           "both@5": 1.0,
-          "mean_ms": 8.459720002429094,
-          "median_ms": 8.564600007957779,
+          "mean_ms": 6.913929999996071,
+          "median_ms": 6.904750000103377,
           "embedded": 0.0,
           "escalated": 0.0
         }
@@ -106,8 +106,8 @@
           "hit@5": 1.0,
           "MRR": 0.9166666666666666,
           "both@5": 1.0,
-          "mean_ms": 24.57378846436488,
-          "median_ms": 23.848750002798624,
+          "mean_ms": 23.426211538487852,
+          "median_ms": 21.638650000113557,
           "embedded": 1.0,
           "escalated": 0.0
         },
@@ -117,8 +117,8 @@
           "hit@5": 1.0,
           "MRR": 0.9166666666666666,
           "both@5": 1.0,
-          "mean_ms": 25.783369229219925,
-          "median_ms": 24.18440001201816,
+          "mean_ms": 24.577926923047226,
+          "median_ms": 23.427149999974972,
           "embedded": 1.0,
           "escalated": 0.0
         }
@@ -131,8 +131,8 @@
         "hit@5": 1.0,
         "MRR": 1.0,
         "both@5": 1.0,
-        "mean_ms": 21.28732999553904,
-        "median_ms": 21.000849999836646,
+        "mean_ms": 20.025700000064717,
+        "median_ms": 19.810200000051736,
         "embedded": 0.0,
         "escalated": 0.0
       },
@@ -142,8 +142,8 @@
         "hit@5": 1.0,
         "MRR": 1.0,
         "both@5": 1.0,
-        "mean_ms": 231.08258999418467,
-        "median_ms": 231.5884499985259,
+        "mean_ms": 175.5660799999987,
+        "median_ms": 184.79360000014822,
         "embedded": 0.0,
         "escalated": 0.0
       }
@@ -165,7 +165,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 57.562600006349385,
+      "ms": 36.695899999813264,
       "embedded": true,
       "reranked": false
     },
@@ -179,7 +179,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 25.057800026843324,
+      "ms": 34.243500000002314,
       "embedded": true,
       "reranked": false
     },
@@ -193,7 +193,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 18.706000002566725,
+      "ms": 17.81859999982771,
       "embedded": true,
       "reranked": false
     },
@@ -207,7 +207,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 17.85800000652671,
+      "ms": 15.90610000016568,
       "embedded": true,
       "reranked": false
     },
@@ -221,7 +221,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 19.436900009168312,
+      "ms": 15.09940000005372,
       "embedded": true,
       "reranked": false
     },
@@ -235,7 +235,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 17.866200010757893,
+      "ms": 16.364199999998164,
       "embedded": true,
       "reranked": false
     },
@@ -249,7 +249,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 18.60129999113269,
+      "ms": 16.546099999914077,
       "embedded": true,
       "reranked": false
     },
@@ -263,7 +263,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 17.790299985790625,
+      "ms": 16.537500000140426,
       "embedded": true,
       "reranked": false
     },
@@ -277,7 +277,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 30.46310000354424,
+      "ms": 15.920600000072227,
       "embedded": true,
       "reranked": false
     },
@@ -291,7 +291,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 20.590800006175414,
+      "ms": 17.41590000005999,
       "embedded": true,
       "reranked": false
     },
@@ -305,7 +305,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 18.822699988959357,
+      "ms": 17.895499999895037,
       "embedded": true,
       "reranked": false
     },
@@ -319,7 +319,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 17.430300009436905,
+      "ms": 18.555200000037075,
       "embedded": true,
       "reranked": false
     },
@@ -333,7 +333,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 15.19240002380684,
+      "ms": 14.370100000178354,
       "embedded": false,
       "reranked": false
     },
@@ -347,7 +347,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 15.86949999909848,
+      "ms": 13.950200000181212,
       "embedded": false,
       "reranked": false
     },
@@ -361,7 +361,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.14069999777712,
+      "ms": 14.71939999987626,
       "embedded": true,
       "reranked": false
     },
@@ -375,7 +375,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.14359999075532,
+      "ms": 15.394500000184053,
       "embedded": true,
       "reranked": false
     },
@@ -389,7 +389,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.431299998657778,
+      "ms": 16.008200000214856,
       "embedded": true,
       "reranked": false
     },
@@ -403,7 +403,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.549799998756498,
+      "ms": 16.017300000157775,
       "embedded": true,
       "reranked": false
     },
@@ -417,7 +417,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 15.832100005354732,
+      "ms": 14.222599999811791,
       "embedded": true,
       "reranked": false
     },
@@ -431,7 +431,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 15.654000017093495,
+      "ms": 18.137900000056106,
       "embedded": true,
       "reranked": false
     },
@@ -445,7 +445,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 19.632100011222064,
+      "ms": 21.625000000085493,
       "embedded": true,
       "reranked": false
     },
@@ -459,7 +459,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 18.563500023446977,
+      "ms": 19.68130000000201,
       "embedded": true,
       "reranked": false
     },
@@ -473,7 +473,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 22.83589998842217,
+      "ms": 16.666800000166404,
       "embedded": true,
       "reranked": false
     },
@@ -487,7 +487,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 18.090700003085658,
+      "ms": 17.411399999900823,
       "embedded": true,
       "reranked": false
     },
@@ -501,7 +501,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 17.979800002649426,
+      "ms": 15.54929999997512,
       "embedded": true,
       "reranked": false
     },
@@ -515,7 +515,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.897300025448203,
+      "ms": 16.376400000126523,
       "embedded": true,
       "reranked": false
     },
@@ -529,7 +529,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 18.909300008090213,
+      "ms": 17.76489999997466,
       "embedded": true,
       "reranked": false
     },
@@ -543,7 +543,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.159499995410442,
+      "ms": 15.349099999866667,
       "embedded": true,
       "reranked": false
     },
@@ -557,7 +557,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.79680001689121,
+      "ms": 15.334799999891402,
       "embedded": true,
       "reranked": false
     },
@@ -571,7 +571,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.97180001065135,
+      "ms": 16.437900000028094,
       "embedded": true,
       "reranked": false
     },
@@ -585,7 +585,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 17.661699996097013,
+      "ms": 15.132700000094701,
       "embedded": true,
       "reranked": false
     },
@@ -599,7 +599,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 17.7010000043083,
+      "ms": 16.41709999989871,
       "embedded": true,
       "reranked": false
     },
@@ -613,7 +613,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.84589998330921,
+      "ms": 14.639199999919583,
       "embedded": true,
       "reranked": false
     },
@@ -627,7 +627,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.47269999375567,
+      "ms": 16.548900000088906,
       "embedded": true,
       "reranked": false
     },
@@ -641,7 +641,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 28.600399993592873,
+      "ms": 28.66049999988718,
       "embedded": true,
       "reranked": false
     },
@@ -655,7 +655,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 28.05839999928139,
+      "ms": 27.133499999990818,
       "embedded": true,
       "reranked": false
     },
@@ -669,7 +669,7 @@
       "hit5": true,
       "rr": 0.5,
       "both5": true,
-      "ms": 17.00259998324327,
+      "ms": 19.06220000000758,
       "embedded": true,
       "reranked": false
     },
@@ -683,7 +683,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 21.58709999639541,
+      "ms": 20.093800000040574,
       "embedded": true,
       "reranked": false
     },
@@ -697,7 +697,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 25.162600009934977,
+      "ms": 22.205299999995987,
       "embedded": true,
       "reranked": false
     },
@@ -711,7 +711,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 28.330400004051626,
+      "ms": 26.832800000192947,
       "embedded": true,
       "reranked": false
     },
@@ -725,7 +725,7 @@
       "hit5": true,
       "rr": 0.5,
       "both5": true,
-      "ms": 18.901900009950623,
+      "ms": 18.018099999835613,
       "embedded": true,
       "reranked": false
     },
@@ -739,7 +739,7 @@
       "hit5": true,
       "rr": 0.5,
       "both5": true,
-      "ms": 24.329000007128343,
+      "ms": 23.682400000097914,
       "embedded": true,
       "reranked": false
     },
@@ -753,7 +753,7 @@
       "hit5": true,
       "rr": 0.3333333333333333,
       "both5": true,
-      "ms": 25.07299999706447,
+      "ms": 24.829899999986083,
       "embedded": true,
       "reranked": false
     },
@@ -767,7 +767,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 34.7528999845963,
+      "ms": 34.41900000007081,
       "embedded": true,
       "reranked": false
     },
@@ -781,7 +781,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 22.15910001541488,
+      "ms": 20.662500000071304,
       "embedded": true,
       "reranked": false
     },
@@ -795,7 +795,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 22.674200008623302,
+      "ms": 20.1323000001139,
       "embedded": true,
       "reranked": false
     },
@@ -809,7 +809,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 22.3767000134103,
+      "ms": 21.347000000105254,
       "embedded": true,
       "reranked": false
     },
@@ -823,7 +823,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 24.406100012129173,
+      "ms": 23.27119999995375,
       "embedded": true,
       "reranked": false
     },
@@ -837,7 +837,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 19.91289999568835,
+      "ms": 18.2563000000755,
       "embedded": true,
       "reranked": false
     },
@@ -851,7 +851,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 24.079299997538328,
+      "ms": 23.67340000000695,
       "embedded": true,
       "reranked": false
     },
@@ -865,7 +865,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 21.63289999589324,
+      "ms": 20.89109999997163,
       "embedded": true,
       "reranked": false
     },
@@ -879,7 +879,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 21.5543000085745,
+      "ms": 19.805099999985032,
       "embedded": true,
       "reranked": false
     },
@@ -893,7 +893,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 23.146099993027747,
+      "ms": 21.325299999944036,
       "embedded": true,
       "reranked": false
     },
@@ -907,7 +907,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 23.61820000805892,
+      "ms": 20.80290000003515,
       "embedded": true,
       "reranked": false
     },
@@ -921,7 +921,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 34.98190001118928,
+      "ms": 32.993899999837595,
       "embedded": true,
       "reranked": false
     },
@@ -935,7 +935,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 30.77579999808222,
+      "ms": 31.415900000183683,
       "embedded": true,
       "reranked": false
     },
@@ -949,7 +949,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 21.316400001524016,
+      "ms": 20.727800000031493,
       "embedded": true,
       "reranked": false
     },
@@ -963,7 +963,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 24.540700018405914,
+      "ms": 21.93030000012186,
       "embedded": true,
       "reranked": false
     },
@@ -977,7 +977,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 20.31140000326559,
+      "ms": 20.167800000081115,
       "embedded": true,
       "reranked": false
     },
@@ -991,7 +991,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 29.634200007421896,
+      "ms": 26.741200000060417,
       "embedded": true,
       "reranked": false
     }
@@ -1007,7 +1007,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.822199975838885,
+      "ms": 7.357199999887598,
       "embedded": false,
       "reranked": false
     },
@@ -1021,7 +1021,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 11.487300012959167,
+      "ms": 8.778699999993478,
       "embedded": false,
       "reranked": false
     },
@@ -1035,7 +1035,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 10.557300003711134,
+      "ms": 10.170199999947727,
       "embedded": false,
       "reranked": false
     },
@@ -1049,7 +1049,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 11.534800025401637,
+      "ms": 10.451900000134628,
       "embedded": false,
       "reranked": false
     },
@@ -1063,7 +1063,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 10.427700006403029,
+      "ms": 8.88659999986885,
       "embedded": false,
       "reranked": false
     },
@@ -1077,7 +1077,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 10.479699994903058,
+      "ms": 9.710499999982858,
       "embedded": false,
       "reranked": false
     },
@@ -1091,7 +1091,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 9.63489999412559,
+      "ms": 8.196900000029927,
       "embedded": false,
       "reranked": false
     },
@@ -1105,7 +1105,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 10.020900022936985,
+      "ms": 9.43449999999757,
       "embedded": false,
       "reranked": false
     },
@@ -1119,7 +1119,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 10.794100002385676,
+      "ms": 9.554500000149346,
       "embedded": false,
       "reranked": false
     },
@@ -1133,7 +1133,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 10.706300003221259,
+      "ms": 9.05760000000555,
       "embedded": false,
       "reranked": false
     },
@@ -1147,7 +1147,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 10.080400010338053,
+      "ms": 8.384799999930692,
       "embedded": false,
       "reranked": false
     },
@@ -1161,7 +1161,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 9.138299996266142,
+      "ms": 8.719199999859484,
       "embedded": false,
       "reranked": false
     },
@@ -1175,7 +1175,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 15.839100000448525,
+      "ms": 13.834599999881902,
       "embedded": false,
       "reranked": false
     },
@@ -1189,7 +1189,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 16.233499976806343,
+      "ms": 13.317499999857318,
       "embedded": false,
       "reranked": false
     },
@@ -1203,7 +1203,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 9.164300019619986,
+      "ms": 7.107099999984712,
       "embedded": false,
       "reranked": false
     },
@@ -1217,7 +1217,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 7.081799994921312,
+      "ms": 7.106499999963489,
       "embedded": false,
       "reranked": false
     },
@@ -1231,7 +1231,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 9.15479997638613,
+      "ms": 6.410599999981059,
       "embedded": false,
       "reranked": false
     },
@@ -1245,7 +1245,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 7.9898000112734735,
+      "ms": 6.703199999947174,
       "embedded": false,
       "reranked": false
     },
@@ -1259,7 +1259,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 9.012199996504933,
+      "ms": 5.964800000128889,
       "embedded": false,
       "reranked": false
     },
@@ -1273,7 +1273,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.084300003247336,
+      "ms": 6.2255000000277505,
       "embedded": false,
       "reranked": false
     },
@@ -1287,7 +1287,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.423999999649823,
+      "ms": 7.660900000018955,
       "embedded": false,
       "reranked": false
     },
@@ -1301,7 +1301,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.54010001057759,
+      "ms": 8.620699999937642,
       "embedded": false,
       "reranked": false
     },
@@ -1315,7 +1315,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.7651000067126,
+      "ms": 6.899800000155665,
       "embedded": false,
       "reranked": false
     },
@@ -1329,7 +1329,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.976399985840544,
+      "ms": 7.001199999876917,
       "embedded": false,
       "reranked": false
     },
@@ -1343,7 +1343,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.321300003444776,
+      "ms": 7.506599999942409,
       "embedded": false,
       "reranked": false
     },
@@ -1357,7 +1357,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.891999983461574,
+      "ms": 7.579600000099163,
       "embedded": false,
       "reranked": false
     },
@@ -1371,7 +1371,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.589100005337968,
+      "ms": 6.909700000051089,
       "embedded": false,
       "reranked": false
     },
@@ -1385,7 +1385,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 7.718800014117733,
+      "ms": 5.875099999911981,
       "embedded": false,
       "reranked": false
     },
@@ -1399,7 +1399,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 6.942400010302663,
+      "ms": 6.408999999848675,
       "embedded": false,
       "reranked": false
     },
@@ -1413,7 +1413,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.669400005601346,
+      "ms": 7.7701000000161,
       "embedded": false,
       "reranked": false
     },
@@ -1427,7 +1427,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 9.540400002151728,
+      "ms": 6.3150999999379565,
       "embedded": false,
       "reranked": false
     },
@@ -1441,7 +1441,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 9.64090001070872,
+      "ms": 6.762499999922511,
       "embedded": false,
       "reranked": false
     },
@@ -1455,7 +1455,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 7.496600010199472,
+      "ms": 6.395600000132617,
       "embedded": false,
       "reranked": false
     },
@@ -1469,7 +1469,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 8.190699998522177,
+      "ms": 7.055000000036671,
       "embedded": false,
       "reranked": false
     },
@@ -1483,7 +1483,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 29.38899997388944,
+      "ms": 30.340600000045015,
       "embedded": true,
       "reranked": false
     },
@@ -1497,7 +1497,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 29.256499983603135,
+      "ms": 29.460599999993065,
       "embedded": true,
       "reranked": false
     },
@@ -1511,7 +1511,7 @@
       "hit5": true,
       "rr": 0.5,
       "both5": true,
-      "ms": 20.292600005632266,
+      "ms": 18.388799999911498,
       "embedded": true,
       "reranked": false
     },
@@ -1525,7 +1525,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 22.903700009919703,
+      "ms": 21.826700000019628,
       "embedded": true,
       "reranked": false
     },
@@ -1539,7 +1539,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 24.97530000982806,
+      "ms": 23.799800000006144,
       "embedded": true,
       "reranked": false
     },
@@ -1553,7 +1553,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 26.238799997372553,
+      "ms": 26.482799999939743,
       "embedded": true,
       "reranked": false
     },
@@ -1567,7 +1567,7 @@
       "hit5": true,
       "rr": 0.5,
       "both5": true,
-      "ms": 21.040899999206886,
+      "ms": 17.144200000075216,
       "embedded": true,
       "reranked": false
     },
@@ -1581,7 +1581,7 @@
       "hit5": true,
       "rr": 0.5,
       "both5": true,
-      "ms": 25.182099983794615,
+      "ms": 25.017200000093,
       "embedded": true,
       "reranked": false
     },
@@ -1595,7 +1595,7 @@
       "hit5": true,
       "rr": 0.3333333333333333,
       "both5": true,
-      "ms": 25.44959998340346,
+      "ms": 24.176199999828896,
       "embedded": true,
       "reranked": false
     },
@@ -1609,7 +1609,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 37.575900001684204,
+      "ms": 36.6199999998571,
       "embedded": true,
       "reranked": false
     },
@@ -1623,7 +1623,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 23.956499993801117,
+      "ms": 21.485700000084762,
       "embedded": true,
       "reranked": false
     },
@@ -1637,7 +1637,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 21.90540000447072,
+      "ms": 21.653199999946082,
       "embedded": true,
       "reranked": false
     },
@@ -1651,7 +1651,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 22.36350000021048,
+      "ms": 22.301099999822327,
       "embedded": true,
       "reranked": false
     },
@@ -1665,7 +1665,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 24.733500002184883,
+      "ms": 23.529099999905156,
       "embedded": true,
       "reranked": false
     },
@@ -1679,7 +1679,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 18.799399986164644,
+      "ms": 17.412700000022596,
       "embedded": true,
       "reranked": false
     },
@@ -1693,7 +1693,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 28.090900013921782,
+      "ms": 25.5691999998362,
       "embedded": true,
       "reranked": false
     },
@@ -1707,7 +1707,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 22.597900009714067,
+      "ms": 22.744699999975637,
       "embedded": true,
       "reranked": false
     },
@@ -1721,7 +1721,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 22.325500001898035,
+      "ms": 21.434700000099838,
       "embedded": true,
       "reranked": false
     },
@@ -1735,7 +1735,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 24.008900014450774,
+      "ms": 24.677999999994427,
       "embedded": true,
       "reranked": false
     },
@@ -1749,7 +1749,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 22.622299991780892,
+      "ms": 21.494300000085786,
       "embedded": true,
       "reranked": false
     },
@@ -1763,7 +1763,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 38.98079998907633,
+      "ms": 36.32679999986976,
       "embedded": true,
       "reranked": false
     },
@@ -1777,7 +1777,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 34.91499999654479,
+      "ms": 31.70959999988554,
       "embedded": true,
       "reranked": false
     },
@@ -1791,7 +1791,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 22.835599986137822,
+      "ms": 22.492899999861038,
       "embedded": true,
       "reranked": false
     },
@@ -1805,7 +1805,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 24.359900009585544,
+      "ms": 23.325200000044788,
       "embedded": true,
       "reranked": false
     },
@@ -1819,7 +1819,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 23.082300001988187,
+      "ms": 20.677700000078403,
       "embedded": true,
       "reranked": false
     },
@@ -1833,7 +1833,7 @@
       "hit5": true,
       "rr": 1.0,
       "both5": true,
-      "ms": 32.48580000945367,
+      "ms": 28.934299999946234,
       "embedded": true,
       "reranked": false
     }

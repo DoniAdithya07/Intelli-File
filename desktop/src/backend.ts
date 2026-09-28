@@ -293,7 +293,7 @@ export type AskEvent =
   | { type: "quick_answer"; text: string; source: AskSource }
   | { type: "answer_start" }
   | { type: "token"; text: string }
-  | { type: "answer"; text: string; citations: AskSource[]; grounded: boolean; citations_inferred?: boolean; warnings?: string[] }
+  | { type: "answer"; text: string; citations: AskSource[]; grounded: boolean; citations_inferred?: boolean; warnings?: string[]; from_index?: boolean }
   | { type: "done"; seconds: number; tool_calls: number; strategies: { query: string; mode: string; filters: string; route: string; results: number }[]; sources: AskSource[] }
   | { type: "error"; message: string };
 
