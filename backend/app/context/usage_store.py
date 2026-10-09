@@ -29,6 +29,7 @@ EVENT_KINDS = {
 }
 
 SESSION_GAP_SECONDS = 30 * 60
+_INSERT_SQL = "INSERT INTO usage_events (ts, kind, session_id, file_id, path, file_type, query, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS usage_events (
@@ -95,11 +96,39 @@ class UsageStore:
         """Add historical events from outside the app (Windows' Recent
         items). Sessions are assigned among the imported events by their own
         gaps, and the live session is left alone — an import from last week
-        must not join what the user is doing now. meta.source marks them."""
+        must not join what the user is doing now. meta.source marks them;
+        an event may bring its own `query` and extra `meta` (the sample
+        history's searches, context/sample_history.py)."""
+        rows = self._import_rows(kind, events, source, session_gap_seconds)
+        if not rows:
+            return 0
+        with self._lock:
+            self._conn.executemany(_INSERT_SQL, rows)
+            self._conn.commit()
+            self.version += 1
+        return len(rows)
+
+    def replace_source(self, source: str, batches: list[tuple[str, list[dict]]]) -> int:
+        """Swap every event imported from `source` for `batches` ((kind,
+        events) pairs, as import_events takes them) in ONE transaction. Until
+        2026-10-05 "Load sample history" deleted the old sample first and
+        imported after: a failure in between left it gone or half written.
+        Returns how many events were written."""
+        rows = [row for kind, events in batches for row in self._import_rows(kind, events, source, None)]
+        with self._lock:
+            try:
+                self._conn.execute("DELETE FROM usage_events WHERE meta LIKE ?", (f'%"source": "{source}"%',))
+                self._conn.executemany(_INSERT_SQL, rows)
+                self._conn.commit()
+            except BaseException:
+                self._conn.rollback()
+                raise
+            self.version += 1
+        return len(rows)
+
+    def _import_rows(self, kind: str, events: list[dict], source: str, session_gap_seconds: float | None) -> list[tuple]:
         if kind not in EVENT_KINDS:
             raise ValueError(f"unknown event kind: {kind}")
-        if not events:
-            return 0
         gap = self._gap if session_gap_seconds is None else session_gap_seconds
         rows, session, last = [], None, None
         for e in sorted(events, key=lambda e: e["ts"]):
@@ -108,19 +137,19 @@ class UsageStore:
             last = e["ts"]
             path = e.get("path")
             file_type = Path(path).suffix.lower().lstrip(".") or None if path else None
-            rows.append((e["ts"], kind, session, e.get("file_id"), path, file_type, None, json.dumps({"source": source})))
-        with self._lock:
-            self._conn.executemany(
-                "INSERT INTO usage_events (ts, kind, session_id, file_id, path, file_type, query, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
-            self._conn.commit()
-            self.version += 1
-        return len(rows)
+            rows.append((e["ts"], kind, session, e.get("file_id"), path, file_type, e.get("query"), json.dumps({"source": source, **(e.get("meta") or {})})))
+        return rows
 
     def imported_keys(self, source: str) -> set[tuple[str, float]]:
         """(path, ts) of every event already imported from `source`."""
         with self._lock:
             rows = self._conn.execute("SELECT path, ts FROM usage_events WHERE meta LIKE ?", (f'%"source": "{source}"%',)).fetchall()
         return {(r["path"], round(r["ts"], 3)) for r in rows}
+
+    def count_source(self, source: str) -> int:
+        """How many events were imported from `source`."""
+        with self._lock:
+            return self._conn.execute("SELECT COUNT(*) FROM usage_events WHERE meta LIKE ?", (f'%"source": "{source}"%',)).fetchone()[0]
 
     def clear_source(self, source: str) -> int:
         """Remove every event imported from `source` (the import switched off)."""

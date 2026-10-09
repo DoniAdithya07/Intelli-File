@@ -12,6 +12,7 @@ meaning, not exact characters (see prototype_typo_tolerance.py).
 """
 
 import re
+from collections.abc import Callable
 
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 MAX_EDIT_DISTANCE = 2
@@ -70,6 +71,10 @@ def _levenshtein(a: str, b: str, max_distance: int) -> int:
                 previous_row[j - 1] + cost,  # substitution
             )
         previous_row = current_row
+        # Every cell in this row already exceeds the limit and rows never
+        # get cheaper: the answer is "too far", no need to finish the grid.
+        if min(current_row) > max_distance:
+            return max_distance + 1
     return previous_row[-1]
 
 
@@ -81,10 +86,18 @@ def _closest_word(word: str, vocabulary: dict[str, int]) -> str | None:
     more frequent word."""
     allowed = _allowed_distance(word)
     best = None  # (is_not_extension, distance, -count, candidate)
+    # Pigeonhole: with at most `allowed` edits, one of `allowed + 1` pieces of
+    # the word survives untouched, so a real near-match contains it verbatim.
+    # A C-speed substring test discards almost the whole vocabulary before
+    # the (pure Python) edit distance runs; it is exact, not a heuristic.
+    cuts = [round(i * len(word) / (allowed + 1)) for i in range(allowed + 2)]
+    pieces = [word[cuts[i]:cuts[i + 1]] for i in range(allowed + 1)]
     for candidate, count in vocabulary.items():
         extension = candidate.startswith(word) or word.startswith(candidate)
         limit = MAX_EDIT_DISTANCE if extension else allowed
         if abs(len(candidate) - len(word)) > limit:
+            continue
+        if not extension and not any(p in candidate for p in pieces):
             continue
         distance = _levenshtein(word, candidate, limit)
         if distance > limit:
@@ -95,11 +108,23 @@ def _closest_word(word: str, vocabulary: dict[str, int]) -> str | None:
     return best[3] if best else None
 
 
-def correct_query(text: str, vocabulary: dict[str, int]) -> str:
+def _plural_of_known(word: str, vocabulary: dict[str, int]) -> bool:
+    """"servers" when the files say "server", "categories" for "category"."""
+    for suffix, singular_ending in (("ies", "y"), ("es", ""), ("s", "")):
+        if word.endswith(suffix) and word[: -len(suffix)] + singular_ending in vocabulary:
+            return True
+    return False
+
+
+def correct_query(text: str, vocabulary: dict[str, int], is_word: Callable[[str], bool] | None = None) -> str:
     """Replaces each unknown word with the closest known word from the
     vocabulary, when one exists within MAX_EDIT_DISTANCE. Words already in
     the vocabulary, or too short to safely correct, or with no close
-    enough match, are left exactly as typed.
+    enough match, are left exactly as typed. So are the plural of a
+    vocabulary word and, with `is_word` (dictionary.Dictionary.is_word), a
+    common English word: until 2026-10-05 "servers" became "server" and
+    "recipes" "recipe" — the extension rule below reads a plural as a typo
+    of its singular — and the search page said "Showing results for server".
     """
     if not vocabulary:
         return text
@@ -107,7 +132,12 @@ def correct_query(text: str, vocabulary: dict[str, int]) -> str:
     def replace(match: re.Match) -> str:
         word = match.group(0)
         lower = word.lower()
-        if lower in vocabulary:
+        # A token with a digit is a number or an ID (invoice 48213, PO-8812,
+        # ref AS-77Q), never a typo: one swap or edit lands on a *different*
+        # real number from the same files ("48213" -> "48231", 2026-10-04).
+        if lower in vocabulary or any(c.isdigit() for c in lower):
+            return word
+        if _plural_of_known(lower, vocabulary) or (is_word is not None and is_word(lower)):
             return word
         if len(lower) < MIN_WORD_LENGTH_TO_CORRECT:
             swapped = _adjacent_swap(lower, vocabulary) if len(lower) >= SWAP_WORD_MIN_LENGTH else None

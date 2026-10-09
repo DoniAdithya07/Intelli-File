@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { fileKind, formatAgo, formatBytes, getPassages, Passage, PassagesResponse, SearchResult, shortenFolder, thumbnailUrl } from "../backend";
+import { fileKind, formatAgo, formatBytes, getPassages, Passage, PassagesResponse, SearchResult, shortenFolder } from "../backend";
 import { FILE_MANAGER } from "../platform";
-import { FileBadge, openResult, revealResult } from "./ResultCard";
+import { canOpen, FileBadge, openResult, revealResult } from "./ResultCard";
+import { Thumb } from "./Thumb";
 
 // Words too common to be worth marking in a passage.
 const STOP = new Set("the and for with that this from what when where which who how are was were have has had not you your our their about into over under after before than then them they its".split(" "));
@@ -73,7 +74,7 @@ export function SearchPreview({ result, query, onError }: Props) {
 
   if (!result) {
     return (
-      <div className="grid h-full place-items-center px-6 text-center text-[13px] text-ink/60">
+      <div className="grid h-full place-items-center px-6 text-center text-[13px] text-ink/65">
         Select a result to see the matching passage.
       </div>
     );
@@ -91,16 +92,16 @@ export function SearchPreview({ result, query, onError }: Props) {
           <FileBadge filename={result.filename} />
           <div className="min-w-0">
             <h2 className="break-words text-[15px] font-semibold leading-snug select-text">{result.filename}</h2>
-            {result.path && <div className="mono mt-0.5 truncate text-[12px] text-ink/60" title={result.path}>in {shortenFolder(result.path)}</div>}
-            <div className="mt-0.5 text-[12px] text-ink/60"><span className="mono">{formatBytes(result.size)}</span>, modified {formatAgo(result.modified_time)}</div>
+            {result.path && <div className="mono mt-0.5 truncate text-[12px] text-ink/65" title={result.path}>in {shortenFolder(result.path)}</div>}
+            <div className="mt-0.5 text-[12px] text-ink/65"><span className="mono">{formatBytes(result.size)}</span>, modified {formatAgo(result.modified_time)}</div>
           </div>
         </div>
 
         {kind === "image" && result.path && (
-          <img src={thumbnailUrl(result.path, 480)} alt={`Picture: ${result.filename}`} className="mt-4 max-h-[220px] w-auto rounded border border-rule object-contain" />
+          <Thumb path={result.path} size={480} alt={`Picture: ${result.filename}`} boxClassName="mt-4 h-[220px] w-[293px] max-w-full rounded border border-rule" className="mt-4 max-h-[220px] w-auto rounded border border-rule object-contain" />
         )}
 
-        {state === "loading" && <p className="mt-4 text-[13px] text-ink/60">Loading passage</p>}
+        {state === "loading" && <p className="mt-4 text-[13px] text-ink/65">Loading passage</p>}
         {state === "failed" && <p className="mt-4 text-[13px] text-error">The passage could not be loaded. The search engine did not answer; try selecting the result again.</p>}
         {gone && (
           <div className="mt-4 text-[13px]">
@@ -109,7 +110,7 @@ export function SearchPreview({ result, query, onError }: Props) {
           </div>
         )}
         {state === "ready" && data && !data.error && !data.match && (
-          <p className="mt-4 text-[13px] text-ink/60">
+          <p className="mt-4 text-[13px] text-ink/65">
             {kind === "image" ? "No text was found in this picture. It matched by its file name." : kind === "audio" ? "This recording has no transcript yet. It matched by its file name." : "IntelliFile holds no text for this file. It matched by its file name."}
           </p>
         )}
@@ -133,13 +134,13 @@ export function SearchPreview({ result, query, onError }: Props) {
               const personal = PERSONAL_PREFIXES.some((p) => w.startsWith(p));
               return (
                 <li key={i} className="flex gap-2">
-                  <span className={`material-symbols-outlined mt-px icon-sm ${personal ? "text-amber" : "text-ink/55"}`} aria-hidden>{personal ? "person" : "check"}</span>
+                  <span className={`material-symbols-outlined mt-px icon-sm ${personal ? "text-amber" : "text-ink/65"}`} aria-hidden>{personal ? "person" : "check"}</span>
                   <span className={personal ? "text-[rgb(var(--c-amber-text))]" : "text-ink/85"}>{w}</span>
                 </li>
               );
             })}
             <li className="flex gap-2">
-              <span className="material-symbols-outlined mt-px icon-sm text-ink/55" aria-hidden>{weak ? "remove" : "check"}</span>
+              <span className="material-symbols-outlined mt-px icon-sm text-ink/65" aria-hidden>{weak ? "remove" : "check"}</span>
               <span className="text-ink/85">{weak ? "Weaker match: only loosely related to the search" : "Strong match"}</span>
             </li>
           </ul>
@@ -147,7 +148,7 @@ export function SearchPreview({ result, query, onError }: Props) {
       </div>
 
       <div className="flex shrink-0 gap-2 border-t border-rule px-5 py-3">
-        <button className="btn-primary px-3 py-1.5 text-[13px]" onClick={() => openResult(result.path, onError, result.file_id)}>Open</button>
+        {canOpen(result.path) && <button className="btn-primary px-3 py-1.5 text-[13px]" onClick={() => openResult(result.path, onError, result.file_id)}>Open</button>}
         <button className="btn-secondary px-3 py-1.5 text-[13px]" onClick={() => revealResult(result.path, onError, result.file_id)}>Show in {FILE_MANAGER}</button>
       </div>
     </div>

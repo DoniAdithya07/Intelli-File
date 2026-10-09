@@ -3,8 +3,8 @@
     {
       "gap": null,
       "cap": null,
-      "weak_per_query": 2.25,
-      "noise_per_query": 2.25,
+      "weak_per_query": 2.216666666666667,
+      "noise_per_query": 2.216666666666667,
       "relevant_lost": 0
     },
     {
@@ -17,50 +17,50 @@
     {
       "gap": null,
       "cap": 3,
+      "weak_per_query": 1.1666666666666667,
+      "noise_per_query": 1.1666666666666667,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.3,
+      "cap": null,
+      "weak_per_query": 1.4166666666666667,
+      "noise_per_query": 1.4166666666666667,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.3,
+      "cap": 5,
       "weak_per_query": 1.1833333333333333,
       "noise_per_query": 1.1833333333333333,
       "relevant_lost": 0
     },
     {
       "gap": 0.3,
-      "cap": null,
-      "weak_per_query": 1.4833333333333334,
-      "noise_per_query": 1.4833333333333334,
-      "relevant_lost": 0
-    },
-    {
-      "gap": 0.3,
-      "cap": 5,
-      "weak_per_query": 1.2166666666666666,
-      "noise_per_query": 1.2166666666666666,
-      "relevant_lost": 0
-    },
-    {
-      "gap": 0.3,
       "cap": 3,
-      "weak_per_query": 0.8666666666666667,
-      "noise_per_query": 0.8666666666666667,
+      "weak_per_query": 0.8333333333333334,
+      "noise_per_query": 0.8333333333333334,
       "relevant_lost": 0
     },
     {
       "gap": 0.2,
       "cap": null,
-      "weak_per_query": 0.45,
-      "noise_per_query": 0.45,
-      "relevant_lost": 0
-    },
-    {
-      "gap": 0.2,
-      "cap": 5,
       "weak_per_query": 0.4,
       "noise_per_query": 0.4,
       "relevant_lost": 0
     },
     {
       "gap": 0.2,
+      "cap": 5,
+      "weak_per_query": 0.38333333333333336,
+      "noise_per_query": 0.38333333333333336,
+      "relevant_lost": 0
+    },
+    {
+      "gap": 0.2,
       "cap": 3,
-      "weak_per_query": 0.3333333333333333,
-      "noise_per_query": 0.3333333333333333,
+      "weak_per_query": 0.31666666666666665,
+      "noise_per_query": 0.31666666666666665,
       "relevant_lost": 0
     },
     {
@@ -288,13 +288,13 @@
       "query": "in:invoices",
       "results": [
         {
-          "name": "march invoice.txt",
+          "name": "april invoice.txt",
           "tier": "strong",
           "distance": null,
           "relevant": true
         },
         {
-          "name": "april invoice.txt",
+          "name": "march invoice.txt",
           "tier": "strong",
           "distance": null,
           "relevant": true
@@ -592,19 +592,13 @@
         {
           "name": "landlord letter.txt",
           "tier": "strong",
-          "distance": 0.6702245473861694,
+          "distance": 0.44952237606048584,
           "relevant": true
-        },
-        {
-          "name": "caching strategy.txt",
-          "tier": "weak",
-          "distance": 0.8303072452545166,
-          "relevant": false
         },
         {
           "name": "incident report.md",
           "tier": "weak",
-          "distance": 0.8885797262191772,
+          "distance": 0.8347688317298889,
           "relevant": false
         }
       ]
@@ -998,55 +992,43 @@
         {
           "name": "deploy checklist.md",
           "tier": "strong",
-          "distance": 0.7445869445800781,
+          "distance": 0.7429236173629761,
           "relevant": true
         },
         {
           "name": "meeting notes.txt",
           "tier": "weak",
-          "distance": 0.8384225368499756,
+          "distance": 0.8418207168579102,
           "relevant": false
         },
         {
           "name": "api design.md",
           "tier": "weak",
-          "distance": 0.8565791845321655,
-          "relevant": false
-        },
-        {
-          "name": "april invoice.txt",
-          "tier": "weak",
-          "distance": 0.8635408878326416,
+          "distance": 0.8505399823188782,
           "relevant": false
         },
         {
           "name": "incident report.md",
           "tier": "weak",
-          "distance": 0.8668291568756104,
+          "distance": 0.8678026795387268,
+          "relevant": false
+        },
+        {
+          "name": "april invoice.txt",
+          "tier": "weak",
+          "distance": 0.8684378862380981,
           "relevant": false
         },
         {
           "name": "queue_design.md",
           "tier": "weak",
-          "distance": 0.8724559545516968,
+          "distance": 0.8824964761734009,
           "relevant": false
         },
         {
           "name": "caching strategy.txt",
           "tier": "weak",
-          "distance": 0.8977302312850952,
-          "relevant": false
-        },
-        {
-          "name": "tax notes.md",
-          "tier": "weak",
-          "distance": 0.9001957774162292,
-          "relevant": false
-        },
-        {
-          "name": "croissants.txt",
-          "tier": "weak",
-          "distance": 0.9073964357376099,
+          "distance": 0.9054298996925354,
           "relevant": false
         }
       ]
@@ -1175,31 +1157,37 @@
         {
           "name": "caching strategy.txt",
           "tier": "strong",
-          "distance": 0.6047378778457642,
+          "distance": 0.6031878590583801,
           "relevant": true
         },
         {
           "name": "deploy checklist.md",
           "tier": "weak",
-          "distance": 0.776833176612854,
+          "distance": 0.7714852094650269,
           "relevant": false
         },
         {
           "name": "tax notes.md",
           "tier": "weak",
-          "distance": 0.8608547449111938,
-          "relevant": false
-        },
-        {
-          "name": "pizza dough.md",
-          "tier": "weak",
-          "distance": 0.890844464302063,
+          "distance": 0.8520041704177856,
           "relevant": false
         },
         {
           "name": "incident report.md",
           "tier": "weak",
-          "distance": 0.9009561538696289,
+          "distance": 0.8946042656898499,
+          "relevant": false
+        },
+        {
+          "name": "pizza dough.md",
+          "tier": "weak",
+          "distance": 0.9024481773376465,
+          "relevant": false
+        },
+        {
+          "name": "queue_design.md",
+          "tier": "weak",
+          "distance": 0.9039126038551331,
           "relevant": false
         }
       ]
@@ -1521,61 +1509,61 @@
         {
           "name": "incident report.md",
           "tier": "strong",
-          "distance": 0.5965818166732788,
+          "distance": 0.593468189239502,
           "relevant": true
         },
         {
           "name": "deploy checklist.md",
           "tier": "strong",
-          "distance": 0.6017029881477356,
+          "distance": 0.6125472784042358,
           "relevant": true
         },
         {
           "name": "april invoice.txt",
           "tier": "weak",
-          "distance": 0.8121014833450317,
-          "relevant": false
-        },
-        {
-          "name": "march invoice.txt",
-          "tier": "weak",
-          "distance": 0.8219896554946899,
+          "distance": 0.8067212104797363,
           "relevant": false
         },
         {
           "name": "meeting notes.txt",
           "tier": "weak",
-          "distance": 0.8302172422409058,
+          "distance": 0.8153700828552246,
+          "relevant": false
+        },
+        {
+          "name": "march invoice.txt",
+          "tier": "weak",
+          "distance": 0.8235940933227539,
           "relevant": false
         },
         {
           "name": "monthly expenses.csv",
           "tier": "weak",
-          "distance": 0.8397484421730042,
-          "relevant": false
-        },
-        {
-          "name": "caching strategy.txt",
-          "tier": "weak",
-          "distance": 0.849075198173523,
+          "distance": 0.8296682834625244,
           "relevant": false
         },
         {
           "name": "travel insurance.md",
           "tier": "weak",
-          "distance": 0.8496864438056946,
+          "distance": 0.8458129167556763,
+          "relevant": false
+        },
+        {
+          "name": "caching strategy.txt",
+          "tier": "weak",
+          "distance": 0.8605679273605347,
           "relevant": false
         },
         {
           "name": "queue_design.md",
           "tier": "weak",
-          "distance": 0.8580251932144165,
+          "distance": 0.8613828420639038,
           "relevant": false
         },
         {
           "name": "landlord letter.txt",
           "tier": "weak",
-          "distance": 0.8609392046928406,
+          "distance": 0.8636420965194702,
           "relevant": false
         }
       ]

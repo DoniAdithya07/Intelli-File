@@ -7,6 +7,9 @@ interface Props {
   onSubmit: () => void;
   onEscape?: () => void;
   onArrow?: (dir: 1 | -1) => void;
+  /** The results list this box drives and its highlighted row, so screen readers follow the arrow keys. */
+  listId?: string;
+  activeId?: string;
   placeholder: string;
   icon?: string;
   searching?: boolean;
@@ -17,7 +20,7 @@ interface Props {
 }
 
 /** The search bar, shared by Search, Photos and the Ctrl+Space overlay. */
-export function Omnibox({ value, onChange, onSubmit, onEscape, onArrow, placeholder, icon = "search", searching, voice, autoFocus, trailing, large }: Props) {
+export function Omnibox({ value, onChange, onSubmit, onEscape, onArrow, listId, activeId, placeholder, icon = "search", searching, voice, autoFocus, trailing, large }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus();
@@ -51,12 +54,13 @@ export function Omnibox({ value, onChange, onSubmit, onEscape, onArrow, placehol
       }`}
     >
       {v === "recording" ? levelBars : (
-        <span className="material-symbols-outlined text-ink/60">{v === "warming" || v === "transcribing" ? "graphic_eq" : icon}</span>
+        <span className="material-symbols-outlined text-ink/65">{v === "warming" || v === "transcribing" ? "graphic_eq" : icon}</span>
       )}
       <input
         ref={inputRef}
         aria-label={placeholder}
-        className={`flex-1 bg-transparent outline-none placeholder:text-ink/55 ${large ? "text-[17px]" : "text-[15px]"}`}
+        {...(listId ? { role: "combobox", "aria-expanded": true, "aria-controls": listId, "aria-activedescendant": activeId, "aria-autocomplete": "none" as const } : {})}
+        className={`flex-1 bg-transparent outline-none placeholder:text-ink/65 ${large ? "text-[17px]" : "text-[15px]"}`}
         value={busy ? "" : value}
         placeholder={v === "warming" ? "Getting the microphone ready…" : v === "recording" ? "Listening. Click the microphone again to stop." : v === "transcribing" ? "Turning your words into text…" : placeholder}
         onChange={(e) => onChange(e.currentTarget.value)}

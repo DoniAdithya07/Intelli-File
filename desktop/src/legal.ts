@@ -1,7 +1,6 @@
 /**
- * The privacy policy and terms of use shown in Settings > About. The same
- * text is in PRIVACY.md and TERMS.md at the repository root; keep them in
- * step. Every statement here describes what the code actually does.
+ * The privacy policy and terms of use shown in Settings > About. Every
+ * statement here describes what the code actually does.
  */
 export interface LegalSection { heading: string; body: string[] }
 export interface LegalDoc { title: string; updated: string; sections: LegalSection[] }
@@ -90,7 +89,7 @@ export const TERMS: LegalDoc = {
     {
       heading: "Third-party components",
       body: [
-        "IntelliFile includes models, fonts and libraries made by others, each under its own licence (for example Apache 2.0, MIT, SIL Open Font License and CC BY-SA 4.0). They are listed in THIRD_PARTY_NOTICES.md with the source code.",
+        "IntelliFile includes models, fonts and libraries made by others, each under its own licence (for example Apache 2.0, MIT, SIL Open Font License and CC BY-SA 4.0). Their licence texts are in the licenses folder next to IntelliFile.exe.",
       ],
     },
   ],

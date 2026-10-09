@@ -17,6 +17,7 @@ class Job:
     kind: str  # "index" | "delete"
     path: str
     file_id: str | None = None
+    new: bool = False  # the watcher had no record for this path: nothing of it is in the index yet
 
 
 class JobQueue:

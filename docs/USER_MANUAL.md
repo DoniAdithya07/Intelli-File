@@ -73,7 +73,7 @@ Answers usually take 10 to 30 seconds and never more than 50. If Ask says it nee
 
 ## For You and Activity
 
-**For You** shows what IntelliFile has learned from how you use your files: **Continue where you left off**, the files you use most (**Frequently used**), **Recommended** files for now with the reason for each, and **What IntelliFile learned**: your topics, the file types you use, and when you work. Until it has seen 20 actions it says **Still learning**. Personalization only reorders results that are nearly tied, and every result says why.
+**For You** shows what IntelliFile has learned from how you use your files: **Continue where you left off**, the files you use most (**Frequently used**), **Recommended** files for now with the reason for each, and **What IntelliFile learned**: your topics, the file types you use, and when you work. Until it has seen 20 actions it says **Still learning**. If you are testing with the sample folder, you can click **Load sample history** to fill the page with a made-up four weeks of use; you can remove this history in **Settings** > **Activity** or on this page. Personalization only reorders results that are nearly tied, and every result says why.
 
 **Activity** lists what you did, grouped by day: searches, opened files, files shown in File Explorer, results you selected and files opened from recommendations. Choose which kind to show at the top. **Clear activity** deletes it all (IntelliFile asks first). Switch **Remember my activity** off to stop recording.
 
@@ -98,7 +98,7 @@ Changes in your folders are picked up within about 30 seconds while IntelliFile 
 - **Search:** **Personalize results**.
 - **File access:** **Whole computer**, **Only folders I choose** or **Nothing**. **Manage indexed folders** opens **Index**.
 - **Privacy:** **Remember my activity**; **Learn from files you opened in Windows** (off by default: reads Windows' list of recently opened files so For You can start at once); **Open Activity** and **Clear activity** (IntelliFile asks first).
-- **Indexing:** **Pause on battery**, **Pause in power-saving mode**, and the **Resource mode**: **Balanced**, **Performance** or **Battery saver**. Indexing that pauses resumes from the same file.
+- **Indexing:** **Pause on battery** (off by default), **Pause in power-saving mode** (on by default), and the **Resource mode**: **Balanced**, **Performance** or **Battery saver**. Indexing that pauses resumes from the same file.
 - **Local models**, **Network** (IntelliFile never connects to the internet) and **About** (version, where the index is kept, its size, the licence, the **Privacy policy** and the **Terms of use**).
 
 ## Quick search

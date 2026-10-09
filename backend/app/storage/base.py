@@ -17,8 +17,10 @@ class VectorStore(ABC):
         """Insert or update records. Each record must include 'id', 'vector', and 'file_id'."""
 
     @abstractmethod
-    def query(self, table: str, vector: list[float], top_k: int = 20) -> list[dict[str, Any]]:
-        """Return the top_k nearest records to the given vector, most similar first."""
+    def query(self, table: str, vector: list[float], top_k: int = 20, payload_equals: dict[str, str] | None = None) -> list[dict[str, Any]]:
+        """Return the top_k nearest records to the given vector, most similar first.
+        `payload_equals` keeps only records whose payload has those values,
+        applied BEFORE the top_k cut."""
 
     @abstractmethod
     def delete(self, table: str, ids: list[str]) -> None:

@@ -85,7 +85,7 @@ class Indexer:
         except Exception:
             return 0
 
-    def index_file(self, path: Path, file_id: str, file_hash: str) -> int:
+    def index_file(self, path: Path, file_id: str, file_hash: str, replace: bool = True) -> int:
         """(Re-)index a file. Returns the number of chunks stored. The
         previous chunks for this file_id are replaced, never left stale —
         but only once the new content is ready: extraction and embedding
@@ -95,14 +95,14 @@ class Indexer:
         from search until the next successful index."""
         duplicate = self.file_record_store.find_active_by_hash(file_hash, exclude_file_id=file_id)
         if duplicate is not None:
-            reused = self._reuse_duplicate_chunks(file_id, duplicate.file_id)
+            reused = self._reuse_duplicate_chunks(file_id, duplicate.file_id, replace)
             if reused:
                 return reused
             # Fall through: the duplicate's own chunks weren't found (e.g.
             # already cleaned up) — index normally instead.
 
         blocks = extract_document(path, transcriber=self.transcriber)
-        return self._store_blocks(file_id, blocks)
+        return self._store_blocks(file_id, blocks, replace)
 
     def index_image_text(self, path: Path, file_id: str) -> int:
         """Next-round improvement 4: the text in a screenshot, a photographed
@@ -121,15 +121,17 @@ class Indexer:
             return 0
         return self._store_blocks(file_id, [ExtractedBlock(text=text)])
 
-    def _store_blocks(self, file_id: str, blocks: list) -> int:
+    def _store_blocks(self, file_id: str, blocks: list, replace: bool = True) -> int:
         chunks = chunk_document(blocks, chunk_size=self.chunk_tokens, overlap=self.chunk_overlap, token_spans=self.embedding_model.token_spans)
         if not chunks:
-            self.delete_file(file_id)  # the file is now genuinely empty
+            if replace:
+                self.delete_file(file_id)  # the file is now genuinely empty
             return 0
 
         texts = [c.content for c in chunks]
         vectors = self.embedding_model.embed_texts(texts)
-        self.delete_file(file_id)
+        if replace:
+            self.delete_file(file_id)
 
         vector_records = []
         keyword_records = []
@@ -153,17 +155,18 @@ class Indexer:
             )
             keyword_records.append({"chunk_id": chunk_id, "file_id": file_id, "content": chunk.content})
 
-        self.vector_store.upsert(CHUNKS_TABLE, vector_records)
+        self.vector_store.upsert(CHUNKS_TABLE, vector_records, replace=False)  # ids are fresh uuids
         self.keyword_store.add_chunks(keyword_records)
         return len(chunks)
 
-    def _reuse_duplicate_chunks(self, file_id: str, source_file_id: str) -> int:
+    def _reuse_duplicate_chunks(self, file_id: str, source_file_id: str, replace: bool = True) -> int:
         """Copy an identical file's existing chunks/vectors under the new
         file_id, skipping re-extraction and re-embedding entirely."""
         existing = self.vector_store.get_by_file_id(CHUNKS_TABLE, source_file_id)
         if not existing:
             return 0
-        self.delete_file(file_id)
+        if replace:
+            self.delete_file(file_id)
 
         vector_records = []
         keyword_records = []
@@ -181,7 +184,7 @@ class Indexer:
                 {"chunk_id": chunk_id, "file_id": file_id, "content": row["payload"].get("content", "")}
             )
 
-        self.vector_store.upsert(CHUNKS_TABLE, vector_records)
+        self.vector_store.upsert(CHUNKS_TABLE, vector_records, replace=False)  # ids are fresh uuids
         self.keyword_store.add_chunks(keyword_records)
         return len(existing)
 

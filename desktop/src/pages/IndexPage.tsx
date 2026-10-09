@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ask, open } from "@tauri-apps/plugin-dialog";
-import { AccessMode, askStatus, forgetFolder, getSampleFolder, formatAgo, formatBytes, getRouterStats, indexFile, indexFolder, reindexFolder, RouterStats, scanAll, setAccess, shortenPath, StatusResponse } from "../backend";
-import { PageHeader, Section } from "../ui/kit";
+import { AccessMode, askStatus, engineUnreachable, forgetFolder, getSampleFolder, formatAgo, formatBytes, getRouterStats, indexFile, indexFolder, reindexFolder, RouterStats, scanAll, setAccess, shortenPath, StatusResponse } from "../backend";
+import { LoadFailed, PageHeader, Section } from "../ui/kit";
 import { FirstRun } from "./FirstRun";
 
 interface Props {
@@ -22,7 +22,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-rule bg-content px-4 py-3">
       <div className="text-[22px] font-semibold leading-tight">{value.toLocaleString()}</div>
-      <div className="mt-0.5 text-[12px] text-ink/60">{label}</div>
+      <div className="mt-0.5 text-[12px] text-ink/65">{label}</div>
     </div>
   );
 }
@@ -32,9 +32,12 @@ export function IndexPage({ status, onError, refresh }: Props) {
   const [stats, setStats] = useState<RouterStats | null>(null);
   const [scanNote, setScanNote] = useState<string | null>(null);
   const [askModel, setAskModel] = useState<string | null | undefined>(undefined);
+  // Calls the engine answered with an error; when it cannot be reached at all the sidebar says so.
+  const [statsFailed, setStatsFailed] = useState(false);
+  const [askFailed, setAskFailed] = useState(false);
   useEffect(() => {
-    getRouterStats().then(setStats).catch(() => setStats(null));
-    askStatus().then((s) => setAskModel(s.available ? s.model : null)).catch(() => setAskModel(null));
+    getRouterStats().then(setStats).catch((e) => { setStats(null); setStatsFailed(!engineUnreachable(e)); });
+    askStatus().then((s) => setAskModel(s.available ? s.model : null)).catch((e) => setAskFailed(!engineUnreachable(e)));
     getSampleFolder().then((r) => setSample(r.path)).catch(() => setSample(null));
   }, []);
   const [sample, setSample] = useState<string | null>(null);
@@ -102,8 +105,17 @@ export function IndexPage({ status, onError, refresh }: Props) {
   const { job, totals, folders, models } = status;
   const running = job.state === "running";
   const paused = job.paused_reason || status.power.paused_reason;
-  const state = paused ? `Paused: ${paused}` : running ? (job.total ? `Indexing ${job.done.toLocaleString()} of ${job.total.toLocaleString()}` : "Indexing") : "Up to date";
+  const scanFailed = !running && !paused && job.state === "failed";
+  const state = paused ? `Paused: ${paused}` : running ? (job.total ? `Indexing ${job.done.toLocaleString()} of ${job.total.toLocaleString()}` : "Indexing") : scanFailed ? `Scan failed: ${job.error || "the reason was not recorded"}` : "Up to date";
   const failures = job.recent_failures ?? [];
+  // Left alone on purpose (not failures): one quiet line of totals, and the latest by name.
+  const sk = job.skipped ?? {};
+  const skippedLine = ([
+    [sk.too_large, "over the size limit"],
+    [sk.online_only, "online-only OneDrive"],
+    [sk.path_too_long, "path too long"],
+  ] as const).filter(([n]) => n).map(([n, why]) => `${n!.toLocaleString()} ${why}`).join(", ");
+  const skips = job.recent_skips ?? [];
 
   const searches = (stats?.routes ?? []).filter((r) => r.route !== "agent");
   const searchTotal = searches.reduce((n, r) => n + r.queries, 0);
@@ -128,7 +140,7 @@ export function IndexPage({ status, onError, refresh }: Props) {
   return (
     <div className="h-full space-y-4 overflow-y-auto pr-1">
       <PageHeader title="Index" subtitle="Your files are indexed on this computer and kept up to date as they change.">
-        <span role="status" className={`rounded-md border px-2.5 py-1 text-[13px] ${paused ? "border-rule-strong text-ink/80" : running ? "border-marker text-marker" : "border-rule-strong text-ink/80"}`}>{state}</span>
+        <span role="status" className={`max-w-[360px] rounded-md border px-2.5 py-1 text-[13px] ${scanFailed ? "border-error/40 bg-error-soft text-error" : paused ? "border-rule-strong text-ink/80" : running ? "border-marker text-marker" : "border-rule-strong text-ink/80"}`}>{state}</span>
       </PageHeader>
 
       {status.access.mode === "denied" && (
@@ -153,9 +165,10 @@ export function IndexPage({ status, onError, refresh }: Props) {
             {running && job.current_file ? <>Reading <span className="mono">{job.current_file.split(/[\\/]/).pop()}</span></> : job.finished_at ? `Finished ${formatAgo(job.finished_at)}` : "No scan has finished since IntelliFile started."}
             {scanNote && <> {scanNote}</>}
           </div>
+          {skippedLine && <div className="mt-0.5 text-[12px] text-ink/70">Skipped: {skippedLine}.</div>}
           {running && job.total > 0 && <div className="progress mt-2"><i style={{ width: `${(job.done / job.total) * 100}%` }} /></div>}
         </div>
-        <span className="text-[12px] text-ink/60">Index size <span className="mono">{formatBytes(status.index_size_bytes)}</span></span>
+        <span className="text-[12px] text-ink/65">Index size <span className="mono">{formatBytes(status.index_size_bytes)}</span></span>
         <button className="btn-secondary px-3 py-1.5 text-[13px]" onClick={scanNow} disabled={busy !== null || status.access.mode === "denied"}>Scan now</button>
       </div>
 
@@ -169,12 +182,12 @@ export function IndexPage({ status, onError, refresh }: Props) {
               const st = f.indexing ? "Indexing" : f.queued ? "Queued" : f.exists ? "Watching" : "Missing";
               return (
                 <li key={f.path} className={`flex items-center gap-3 border-b border-rule px-3 py-2.5 last:border-b-0 ${busy === f.path ? "opacity-60" : ""}`}>
-                  <span className="material-symbols-outlined text-ink/60" aria-hidden>{f.kind === "file" ? "description" : "folder"}</span>
+                  <span className="material-symbols-outlined text-ink/65" aria-hidden>{f.kind === "file" ? "description" : "folder"}</span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[14px] font-medium">{name}</div>
-                    <div className="mono truncate text-[12px] text-ink/55" title={f.path}>{shortenPath(f.path)}</div>
+                    <div className="mono truncate text-[12px] text-ink/65" title={f.path}>{shortenPath(f.path)}</div>
                   </div>
-                  <span className="hidden text-[12px] text-ink/60 lg:block">{f.documents} documents, {f.photos} photos, {f.videos} videos, {f.audio} audio</span>
+                  <span className="hidden text-[12px] text-ink/65 lg:block">{f.documents} documents, {f.photos} photos, {f.videos} videos, {f.audio} audio</span>
                   <span className={`w-20 text-[12px] ${st === "Missing" ? "text-error" : st === "Watching" ? "text-ink/70" : "text-marker"}`}>{st}</span>
                   {f.kind !== "file" && <button className="btn-ghost px-2 py-1 text-[12px]" onClick={() => run(f.path, () => reindexFolder(f.path))} disabled={busy !== null || f.indexing}>Re-index</button>}
                   <button className="btn-ghost px-2 py-1 text-[12px] hover:text-error" onClick={() => remove(f.path)} disabled={busy !== null}>Remove</button>
@@ -196,15 +209,30 @@ export function IndexPage({ status, onError, refresh }: Props) {
         <Section title="Files that could not be read" note="IntelliFile skips these and tries again when they change.">
           <ul className="space-y-1 text-[12px]">
             {failures.slice(0, 20).map((f) => (
-              <li key={f.path + f.at} className="flex gap-3"><span className="mono min-w-0 flex-1 truncate" title={f.path}>{f.path.split(/[\\/]/).pop()}</span><span className="min-w-0 flex-[2] truncate text-ink/65">{f.error}</span></li>
+              <li key={f.path + f.at} className="flex gap-3"><span className="mono min-w-0 flex-1 truncate" title={f.path}>{f.path.split(/[\\/]/).pop()}</span><span className="min-w-0 flex-[2] truncate text-ink/70" title={f.reason || f.error}>{f.reason || f.error}</span></li>
             ))}
           </ul>
         </Section>
       )}
 
+      {skips.length > 0 && (
+        <details className="panel group p-4">
+          <summary className="flex cursor-default list-none items-baseline gap-2 [&::-webkit-details-marker]:hidden">
+            <span className="material-symbols-outlined icon-sm self-center text-ink/70 transition-transform group-open:rotate-90" aria-hidden>chevron_right</span>
+            <h2 className="text-[15px] font-semibold">Files skipped</h2>
+            <span className="text-[12px] text-ink/70">Left alone on purpose, not errors.</span>
+          </summary>
+          <ul className="mt-3 space-y-1 text-[12px]">
+            {skips.slice(0, 50).map((f) => (
+              <li key={f.path} className="flex gap-3"><span className="mono min-w-0 flex-1 truncate" title={f.path}>{f.path.split(/[\\/]/).pop()}</span><span className="min-w-0 flex-[2] truncate text-ink/70">{f.reason}</span></li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <Section title="How your searches were routed" note={`From the last ${searchTotal.toLocaleString()} remembered searches (up to 500).`}>
-          {!stats || searchTotal === 0 ? (
+          {statsFailed ? <LoadFailed what="the search statistics" /> : !stats || searchTotal === 0 ? (
             <p className="text-[13px] text-ink/65">No remembered searches yet. These statistics need Remember my activity.</p>
           ) : (
             <>
@@ -231,8 +259,8 @@ export function IndexPage({ status, onError, refresh }: Props) {
             {modelRows.map(([label, name]) => (
               <li key={label} className="flex items-center gap-3">
                 <span className="w-40 shrink-0 text-ink/75">{label}</span>
-                <span className="min-w-0 flex-1 truncate text-[12px] text-ink/60">{name ?? ""}</span>
-                <span className={`shrink-0 text-[12px] ${name ? "text-ink/80" : name === null ? "text-error" : "text-ink/50"}`}>{name ? "Installed" : name === null ? "Not installed" : "Checking"}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-ink/65">{name ?? ""}</span>
+                <span className={`shrink-0 text-[12px] ${name ? "text-ink/80" : name === null ? "text-error" : "text-ink/65"}`}>{name ? "Installed" : name === null ? "Not installed" : label === "Ask" && askFailed ? "Could not check" : "Checking"}</span>
               </li>
             ))}
           </ul>

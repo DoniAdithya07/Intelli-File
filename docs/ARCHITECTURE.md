@@ -267,10 +267,139 @@ This is the reference description of the system, checked against the code on 27 
  └────────────────────────────────────────────────────────────────────────────┘
 
  Supporting autonomous behaviour (not an AI agent): Windows file watching,
- automatic index maintenance, power-aware indexing (pauses on battery).
+ automatic index maintenance, power-aware indexing (pauses in power-saving mode; on battery too if the user turns that on).
 ```
 
 Escalation follows a fixed order: file name, then keywords, then keywords + meaning, then keywords + meaning with the cross-encoder reranker. A metadata query (filters only) lists the matching files and never escalates.
+
+## Three views in more detail
+
+The diagram above shows the whole system. These three zoom in on the parts a reader is most likely to question. Names in the boxes are functions, files or settings in the code (paths under `backend/app/` unless they say otherwise).
+
+### Indexing pipeline
+
+The path a file takes from a folder to the search index. `files/service.py` watches for changes and `indexing/folder_scan.py` decides what each file needs.
+
+```mermaid
+flowchart TD
+  A["Allowed folders<br/>files/access.py"] --> B["Watcher, 30 s debounce<br/>files/service.py, files/debounce.py"]
+  A --> C["Full scan at every start<br/>index_folder()"]
+  B --> D["_scan_one(): decide what the file needs"]
+  C --> D
+  P{{"Power check<br/>power/, pauses between files on battery"}} -. gates .-> D
+  D --> E{"Size and modified time<br/>match the record?"}
+  E -- yes --> S1["Skip, no read"]
+  E -- no --> F["SHA-256 of the file"]
+  F --> G{"Same hash as the record?"}
+  G -- yes --> S1
+  G -- no --> H{"Known hash but the old<br/>path is gone?"}
+  H -- yes --> R["Rename: move the record,<br/>keep the vectors"]
+  H -- no --> I["Write the file record<br/>indexed = false"]
+  I --> J{"File type"}
+  J -- "text, Office, PDF" --> K["extraction/: one extractor per type<br/>scanned pages: Windows OCR"]
+  J -- audio --> L["transcription/: Whisper base.en"]
+  J -- "photo, video" --> M["visual_indexer: CLIP vectors<br/>then index_image_text(): OCR if 5 or more words"]
+  K --> N["chunking/chunker.py<br/>224 tokens, 32 overlap"]
+  L --> N
+  M --> N
+  N --> O["Indexer._store_blocks()"]
+  O --> Q[("SQLite FTS5<br/>keyword_store")]
+  O --> T[("LanceDB text vectors<br/>bge-small, 384 dimensions")]
+  M --> U[("LanceDB image vectors<br/>CLIP, 512 dimensions")]
+  Q --> V["mark_indexed(): record.indexed = true"]
+  T --> V
+  U --> V
+  X["Deleted files:<br/>tombstone, then cleanup_tombstones()"] -. removes .-> Q
+  X -. removes .-> T
+```
+
+Two safety rules are in this path. A file that fails to read or extract is counted and listed, and never stops the folder scan. The old passages are deleted only after the new ones are ready, so a locked file does not vanish from search. A crash between "write the record" and `mark_indexed()` leaves `indexed = false`, and the next scan repairs that file without a full rescan.
+
+### Search routing and the Ask flow
+
+Normal search is a fixed pipeline with a router in front. Ask is a separate loop that calls that same search as one of its tools.
+
+```mermaid
+flowchart TD
+  Q["Query text"] --> PQ["parse_query(): filters, quoted phrase<br/>search/query_parsing.py"]
+  PQ --> SP["Typo correction from your own vocabulary<br/>search/spelling.py"]
+  SP --> RT{"route()<br/>search/router.py"}
+  RT -- "names a file (2+ words, 75%+ match)" --> T1["filename<br/>names only"]
+  RT -- "filters only" --> T2["metadata<br/>list matching files"]
+  RT -- "3 or fewer known words, no question" --> T3["keyword<br/>names + BM25"]
+  RT -- "anything else" --> T4["hybrid<br/>names + BM25 + vectors + RRF"]
+  T1 --> CF{"A strong result?"}
+  T3 --> CF
+  T4 --> CF
+  T2 --> OUT
+  CF -- yes --> OUT["_personalize(): near-ties only<br/>_prune_weak(): at most 3 weak results"]
+  CF -- no --> ES["Escalate one tier, once<br/>filename to keyword to hybrid to hybrid+rerank"]
+  ES --> OUT
+  OUT --> RES["Results + route report<br/>tier, reason, ms per stage, suggest_ask"]
+
+  AQ["Question with ? or the Ask button<br/>GET /ask"] --> LB{"About the collection?<br/>agent/library.py"}
+  LB -- yes --> LA["Exact answer from the index<br/>no model"]
+  LB -- no --> FL["First look: search(question, auto)<br/>the router picks the tier"]
+  FL --> QA["quick_answer: best sentence shown at once"]
+  FL --> PL["Planner: Qwen2.5-1.5B<br/>agent/loop.py"]
+  PL -- "search again: query, mode, filters" --> TS["Toolbox.search()<br/>agent/tools.py"]
+  PL -- "read more of a source" --> TR["Toolbox.read_more()"]
+  TS --> PL
+  TR --> PL
+  TS -. same pipeline .-> RT
+  PL -- "enough evidence, or the limits" --> AN["Model writes the answer with [n] citations<br/>at most 6 sources"]
+  AN --> GR{"Code grounding check<br/>_ground(), _trim_citations(),<br/>_unsupported_premise()"}
+  GR -- pass --> OK["Answer + cited files<br/>warning if a figure is not in the sources"]
+  GR -- fail --> NF["I couldn't find that in your files"]
+```
+
+The limits in the Ask loop are set in `agent/loop.py`: `MAX_TOOL_CALLS = 4` (the first look counts as one), `BUDGET_SECONDS = 25`, planning stops at 1.3 times the budget, and nothing asks the model after 2 times the budget (50 s). The reranker is reached only by escalation from hybrid, because a measurement showed it changed no result when it ran up front.
+
+### Security and offline boundary
+
+What is allowed to talk to what, and what stops everything else. The code that enforces each line is named.
+
+```mermaid
+flowchart LR
+  subgraph PC["Your Windows PC"]
+    subgraph SHELL["Desktop shell: desktop/src-tauri/src/lib.rs"]
+      TK["new_token(): 128 random bits per launch"]
+      UI["React UI in WebView2<br/>api_token command"]
+    end
+    subgraph ENG["Search engine: backend/app/main.py, run_backend.py"]
+      MW["require_api_token middleware<br/>x-intellifile-token, secrets.compare_digest"]
+      API["FastAPI routes"]
+      ACC["files/access.py: all, limited or denied<br/>_safe_path(): only indexed files"]
+      OG["offline_guard.py<br/>test builds only"]
+    end
+    FILES[["Your folders: read only"]]
+    DATA[("%LOCALAPPDATA%\\IntelliFile")]
+    OTHER["Any other program<br/>or web page"]
+  end
+  NET(("Internet"))
+
+  TK -- "INTELLIFILE_API_TOKEN, INTELLIFILE_PARENT_PID" --> ENG
+  TK --> UI
+  UI -- "http://127.0.0.1:8756 + token" --> MW
+  MW -- "token ok" --> API
+  OTHER -- "no token: 401, except /health" --> MW
+  API --> ACC
+  ACC -. "reads only what you allowed" .-> FILES
+  API --> DATA
+  ENG -- "no network code" --x NET
+  OG -. "test runs: every non-loopback connect or DNS lookup is refused and counted" .-> NET
+  ENG -. "exits when the shell is gone" .-> SHELL
+```
+
+What each part guarantees, and what it does not:
+
+- **Loopback only.** `run_backend.py` binds to `127.0.0.1` by default, so other computers cannot reach the engine.
+- **Token on every request.** The shell creates a new 128-bit token at each launch and passes it to the engine in an environment variable and to the page through the `api_token` command. The middleware in `main.py` answers 401 to any request without it, except `/health`, which reveals nothing sensitive to a caller without the token. A web page cannot read the index, and CORS allows only the app's own origins.
+- **Indexed files only.** Thumbnails and previews are served only for files in the index, because any web page can point an image tag at a local port.
+- **Read-only.** The engine reads the files the user allowed in the first-run screen (`all`, `limited` or `denied`) and never writes to them. File contents are treated as data: nothing inside a document is run.
+- **Offline.** The shipped app has no code that connects out. `offline_guard.py` turns that claim into a measurement: with `INTELLIFILE_OFFLINE_GUARD=1` every non-loopback connection or name lookup is refused and counted, and the tests assert the count is 0. The guard is a test tool. The shipped app does not depend on it.
+- **No orphan engine.** The shell stops the engine on exit, and the engine exits by itself when the shell process is gone (`INTELLIFILE_PARENT_PID`), so a crash cannot leave an open port behind.
+- **Known gap.** `tauri.conf.json` sets `csp` to `null`, so the app page has no Content Security Policy. The page loads only bundled code, and this has not been tightened.
 
 ## Final principles
 

@@ -1,33 +1,32 @@
 {
   "qwen2.5-1.5b-instruct-q4_k_m": {
-    "cited_right": 0.92,
+    "cited_right": 0.96,
     "grounded": 1.0,
-    "abstained": 1.0,
-    "false_answers": 0,
-    "figure_warnings": 2,
+    "abstained": 0.8,
+    "false_answers": 1,
+    "figure_warnings": 1,
     "over_cited": 0,
-    "mean_s": 24.185906029999995,
-    "max_s": 42.5687471999845,
-    "mean_plan_s": 18.1641684700017,
-    "mean_judge_s": 0.5185814533324447,
-    "mean_answer_s": 5.148629140000169,
-    "mean_first_results_s": 0.22027865666799093,
+    "mean_s": 14.717871990000276,
+    "max_s": 29.174765999996453,
+    "mean_plan_s": 11.514935646666709,
+    "mean_judge_s": 0.14501240333314247,
+    "mean_answer_s": 2.851059386667718,
+    "mean_first_results_s": 0.13842103333372507,
     "quick_answer_right_file": 21,
     "misses": [
-      [
-        "At what temperature do I bake the sourdough, and for how long covered?",
-        [
-          "croissants.txt",
-          "pizza dough.md"
-        ],
-        "For sourdough, cover it at 230 C for 20 minutes. For croissants, cover them at 200 C for 1"
-      ],
       [
         "When do I fly to Lisbon, and what is the deposit on my flat?",
         [
           "lease agreement.txt"
         ],
         "You fly to Lisbon on the 12th and 16th of May, and the deposit on your flat is 1,800 euros"
+      ],
+      [
+        "When does my gym membership expire?",
+        [
+          "monthly expenses.csv"
+        ],
+        "FALSE ANSWER: The gym membership for the month of January is noted as 45 annual plan renewed i"
       ]
     ],
     "extra_citations": []

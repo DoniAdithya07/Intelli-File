@@ -14,7 +14,7 @@ IntelliFile comes as one zip, `IntelliFile-windows.zip` (1.87 GB). It holds ever
 
 Windows SmartScreen may say "Windows protected your PC", because the app is not signed by a registered publisher. Click **More info, then Run anyway**. It asks only once.
 
-The first launch takes a few seconds (7 to 20 seconds on a typical laptop) while the search models load. The status at the bottom of the sidebar says **Starting…** and changes to **Ready** when IntelliFile can search. Later launches are faster.
+The first launch takes 25 to 34 seconds (measured 27.8, 29.4, 33.9 s) while the search engine loads its models. The sidebar shows **Starting…** then **Works offline** when the engine is ready. Later launches are faster (about 6 to 15 seconds).
 
 Closing the main window quits IntelliFile completely, including its background engine. Starting it a second time brings the open window to the front.
 
@@ -23,6 +23,8 @@ Closing the main window quits IntelliFile completely, including its background e
 Open **Index**, then click **Add folder** (hold **Ctrl** to pick several folders at once). To try it in under a minute, click **Try the sample folder**: it indexes `sample-folder`, which ships inside the `IntelliFile` folder next to `IntelliFile.exe`.
 
 It holds 39 short documents (recipes, a gym plan, invoices, trip notes, engineering notes…) and three test images. Indexing it takes a few seconds. Your own folders work the same way. Documents, spreadsheets, slides, code, audio notes, photos and videos are all indexed.
+
+**Optional:** On the **For You** page, if the page says **Still learning**, click **Load sample history** to fill it with a made-up four weeks of use of the sample folder. This makes recommendations visible on a fresh install. You can remove this history in **Settings** > **Activity** or on the **For You** page.
 
 ## 3. Things to try
 

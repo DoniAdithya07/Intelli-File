@@ -1,15 +1,16 @@
-# Builds the Windows installer on a real windows-latest runner: runs the
-# regression suite, freezes the backend, bundles the models and builds the
-# NSIS installer + the portable zip. Mirrors docs/BUILD_WINDOWS.md, which is
-# the same steps run by hand on a Windows PC.
+# Builds the portable Windows zip on a real windows-latest runner: runs the
+# regression suite, freezes the backend, bundles the models and packs
+# IntelliFile-windows.zip (no installer: see the note below). Mirrors
+# docs/BUILD_WINDOWS.md, which is the same steps run by hand on a Windows PC.
+#
+# Run by hand (Actions > windows-build > Run workflow), not on every push:
+# a run downloads 1.7 GB of models and takes well over an hour.
 #
 # llama-cpp-python comes as a prebuilt CPU wheel (AVX2) from the project's
 # wheel index, so no C++ compiler step is needed for it.
 name: windows-build
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch: {}
 
 env:
@@ -69,11 +70,15 @@ jobs:
       - name: Smoke-test the frozen backend
         working-directory: backend
         shell: bash
+        # Every endpoint except /health needs the API token (security review
+        # 2026-09-29), so the smoke test sets one and sends it as a header.
+        env:
+          INTELLIFILE_API_TOKEN: ci-smoke-test-token
         run: |
           INTELLIFILE_MODELS_DIR="$PWD/models" INTELLIFILE_DATA_DIR="$PWD/data" ./dist/intellifile-backend/intellifile-backend${EXE_SUFFIX:-} --port 8756 &
           for i in $(seq 1 90); do curl -sf http://127.0.0.1:8756/health && break; sleep 2; done
           curl -sf http://127.0.0.1:8756/health
-          curl -sf "http://127.0.0.1:8756/search?q=hello" > /dev/null
+          curl -sf -H "X-IntelliFile-Token: $INTELLIFILE_API_TOKEN" "http://127.0.0.1:8756/search?q=hello" > /dev/null
           kill %1 || true
 
       - name: Assemble resources (backend + models + sample folder)

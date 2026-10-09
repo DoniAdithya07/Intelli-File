@@ -78,7 +78,7 @@ export function ActivityPage({ onError }: { onError: (m: string | null) => void 
       <div className="flex items-center justify-between rounded-lg border border-rule bg-content px-4 py-3">
         <div>
           <div className="text-[14px] font-medium">Remember my activity</div>
-          <div className="text-[12px] text-ink/60">{remember === false ? "Off: nothing new is recorded, and For You stops learning." : `${total.toLocaleString()} actions remembered. Used for ranking near-ties, recommendations and Ask's context.`}</div>
+          <div className="text-[12px] text-ink/65">{remember === false ? "Off: nothing new is recorded, and For You stops learning." : `${total.toLocaleString()} actions remembered. Used for ranking near-ties, recommendations and Ask's context.`}</div>
         </div>
         <Toggle on={remember ?? true} onChange={toggle} disabled={busy || remember === null} label="Remember my activity" />
       </div>
@@ -100,7 +100,7 @@ export function ActivityPage({ onError }: { onError: (m: string | null) => void 
                 const name = e.path ? e.path.split(/[\\/]/).pop()! : null;
                 return (
                   <li key={e.id} className="flex items-center gap-4 border-b border-rule px-4 py-2 text-[13px] last:border-b-0">
-                    <span className="mono w-[4.5rem] shrink-0 whitespace-nowrap text-[12px] text-ink/60">{new Date(e.ts * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span className="mono w-[4.5rem] shrink-0 whitespace-nowrap text-[12px] text-ink/65">{new Date(e.ts * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
                     <span className="w-40 shrink-0 text-ink/70">{k?.action ?? e.kind}</span>
                     {e.kind === "query" ? (
                       <span className="min-w-0 truncate">"{e.query}"</span>

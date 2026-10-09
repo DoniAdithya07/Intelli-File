@@ -10,6 +10,7 @@ is a sourdough recipe inside).
 """
 
 import re
+from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,18 +18,34 @@ from ..files.identity import FileRecord
 from .spelling import _levenshtein
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+_TYPED_EXTENSION_RE = re.compile(r"[a-z0-9]\.([a-z0-9]{1,5})(?![a-z0-9])")
 
 # Words that carry no filename signal in a spoken/typed request:
 # "open the abhisek plan file" should match on "abhisek" and "plan" only.
 _QUERY_NOISE = {
     "a", "an", "the", "my", "me", "of", "for", "to", "in", "on", "and", "or", "with", "about",
-    "open", "show", "find", "get", "search", "look", "up", "please", "file", "files", "document",
-    "documents", "note", "notes", "folder", "photo", "photos", "picture", "pictures", "image",
+    "open", "show", "find", "get", "search", "look", "up", "please",
+}
+# Words that name a KIND of file. Next to real words they are framing ("notes
+# about scaling servers" must not promote every *notes* file above the
+# answer), but on their own they are the name the user remembers: until
+# 2026-10-05 they were plain noise, and "notes" found neither `meeting
+# notes.txt` nor `notes.odt` by name.
+_GENERIC_NAME_WORDS = {
+    "file", "files", "document", "documents", "note", "notes", "folder", "photo", "photos", "picture", "pictures", "image",
 }
 
 
 def _tokens(text: str) -> list[str]:
     return _TOKEN_RE.findall(text.lower())
+
+
+@lru_cache(maxsize=262144)
+def _name_tokens(path: str) -> tuple[list[str], str]:
+    """(stem tokens, extension). Re-parsing every path on every query was
+    O(files) pathlib work per search."""
+    name = Path(path)
+    return _tokens(name.stem), name.suffix.lower().lstrip(".")
 
 
 def _word_in_name(word: str, name_tokens: list[str]) -> bool:
@@ -70,12 +87,21 @@ def match_filenames(query_text: str, records: list[FileRecord]) -> list[Filename
     `bread_recipe.txt` on the strength of "recipe" alone, while "rasmalai"
     does find `rasmalai.txt`. Best coverage first."""
     words = [w for w in _tokens(query_text) if w not in _QUERY_NOISE and len(w) >= 2]
+    typed_extensions = set(_TYPED_EXTENSION_RE.findall(query_text.lower()))  # "odt" in "notes.odt"
+    specific = [w for w in words if w not in _GENERIC_NAME_WORDS and w not in typed_extensions]
+    if specific:  # generic words count only when they are all there is ("notes", "notes.odt")
+        words = specific + [w for w in words if w in typed_extensions]
     if not words:
         return []
     matches = []
     for record in records:
-        name_tokens = _tokens(Path(record.path).stem)
+        name_tokens, extension = _name_tokens(record.path)
         matched = [w for w in words if _word_in_name(w, name_tokens)]
+        # The extension counts only next to a matched name word: "notes.odt"
+        # puts notes.odt above `meeting notes.txt`, while "pdf" alone still
+        # does not turn every PDF into a name match.
+        if matched and extension in words and extension not in matched:
+            matched.append(extension)
         fraction = len(matched) / len(words)
         if fraction >= 0.5 and (len(matched) >= 2 or len(words) == 1):
             matches.append(FilenameMatch(record, matched, fraction))

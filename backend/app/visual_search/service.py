@@ -18,6 +18,7 @@ from ..embeddings.clip_model import ClipModel
 from ..indexing.visual_indexer import IMAGES_TABLE, MAX_VIDEO_KEYFRAMES
 from ..search.dictionary import Dictionary, QueryCheck
 from ..search.filenames import filename_vocabulary
+from ..search.service import hide_if_missing
 from ..storage import FileRecordStore, KeywordStore, LanceDBVectorStore
 
 # LanceDB always hands back its nearest neighbours however unrelated they
@@ -183,12 +184,16 @@ class VisualSearchService:
         # candidates are fetched than files wanted, then collapsed to the
         # best moment per file — otherwise a 120-frame clip would fill the
         # grid with near-identical frames and crowd out every photo.
-        raw_hits = self.vector_store.query(IMAGES_TABLE, query_vector, top_k=top_k * (MAX_VIDEO_KEYFRAMES // 4))
+        # The kind filter runs inside the vector search, before the cut: as a
+        # filter on the nearest candidates, a library with ~700+ photos that
+        # out-scored every video frame left the Videos tab empty (2026-10-04).
+        raw_hits = self.vector_store.query(
+            IMAGES_TABLE, query_vector, top_k=top_k * (MAX_VIDEO_KEYFRAMES // 4),
+            payload_equals={"kind": kind} if kind is not None else None,
+        )
         hits: list[dict] = []
         moments: dict[str, list[dict]] = {}  # file_id -> up to VIDEO_PREVIEW_MOMENTS distinct moments
         for hit in raw_hits:  # already best-first
-            if kind is not None and hit["payload"].get("kind") != kind:
-                continue
             file_id = hit["file_id"]
             if file_id not in moments:
                 if len(hits) >= top_k:
@@ -237,9 +242,7 @@ class VisualSearchService:
                 continue
             # Same rule as the text path: a photo that's no longer on disk
             # is tombstoned and skipped rather than shown as a dead result.
-            if record is None or not Path(record.path).exists():
-                if record is not None:
-                    self.file_record_store.mark_deleted(record.path)
+            if record is None or hide_if_missing(self.file_record_store, record.path):
                 continue
             path = record.path
             results.append(

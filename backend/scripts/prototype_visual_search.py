@@ -24,11 +24,14 @@ from PIL import Image, ImageDraw  # noqa: E402
 from app.embeddings.clip_model import ClipModel  # noqa: E402
 from app.files.discovery import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, discover_files  # noqa: E402
 from app.indexing import IMAGES_TABLE, Indexer, VisualIndexer, cleanup_tombstones, index_folder  # noqa: E402
+from app.indexing.folder_scan import RECENT_FAILURES  # noqa: E402
+from app.indexing.visual_indexer import VIDEO_FRAME_MAX_SIDE, extract_keyframes  # noqa: E402
 from app.embeddings.model import EmbeddingModel, default_model_dir  # noqa: E402
 from app.search.dictionary import DEFAULT_PATH as DEFAULT_WORDLIST_PATH, Dictionary  # noqa: E402
 from app.storage import FileRecordStore, KeywordStore, LanceDBVectorStore  # noqa: E402
 from app.thumbnails import generate_thumbnail  # noqa: E402
 from app.visual_search import VisualSearchService  # noqa: E402
+from app.visual_search.service import embed_query  # noqa: E402
 
 CLIP_MODEL_DIR = Path(__file__).resolve().parents[1] / "models" / "clip-vit-base-patch16"
 TEXT_MODEL_DIR = default_model_dir(Path(__file__).resolve().parents[1] / "models")
@@ -71,6 +74,24 @@ def make_two_scene_video(path: Path, seconds_per_scene: int = 3) -> None:
             for _ in range(seconds_per_scene * 2):
                 for packet in stream.encode(av.VideoFrame.from_image(image)):
                     container.mux(packet)
+        for packet in stream.encode():
+            container.mux(packet)
+
+
+def make_clip(path: Path, images: list, fps: int = 2, gop: int = 1, rotation: int | None = None) -> None:
+    """A real H.264 MP4 of `images`, one frame each. `gop` is the keyframe
+    interval in frames; `rotation` writes a phone-style display-rotation tag."""
+    import av
+
+    with av.open(str(path), mode="w") as container:
+        stream = container.add_stream("libx264", rate=fps)
+        stream.width, stream.height, stream.pix_fmt = images[0].width, images[0].height, "yuv420p"
+        stream.options = {"g": str(gop), "sc_threshold": "0"}  # no extra keyframes at scene cuts
+        if rotation is not None:
+            stream.set_display_rotation(rotation)
+        for image in images:
+            for packet in stream.encode(av.VideoFrame.from_image(image)):
+                container.mux(packet)
         for packet in stream.encode():
             container.mux(packet)
 
@@ -138,6 +159,40 @@ def main():
         assert "app_icon.png" not in names, "32x32 icon must not be embedded as a photo"
         assert "red_circle_copy.avif" in names, ".avif must be indexed (Pillow decodes it natively)"
         print("1. Discovery + folder scan routes photos to CLIP and text to the text pipeline; tiny icon skipped, .avif indexed: OK")
+
+        # --- 1b. A photo that fails is a failure, not a silent "indexed"
+        # (2026-10-04). Every exception used to return 0: a CLIP/ONNX error
+        # or running out of memory marked the photo indexed with nothing
+        # searchable, and it was never retried. A file that is simply not
+        # an image is still skipped quietly. ---
+        trouble = workdir / "trouble"
+        trouble.mkdir()
+        make_blue_square(trouble / "holiday.png")
+        (trouble / "not_an_image.png").write_bytes(b"this is text pretending to be a png" * 20)
+        Image.new("1", (15000, 15000)).save(trouble / "pixel_bomb.png")  # 225 MP: over the 210 MP cap
+        real_embed = clip_model.embed_images
+        def onnx_fails(images):
+            raise RuntimeError("ONNXRuntimeError: bad allocation")
+        clip_model.embed_images = onnx_fails
+        RECENT_FAILURES.clear()
+        try:
+            index_folder(indexer, str(trouble), visual_indexer=visual_indexer)
+        finally:
+            clip_model.embed_images = real_embed
+        failed = {Path(f["path"]).name: f["error"] for f in RECENT_FAILURES}
+        holiday = record_store.get_by_path(str(trouble / "holiday.png"))
+        assert "holiday.png" in failed and (holiday is None or holiday.deleted or not holiday.indexed), (failed, holiday)
+        # A plain sentence since 2026-10-05 (was the class name "DecompressionBombError: ...").
+        assert "pixel_bomb.png" in failed and failed["pixel_bomb.png"] == "The image has too many pixels to read safely (over 210 million).", failed
+        assert "not_an_image.png" not in failed, failed
+        # Not marked indexed, so it is retried: after a restart (failed bytes
+        # are remembered per process, FAILED_HASHES) with CLIP working again.
+        from app.indexing.folder_scan import FAILED_HASHES
+        FAILED_HASHES.clear()
+        index_folder(indexer, str(trouble), visual_indexer=visual_indexer)
+        assert record_store.get_by_path(str(trouble / "holiday.png")).indexed
+        assert "holiday.png" in {r["filename"] for r in visual_search.search("a blue square", top_k=10, apply_cutoff=False)}
+        print(f"1b. A photo whose embedding fails is reported ({failed['holiday.png'][:40]}...) and retried on the next scan; a 225 MP pixel bomb is refused; a non-image is skipped quietly: OK")
 
         # --- 2. Each description finds its own image ---
         expectations = {
@@ -282,6 +337,54 @@ def main():
         visual_indexer.delete_file(video_record.file_id)
         assert all(h["filename"] != "clip.mp4" for h in visual_search.search("a red circle", top_k=10, apply_cutoff=False))
         print(f"9. Video: {len(frames)} keyframes indexed with timestamps, each description finds the right moment, one card per video, frame thumbnail at that time, delete purges all frames: OK")
+
+        # --- 10. Real-world video (2026-10-04, "video search is not at all
+        # working" on another laptop): phone, screen-recording and big files ---
+        real_dir = workdir / "real_videos"
+        real_dir.mkdir()
+        red = Image.new("RGB", (1280, 720), "white")
+        ImageDraw.Draw(red).ellipse([440, 160, 840, 560], fill="red")
+        # Phone portrait: the sensor's landscape pixels hold the scene sideways,
+        # plus a display-rotation tag. Frames must reach CLIP (and the
+        # thumbnail) upright, i.e. portrait.
+        upright = Image.new("RGB", (720, 1280), "white")
+        ImageDraw.Draw(upright).ellipse([160, 80, 560, 480], fill="red")  # top half: shows a wrong-way turn
+        make_clip(real_dir / "portrait.mp4", [upright.transpose(Image.Transpose.ROTATE_270)] * 4, rotation=90)
+        # Big frames are shrunk while decoding: a 4K phone clip held ~30 MB
+        # per keyframe, ~1.8 GB per minute, until the indexer ran out of memory.
+        frames_p = extract_keyframes(real_dir / "portrait.mp4")
+        assert frames_p and all(f.height > f.width for _, f in frames_p), f"Rotated clip decoded sideways: {[f.size for _, f in frames_p]}"
+        top = frames_p[0][1].convert("RGB").getpixel((frames_p[0][1].width // 2, frames_p[0][1].height // 4))
+        assert top[0] > 150 and top[1] < 100, f"Rotated clip turned the wrong way (top-centre pixel {top})"
+        assert all(max(f.size) <= VIDEO_FRAME_MAX_SIDE for _, f in frames_p), f"Frames kept at full size: {frames_p[0][1].size}"
+        with Image.open(io.BytesIO(generate_thumbnail(real_dir / "portrait.mp4", timestamp_offset_seconds=0.0, max_size=64))) as th:
+            assert th.height > th.width, f"Portrait video thumbnail is sideways: {th.size}"
+        # Screen recording / short clip: one keyframe for the whole file and
+        # it is black (fade-in). Keyframes alone give nothing to embed.
+        black = Image.new("RGB", (1280, 720), "black")
+        make_clip(real_dir / "screen_recording.mp4", [black] * 2 + [red] * 10, gop=1000)
+        # Corrupt / unreadable video: a failure on the Status screen and not
+        # marked indexed, never a silent 0-frame "success".
+        (real_dir / "broken.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 4000)
+        scanned = index_folder(indexer, str(real_dir), visual_indexer=visual_indexer)
+        broken = record_store.get_by_path(str(real_dir / "broken.mp4"))
+        assert broken is None or not broken.indexed or broken.deleted, "A video that cannot be decoded was marked indexed"
+        assert any(f["path"] == str(real_dir / "broken.mp4") for f in RECENT_FAILURES), "Undecodable video was not reported as a failure"
+        hits = visual_search.search("a red circle", top_k=10, kind="video")
+        found = {h["filename"] for h in hits}
+        assert {"portrait.mp4", "screen_recording.mp4"} <= found, f"Real-world clips not found by description: {found}"
+        # Videos tab with a big photo library: a thousand photos that match
+        # better than any video frame must not push the video out of the
+        # Videos filter (it used to filter after a fixed nearest-720 cut).
+        flood = embed_query(clip_model, "a red circle")
+        vector_store.upsert(IMAGES_TABLE, [
+            {"id": f"flood-{i}", "file_id": "photo-flood", "vector": flood.tolist(), "payload": {"kind": "photo", "timestamp_offset_seconds": None}}
+            for i in range(1000)
+        ])
+        found = {h["filename"] for h in visual_search.search("a red circle", top_k=10, kind="video")}
+        assert {"portrait.mp4", "screen_recording.mp4"} <= found, f"Videos tab lost the videos behind 1,000 photos: {found}"
+        visual_indexer.delete_file("photo-flood")
+        print(f"10. Real-world video: rotated phone clip upright, frames shrunk while decoding, black-first long-GOP clip found, corrupt file reported, Videos tab not crowded out by photos ({scanned} scanned): OK")
 
         print(
             "\nPhase 8 visual search OK: photos are discovered and routed to CLIP, typed "

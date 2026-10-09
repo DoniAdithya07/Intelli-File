@@ -37,6 +37,7 @@ def generate_thumbnail(
         image.save(buffer, format="JPEG", quality=JPEG_QUALITY)
         return buffer.getvalue()
     with Image.open(path) as opened:
+        opened.draft("RGB", (max_size, max_size))  # JPEG: cheap reduced-scale decode of big phone photos
         image = ImageOps.exif_transpose(opened).convert("RGB")
         image.thumbnail((max_size, max_size), Image.BICUBIC)
         buffer = io.BytesIO()

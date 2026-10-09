@@ -1,4 +1,5 @@
 import { ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { ENGINE_STOPPED_HINT, ENGINE_STOPPED_TITLE } from "../backend";
 import { Logo } from "../Logo";
 import { resolvedTheme, useTheme } from "../theme";
 
@@ -39,6 +40,10 @@ interface Props {
   tab: Tab;
   onTab: (t: Tab) => void;
   backendStatus: "checking" | "connected" | "disconnected";
+  backendProblem: string | null; // why the engine is down, from the desktop shell
+  shortcutOk: boolean; // false when Ctrl+Space could not be registered
+  notices: string[]; // problems the engine reported at start
+  onDismissNotices: () => void;
   fileCount: number | null;
   error: string | null;
   onDismissError: () => void;
@@ -46,7 +51,7 @@ interface Props {
 }
 
 /** The window chrome around the active page: the sidebar and the error line. The title bar is Windows' own. */
-export function AppShell({ tab, onTab, backendStatus, fileCount, error, onDismissError, children }: Props) {
+export function AppShell({ tab, onTab, backendStatus, backendProblem, shortcutOk, notices, onDismissNotices, fileCount, error, onDismissError, children }: Props) {
   // One blue bar that slides to the current page, as in Windows 11's navigation.
   const navRef = useRef<HTMLElement>(null);
   const [barTop, setBarTop] = useState<number | null>(null);
@@ -88,25 +93,43 @@ export function AppShell({ tab, onTab, backendStatus, fileCount, error, onDismis
           <div className="flex items-start justify-between gap-2">
             <div role="status" className="min-w-0">
               <div className="font-medium text-ink">
-                {backendStatus === "connected" ? "Works offline" : backendStatus === "checking" ? "Starting" : "Search engine stopped"}
+                {backendStatus === "connected" ? "Works offline" : backendStatus === "checking" ? "Starting" : ENGINE_STOPPED_TITLE}
               </div>
               <div className="mt-0.5 text-ink/65">
                 {backendStatus === "connected"
                   ? fileCount === null ? "Your files stay on this computer." : `${fileCount.toLocaleString()} files indexed on this computer`
                   : backendStatus === "checking"
                     ? "Loading the search models. This takes a few seconds."
-                    : "Quit IntelliFile fully and open it again."}
+                    : ENGINE_STOPPED_HINT}
               </div>
             </div>
             <ThemeToggle />
           </div>
-          <div className="mt-3 text-ink/65">
-            <span className="kbd">Ctrl+Space</span> quick search
-          </div>
+          {shortcutOk && (
+            <div className="mt-3 text-ink/65">
+              <span className="kbd">Ctrl+Space</span> quick search
+            </div>
+          )}
         </div>
       </aside>
 
       <div className="app-main flex min-h-0 min-w-0 flex-1 flex-col">
+        {backendProblem && (
+          <div role="alert" className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-error/40 bg-error-soft px-3 py-2 text-[13px] text-error">
+            <span className="material-symbols-outlined icon-sm" aria-hidden>error</span>
+            <span className="flex-1 whitespace-pre-line select-text">{backendProblem}</span>
+          </div>
+        )}
+        {notices.length > 0 && (
+          <div role="status" className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-rule-strong bg-amber-soft px-3 py-2 text-[13px] text-[rgb(var(--c-amber-text))]">
+            <span className="material-symbols-outlined icon-sm" aria-hidden>warning</span>
+            <div className="flex-1">
+              <b>Some parts did not start.</b>
+              <ul className="mt-0.5 list-disc pl-4">{notices.map((n) => <li key={n}>{n}</li>)}</ul>
+            </div>
+            <button className="btn-ghost px-2 py-0.5 text-[12px]" onClick={onDismissNotices}>Dismiss</button>
+          </div>
+        )}
         {error && (
           <div role="alert" className="mx-4 mt-3 flex items-center gap-2 rounded-md border border-error/40 bg-error-soft px-3 py-2 text-[13px] text-error">
             <span className="material-symbols-outlined icon-sm">error</span>

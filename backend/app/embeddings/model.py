@@ -19,6 +19,8 @@ MAX_SEQUENCE_LENGTH = 256  # the shipped models' trained max_seq_length (MiniLM 
 # measured in Phase 13: vector-only Recall@5 100% vs 93% for MiniLM on the
 # 60-query corpus (before its query instruction); MiniLM stays as the
 # fallback so a checkout without the new download still runs.
+EMBED_BATCH = 32
+
 PREFERRED_EMBEDDING_MODELS = ("bge-small-en-v1.5", "all-MiniLM-L6-v2")
 
 
@@ -98,7 +100,19 @@ class EmbeddingModel:
     def embed_texts(self, texts: list[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, EMBEDDING_DIMENSION), dtype=np.float32)
+        if len(texts) > EMBED_BATCH:
+            # A big file used to go through ONNX as one batch padded to its
+            # longest chunk (hundreds of x 256 tokens: slow and a RAM spike).
+            # Length-sorted slices pad far less; results are returned in input order.
+            order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
+            out = np.empty((len(texts), EMBEDDING_DIMENSION), dtype=np.float32)
+            for start in range(0, len(order), EMBED_BATCH):
+                idx = order[start:start + EMBED_BATCH]
+                out[idx] = self._embed_batch([texts[i] for i in idx])
+            return out
+        return self._embed_batch(texts)
 
+    def _embed_batch(self, texts: list[str]) -> np.ndarray:
         encodings = self.tokenizer.encode_batch(texts)
         input_ids = np.array([e.ids for e in encodings], dtype=np.int64)
         attention_mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)

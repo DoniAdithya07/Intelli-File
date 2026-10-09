@@ -34,7 +34,35 @@ def synthesize_speech_wav(text: str, out_path: Path) -> None:
     speech_synth.synthesize_wav(text, out_path)
 
 
+def check_lazy_model_failure() -> None:
+    """0. A speech model that cannot be loaded (2026-10-05): audio files fail
+    with that reason, not "could not be read as audio", and the load is
+    tried (and logged) once, not once per audio file."""
+    import logging
+
+    from app.services.lazy_transcriber import LazyTranscriber
+
+    records = []
+    handler = logging.Handler(logging.ERROR)
+    handler.emit = records.append
+    logging.getLogger("app").addHandler(handler)
+    try:
+        lazy = LazyTranscriber(Path(tempfile.gettempdir()) / "no-such-whisper-model")
+        reasons = []
+        for _ in range(3):
+            try:
+                lazy.transcribe(Path("memo.m4a"))
+            except Exception as e:  # noqa: BLE001 - the error itself is checked
+                reasons.append(str(e))
+    finally:
+        logging.getLogger("app").removeHandler(handler)
+    assert len(reasons) == 3 and all("speech model could not be loaded" in r for r in reasons), reasons
+    assert len(records) == 1 and records[0].exc_info, [r.getMessage() for r in records]
+    print("0. Speech model that cannot be loaded: every audio file fails with that reason, logged once: OK")
+
+
 def main():
+    check_lazy_model_failure()
     if not speech_synth.available():
         print("No OS speech engine (macOS `say`, Windows System.Speech) to generate audio — skipping (not a failure).")
         sys.exit(0)

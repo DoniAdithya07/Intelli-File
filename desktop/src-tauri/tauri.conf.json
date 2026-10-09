@@ -38,9 +38,9 @@
       }
     ],
     "security": {
-      "csp": null
-    },
-    "macOSPrivateApi": true
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8756 ipc: http://ipc.localhost; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
+      "devCsp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8756 ipc: http://ipc.localhost ws://localhost:1420; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; object-src 'none'"
+    }
   },
   "bundle": {
     "active": true,
@@ -52,11 +52,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "macOS": {
-      "entitlements": "entitlements.plist",
-      "signingIdentity": "-",
-      "minimumSystemVersion": "12.0"
-    },
     "resources": {
       "resources/backend/": "backend/",
       "resources/models/": "models/",

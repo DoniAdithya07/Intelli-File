@@ -19,12 +19,17 @@ export function OverlayApp() {
       setError(null);
       setResetKey((k) => k + 1);
     });
+    // The shell hides the overlay when it loses focus: remount the search so
+    // a recording in progress stops and the microphone is released.
+    const unfocus = getCurrentWindow().onFocusChanged(({ payload: focused }) => { if (!focused) setResetKey((k) => k + 1); });
     return () => {
       unlisten.then((f) => f());
+      unfocus.then((f) => f());
     };
   }, []);
 
   const hide = useCallback(() => {
+    setResetKey((k) => k + 1);
     getCurrentWindow().hide();
   }, []);
 

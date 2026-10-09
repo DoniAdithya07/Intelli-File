@@ -1,10 +1,10 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import pkg from "../../package.json";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { AccessMode, AppSettings, askStatus, clearEvents, formatBytes, getSettings, getWindowsRecent, ResourceMode, setAccess, shortenPath, StatusResponse, updateSettings, WindowsRecentStatus } from "../backend";
+import { AccessMode, AppSettings, askStatus, clearEvents, engineUnreachable, formatBytes, getProfile, getSettings, getWindowsRecent, removeSampleHistory, ResourceMode, setAccess, shortenPath, StatusResponse, updateSettings, WindowsRecentStatus } from "../backend";
 import { LegalDoc, PRIVACY, TERMS } from "../legal";
 import { ThemeChoice, useTheme } from "../theme";
-import { PageHeader, Section, Toggle } from "../ui/kit";
+import { LoadFailed, PageHeader, Section, Toggle } from "../ui/kit";
 
 interface Props {
   status: StatusResponse | null;
@@ -20,7 +20,7 @@ function Row({ title, note, children }: { title: string; note?: ReactNode; child
     <div className="flex items-center justify-between gap-4 border-b border-rule py-2.5 first:pt-0 last:border-b-0 last:pb-0">
       <div className="min-w-0">
         <div className="text-[13.5px]">{title}</div>
-        {note && <div className="mt-0.5 text-[12px] text-ink/60">{note}</div>}
+        {note && <div className="mt-0.5 text-[12px] text-ink/65">{note}</div>}
       </div>
       {children && <div className="shrink-0">{children}</div>}
     </div>
@@ -71,12 +71,26 @@ export function SettingsPage({ status, appDataDir, onError, refresh, onOpen }: P
   const [askModel, setAskModel] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [legal, setLegal] = useState<LegalDoc | null>(null);
+  const [sampleHistory, setSampleHistory] = useState(false);
+  // Calls the engine answered with an error; when it cannot be reached at all the sidebar says so.
+  const [failed, setFailed] = useState({ recent: false, ask: false, profile: false });
+  const failedUnlessDown = (part: keyof typeof failed) => (e: unknown) => {
+    if (!engineUnreachable(e)) setFailed((f) => ({ ...f, [part]: true }));
+  };
 
   useEffect(() => {
     getSettings().then(setSettings).catch((e) => onError(e instanceof Error ? e.message : String(e)));
-    getWindowsRecent().then(setRecent).catch(() => setRecent(null));
-    askStatus().then((s) => setAskModel(s.available ? s.model : null)).catch(() => setAskModel(null));
+    getWindowsRecent().then(setRecent).catch(failedUnlessDown("recent"));
+    askStatus().then((s) => setAskModel(s.available ? s.model : null)).catch(failedUnlessDown("ask"));
+    getProfile().then((p) => setSampleHistory(!!p.sample_history)).catch(failedUnlessDown("profile"));
   }, [onError]);
+
+  async function removeSample() {
+    setBusy(true);
+    try { await removeSampleHistory(); setSampleHistory(false); }
+    catch (e) { onError(`Sample history could not be removed. ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setBusy(false); }
+  }
 
   // A setting that fails to save keeps its old value and says so (section 23).
   async function change(patch: Partial<AppSettings>) {
@@ -96,7 +110,7 @@ export function SettingsPage({ status, appDataDir, onError, refresh, onOpen }: P
     catch { sure = false; }
     if (!sure) return;
     setBusy(true);
-    try { await clearEvents(); }
+    try { await clearEvents(); getProfile().then((p) => setSampleHistory(!!p.sample_history)).catch(() => undefined); }
     catch (e) { onError(`Activity could not be cleared. ${e instanceof Error ? e.message : String(e)}`); }
     finally { setBusy(false); }
   }
@@ -157,17 +171,24 @@ export function SettingsPage({ status, appDataDir, onError, refresh, onOpen }: P
               <Toggle on={recent.enabled} onChange={(v) => change({ import_windows_recent: v })} disabled={busy || !settings?.remember_activity} label="Learn from files you opened in Windows" />
             </Row>
           )}
+          {failed.recent && <div className="border-b border-rule py-2.5"><LoadFailed what="the Windows recent-files setting" /></div>}
           <Row title="Activity history" note="See or clear everything that was remembered.">
             <div className="flex gap-2">
               <button className="btn-secondary px-3 py-1 text-[13px]" onClick={() => onOpen("activity")}>Open Activity</button>
               <button className="btn-secondary px-3 py-1 text-[13px]" onClick={clearActivity} disabled={busy}>Clear activity</button>
             </div>
           </Row>
+          {failed.profile && <div className="pt-2.5"><LoadFailed what="whether sample history is loaded" /></div>}
+          {sampleHistory && (
+            <Row title="Sample history" note="Made-up use of the sample folder, loaded from For You. Your own activity is kept.">
+              <button className="btn-secondary px-3 py-1 text-[13px]" onClick={removeSample} disabled={busy}>Remove sample history</button>
+            </Row>
+          )}
         </Section>
 
         <Section title="Indexing" note={power ? (power.paused ? `Paused: ${power.paused_reason}` : power.has_battery ? (power.on_battery ? `On battery, ${Math.round(power.percent ?? 0)}%` : "Plugged in") : "No battery") : undefined}>
           <Row title="Pause on battery" note="Search keeps working; new files wait until you plug in.">
-            <Toggle on={settings?.pause_on_battery ?? true} onChange={(v) => change({ pause_on_battery: v })} disabled={busy || !settings} label="Pause on battery" />
+            <Toggle on={settings?.pause_on_battery ?? false} onChange={(v) => change({ pause_on_battery: v })} disabled={busy || !settings} label="Pause on battery" />
           </Row>
           <Row title="Pause in power-saving mode" note="Follows Windows' battery saver, plugged in or not.">
             <Toggle on={settings?.pause_on_low_power ?? true} onChange={(v) => change({ pause_on_low_power: v })} disabled={busy || !settings} label="Pause in power-saving mode" />
@@ -183,8 +204,8 @@ export function SettingsPage({ status, appDataDir, onError, refresh, onOpen }: P
             {modelRows.map(([label, name]) => (
               <li key={label} className="flex items-center gap-3">
                 <span className="w-28 shrink-0">{label}</span>
-                <span className="min-w-0 flex-1 truncate text-[12px] text-ink/60">{name ?? ""}</span>
-                <span className={`shrink-0 text-[12px] ${name ? "text-ink/75" : name === null ? "text-error" : "text-ink/50"}`}>{name ? "Installed" : name === null ? "Not installed" : "Checking"}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-ink/65">{name ?? ""}</span>
+                <span className={`shrink-0 text-[12px] ${name ? "text-ink/75" : name === null ? "text-error" : "text-ink/65"}`}>{name ? "Installed" : name === null ? "Not installed" : label === "Ask" && failed.ask ? "Could not check" : "Checking"}</span>
               </li>
             ))}
           </ul>
@@ -215,20 +236,33 @@ export function SettingsPage({ status, appDataDir, onError, refresh, onOpen }: P
 
 /** Privacy policy or terms of use, readable in place (text from ../legal.ts). */
 function LegalDialog({ doc, onClose }: { doc: LegalDoc; onClose: () => void }) {
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const opener = document.activeElement as HTMLElement | null;  // the button that opened this, focused again on close
+    box.current?.querySelector<HTMLElement>("button")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { onClose(); return; }
+      if (e.key !== "Tab") return;
+      // Keep Tab inside the dialog.
+      const items = box.current?.querySelectorAll<HTMLElement>("button, [href], [tabindex]:not([tabindex='-1'])");
+      if (!items?.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (!box.current!.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => { window.removeEventListener("keydown", onKey); opener?.focus(); };
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-6" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={doc.title} className="anim-dialog panel flex max-h-full w-full max-w-[680px] flex-col shadow-palette" onClick={(e) => e.stopPropagation()}>
+      <div ref={box} role="dialog" aria-modal="true" aria-label={doc.title} className="anim-dialog panel flex max-h-full w-full max-w-[680px] flex-col shadow-palette" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between border-b border-rule px-6 py-4">
           <div>
             <h3 className="text-[18px] font-semibold">{doc.title}</h3>
-            <div className="text-[12px] text-ink/60">Last updated {doc.updated}</div>
+            <div className="text-[12px] text-ink/65">Last updated {doc.updated}</div>
           </div>
-          <button className="btn-ghost px-2 py-1 text-[13px]" onClick={onClose} autoFocus>Close</button>
+          <button className="btn-ghost px-2 py-1 text-[13px]" onClick={onClose}>Close</button>
         </div>
         <div className="overflow-y-auto px-6 py-4">
           {doc.sections.map((sec) => (

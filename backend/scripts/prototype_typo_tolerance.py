@@ -18,6 +18,7 @@ from app.embeddings.model import EmbeddingModel, default_model_dir  # noqa: E402
 from app.files.identity import build_file_record  # noqa: E402
 from app.indexing import Indexer  # noqa: E402
 from app.search import SearchService  # noqa: E402
+from app.search.dictionary import shared_dictionary  # noqa: E402
 from app.search.spelling import _levenshtein, correct_query  # noqa: E402
 from app.storage import FileRecordStore, KeywordStore, LanceDBVectorStore  # noqa: E402
 
@@ -77,6 +78,31 @@ def test_levenshtein_and_correction():
     assert tidy_query("Bread Making") == "Bread Making"  # capitalisation is not 'corrected'
     print("4d. Query tidying: doubled words, punctuation spacing, repeated spaces; colons/decimals/case untouched: OK")
 
+    # 2026-10-04: numbers and IDs are never "corrected". "invoice 48213"
+    # became "invoice 48231" (an adjacent swap onto another invoice number
+    # in the files) and a six-digit order number moved one digit.
+    ids_vocab = {"invoice": 3, "48231": 2, "482138": 1, "po8813": 1, "invoices": 1}
+    assert correct_query("invoice 48213", ids_vocab) == "invoice 48213"
+    assert correct_query("order 482139 po8812", ids_vocab) == "order 482139 po8812"
+    assert correct_query("invoise 48213", ids_vocab) == "invoice 48213"  # the word is still fixed
+    print("4e. Tokens with a digit (invoice numbers, IDs) are never rewritten; words next to them still are: OK")
+
+    # 2026-10-05: plurals were "corrected" to the singular the files hold
+    # ("servers" -> "server"), so search said "Showing results for server".
+    # A plural of a known word is not a typo; a real typo still is.
+    vocab = {"server": 3, "recipe": 2, "meeting": 4, "sourdough": 3, "category": 1}
+    assert correct_query("servers recipes meetings categories", vocab) == "servers recipes meetings categories", correct_query("servers recipes meetings categories", vocab)
+    assert correct_query("sourdogh recipie", vocab) == "sourdough recipe", correct_query("sourdogh recipie", vocab)
+    # ...and a common English word is not a typo either, even when a file
+    # word sits one edit away ("plants" is not "planets"). The bundled list
+    # is subtitle-derived, so only its common words count (dictionary.RARE_COUNT).
+    english = shared_dictionary()
+    assert english is not None, "backend/data/english_words.txt is missing (scripts/download_wordlist.py)"
+    assert correct_query("plants provision", {"planets": 3, "provisioned": 1}, is_word=english.is_word) == "plants provision"
+    assert correct_query("sourdogh recipie", vocab, is_word=english.is_word) == "sourdough recipe"
+    assert correct_query("recieve", {"receive": 2}, is_word=english.is_word) == "receive", "a rare junk entry ('recieve', 125) is still a typo"
+    print("4f. Plurals of known words and common English words are left as typed; 'sourdogh recipie' is still corrected: OK")
+
 
 def main():
     test_levenshtein_and_correction()
@@ -130,6 +156,13 @@ def main():
                 f"Query {query!r} should have matched via corrected keyword search, not semantic-only"
             )
         print("5. Real misspelled queries still find the right file via corrected keyword search: OK")
+
+        # The same rule through the real service: no "Did you mean" for a
+        # plural or an English word, still one for a typo.
+        assert search_service.suggest("how many servers") is None, search_service.suggest("how many servers")
+        assert search_service.suggest("provision servers") is None, search_service.suggest("provision servers")
+        assert search_service.suggest("sourdogh recipie") == "sourdough recipe", search_service.suggest("sourdogh recipie")
+        print("5b. The search service offers no correction for 'servers' or 'provision', and still corrects 'sourdogh recipie': OK")
 
         # --- Exact-phrase mode must NOT get typo correction — "exact" means exact ---
         exact_typo_results = search_service.search('"sourdogh starter"')

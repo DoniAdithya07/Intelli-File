@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay",
+  "description": "Minimal capability for the Ctrl+Space overlay: hide itself, listen for overlay-shown and focus changes, reveal a result. The app's own commands (api_token, open_indexed_path) are checked in Rust.",
+  "windows": [
+    "overlay"
+  ],
+  "permissions": [
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-center",
+    "core:window:allow-is-visible",
+    "core:event:default",
+    "opener:allow-reveal-item-in-dir"
+  ]
+}

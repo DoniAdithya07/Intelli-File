@@ -54,7 +54,7 @@ export function FirstRun({ busy, onChoose, samplePath, onTrySample }: Props) {
             <button className="btn-secondary px-4 py-2 text-[14px]" onClick={onTrySample} disabled={busy} title={samplePath}>Try the sample folder</button>
           )}
         </div>
-        <p className="mt-4 text-[12px] text-ink/60">IntelliFile only reads your files. It never changes, moves or deletes them.</p>
+        <p className="mt-4 text-[12px] text-ink/65">IntelliFile only reads your files. It never changes, moves or deletes them.</p>
       </div>
     </div>
   );

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { describeError, listEvents, RouteReport, search, SearchResult } from "../backend";
+import { describeError, engineUnreachable, listEvents, RouteReport, search, SearchResult } from "../backend";
 import { useVoice } from "../hooks/useVoice";
 import { FILE_MANAGER, MOD_KEY } from "../platform";
 import { AskAnswer } from "../ui/AskAnswer";
-import { FileIcon, shortPlace } from "../ui/kit";
+import { FileIcon, LoadFailed, shortPlace } from "../ui/kit";
 import { Omnibox } from "../ui/Omnibox";
 import { openResult, revealResult } from "../ui/ResultCard";
 
@@ -33,6 +33,7 @@ export function OverlaySearch({ onError, onEscape }: Props) {
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [route, setRoute] = useState<RouteReport | null>(null);
   const [recent, setRecent] = useState<Row[]>([]);
+  const [recentFailed, setRecentFailed] = useState(false); // the engine answered, with an error
   const [asking, setAsking] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
   const [searching, setSearching] = useState(false);
@@ -52,7 +53,7 @@ export function OverlaySearch({ onError, onEscape }: Props) {
         if (rows.length === 8) break;
       }
       setRecent(rows);
-    }).catch(() => setRecent([]));
+    }).catch((e) => { setRecent([]); setRecentFailed(!engineUnreachable(e)); });
   }, []);
 
   const run = useCallback(async (text: string) => {
@@ -118,6 +119,8 @@ export function OverlaySearch({ onError, onEscape }: Props) {
         onSubmit={submit}
         onEscape={onEscape}
         onArrow={move}
+        listId={rows.length ? "overlay-results" : undefined}
+        activeId={rows.length ? `overlay-result-${selected}` : undefined}
         placeholder="Search files, or ask with ?"
         searching={searching}
         voice={voice}
@@ -130,16 +133,18 @@ export function OverlaySearch({ onError, onEscape }: Props) {
           <div className="pt-1"><AskAnswer key={asking} question={asking} onError={onError} /></div>
         ) : (
           <>
-            <div className="px-1 pb-1 text-[12px] text-ink/60">
+            <div className="px-1 pb-1 text-[12px] text-ink/65">
               {results
                 ? route && `Searched by ${TIER_LABEL[route.tier] ?? route.tier}, ${route.total_ms.toFixed(0)} ms. ${results.length} result${results.length === 1 ? "" : "s"}`
                 : !query.trim() && (recent.length ? "Recent files" : "Type to search your files. Start with ? to ask a question.")}
             </div>
+            {!results && !query.trim() && recentFailed && <div className="px-1 pb-1"><LoadFailed what="your recent files" /></div>}
             {results && results.length === 0 && <p className="px-1 py-6 text-[14px] text-ink/70">Nothing on this computer matches "{lastQuery}".</p>}
-            <ul ref={listRef} role="listbox" aria-label={results ? "Search results" : "Recent files"}>
+            <ul ref={listRef} id="overlay-results" role="listbox" aria-label={results ? "Search results" : "Recent files"}>
               {rows.map((r, i) => (
                 <li
                   key={(r.file_id ?? r.path) + i}
+                  id={`overlay-result-${i}`}
                   role="option"
                   aria-selected={selected === i}
                   data-index={i}
@@ -150,9 +155,9 @@ export function OverlaySearch({ onError, onEscape }: Props) {
                   <FileIcon filename={r.filename} size={32} />
                   <span className="min-w-0 flex-1">
                     <span className={`block truncate text-[14px] ${r.confidence === "weak" ? "font-medium text-ink/80" : "font-semibold"}`}>{r.filename}</span>
-                    <span className="block truncate text-[12px] text-ink/60" title={r.path}>{shortPlace(r.path)}</span>
+                    <span className="block truncate text-[12px] text-ink/65" title={r.path}>{shortPlace(r.path)}</span>
                   </span>
-                  {r.confidence && <span className={`shrink-0 text-[12px] ${r.confidence === "weak" ? "text-ink/55" : "text-marker"}`}>{r.confidence === "weak" ? "Weaker match" : "Strong match"}</span>}
+                  {r.confidence && <span className={`shrink-0 text-[12px] ${r.confidence === "weak" ? "text-ink/65" : "text-marker"}`}>{r.confidence === "weak" ? "Weaker match" : "Strong match"}</span>}
                 </li>
               ))}
             </ul>
@@ -160,7 +165,7 @@ export function OverlaySearch({ onError, onEscape }: Props) {
         )}
       </div>
 
-      <div className="mt-2 flex shrink-0 items-center gap-4 border-t border-rule pt-2 text-[12px] text-ink/60">
+      <div className="mt-2 flex shrink-0 items-center gap-4 border-t border-rule pt-2 text-[12px] text-ink/65">
         <span><span className="kbd">Enter</span> open</span>
         <span><span className="kbd">{MOD_KEY}+Enter</span> show in {FILE_MANAGER}</span>
         <span><span className="kbd">Esc</span> close</span>

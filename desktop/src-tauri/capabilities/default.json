@@ -3,8 +3,7 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": [
-    "main",
-    "overlay"
+    "main"
   ],
   "permissions": [
     "core:default",
@@ -15,11 +14,6 @@
     "core:window:allow-center",
     "core:window:allow-is-visible",
     "core:event:default",
-    "opener:default",
-    {
-      "identifier": "opener:allow-open-path",
-      "allow": [{ "path": "**" }]
-    },
     "opener:allow-reveal-item-in-dir",
     "dialog:default",
     "global-shortcut:allow-register",

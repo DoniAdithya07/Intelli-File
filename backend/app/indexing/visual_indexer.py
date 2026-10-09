@@ -12,6 +12,7 @@ without changes — every VectorStore method takes a table name.
 """
 
 import json
+import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -27,12 +28,23 @@ from ..storage.sqlite_store import FileRecordStore
 
 IMAGES_TABLE = "images"
 
+logger = logging.getLogger(__name__)
+
 # Video (Phase 8b): only the codec's own keyframes are decoded — the
 # encoder already placed one at every scene change or every few seconds,
 # and skipping the frames in between is 10-50x faster than decoding them
 # all. A long recording is then sampled evenly down to this many, so one
 # film can't dominate the index or the indexing time (CLIP ~40 ms/frame).
 MAX_VIDEO_KEYFRAMES = 120
+
+# Keyframes are shrunk to this longest side while decoding; CLIP and the
+# blank-frame check both work at 224 px. Before (2026-10-04) every keyframe was
+# kept at full size until the whole file was read: a 4K phone clip with a
+# keyframe a second held 1.8 GB per minute of video, so a few minutes of
+# phone footage ran a laptop out of memory and the video indexed as
+# nothing. Must stay >= MIN_IMAGE_LONGEST_SIDE, so the too-small check
+# still sees a small video's real size.
+VIDEO_FRAME_MAX_SIDE = 448
 
 # Images whose longest side is below this are skipped. Found via live
 # test (2026-09-11): indexing a project folder swept in the desktop app's
@@ -96,26 +108,42 @@ class VisualIndexer:
             return 0
 
     def index_image_file(self, path: Path, file_id: str, file_hash: str) -> int:
-        """(Re-)index one photo. Returns 1 on success, 0 if the file
-        couldn't be decoded as an image or is too small to be a photo
-        (see MIN_IMAGE_LONGEST_SIDE). Replaces any previous record for
-        this file_id — after the new embedding exists, so a file that is
-        momentarily unreadable keeps its old one (2026-09-21)."""
+        """(Re-)index one photo. Returns 1 on success, 0 if the file is not
+        a decodable image or is too small to be a photo (see
+        MIN_IMAGE_LONGEST_SIDE). Replaces any previous record for this
+        file_id — after the new embedding exists, so a file that is
+        momentarily unreadable keeps its old one (2026-09-21).
+
+        Anything else RAISES, so the scan shows the file as failed and
+        retries it: a locked or vanished file (OSError with an errno), an
+        image over the pixel cap (extraction/__init__.py), running out of
+        memory, a CLIP/ONNX error. Until 2026-10-04 every exception returned
+        0 here, which marked the photo indexed with nothing searchable —
+        silently, and never retried (the same fix as index_video_file's)."""
         try:
             with Image.open(path) as opened:
+                # JPEG only (a no-op otherwise): decode at a reduced scale that
+                # still exceeds CLIP's 224 px, so a 108/200 MP phone photo costs
+                # a few MB instead of 300-600 MB (2026-10-05).
+                opened.draft("RGB", (1024, 1024))
                 # Phones record orientation as EXIF metadata rather than
                 # rotating the pixels, so without this a portrait photo
                 # reaches CLIP sideways and embeds as the wrong thing.
                 image = ImageOps.exif_transpose(opened)
                 image.load()
-                width, height = image.size
-                if max(width, height) < MIN_IMAGE_LONGEST_SIDE:
-                    return 0
-                vector = self.clip_model.embed_images([image])[0]
-        except Exception:
-            # A corrupt/truncated/not-really-an-image file must not kill
-            # the indexing job, per the PRD's Reliability section.
+        except OSError as e:
+            # Pillow reports "not an image" (UnidentifiedImageError) and
+            # "truncated / broken data" as OSError WITHOUT an errno; the
+            # operating system's errors (locked, permission, gone) carry one.
+            if e.errno is not None:
+                raise
             return 0
+        except (SyntaxError, ValueError, EOFError):
+            return 0  # other ways Pillow's decoders say "damaged file"
+        width, height = image.size
+        if max(width, height) < MIN_IMAGE_LONGEST_SIDE:
+            return 0
+        vector = self.clip_model.embed_images([image])[0]
 
         self.delete_file(file_id)
         self.vector_store.upsert(
@@ -143,12 +171,22 @@ class VisualIndexer:
     def index_video_file(self, path: Path, file_id: str, file_hash: str) -> int:
         """(Re-)index one video as its keyframes: one CLIP vector per kept
         keyframe, each carrying its timestamp. Returns the number of
-        frames embedded; 0 if the file can't be decoded or is too small."""
-        try:
-            frames = extract_keyframes(path)
-        except Exception:
-            return 0
-        frames = [(t, f) for t, f in frames if max(f.size) >= MIN_IMAGE_LONGEST_SIDE and not is_blank_frame(f)]
+        frames embedded; 0 if the video is too small or all blank.
+
+        A file that can't be decoded RAISES, so the scan shows it as failed
+        on the Status screen and leaves it un-indexed for a later retry.
+        Until 2026-10-04 it returned 0 here, which marked any undecodable
+        video (or one that ran out of memory) as indexed with nothing
+        searchable — silently, and never retried."""
+        keyframes = extract_keyframes(path)
+        frames = _usable_frames(keyframes)
+        # A video too small to be a photo stays too small between keyframes:
+        # no fallback pass for it (2026-10-05).
+        if not frames and not (keyframes and all(max(f.size) < MIN_IMAGE_LONGEST_SIDE for _, f in keyframes)):
+            # Screen recordings and short clips can have ONE keyframe for
+            # the whole file; when it is a black fade-in nothing is left.
+            # The frames between keyframes still show the content.
+            frames = _usable_frames(extract_keyframes(path, every_seconds=FALLBACK_SAMPLE_SECONDS))
         if not frames:
             return 0
         captured_at = video_captured_at(path)
@@ -203,39 +241,167 @@ def is_blank_frame(image: Image.Image) -> bool:
     return float(np.percentile(gray, 99)) < BLANK_FRAME_P99 and float(gray.max()) < BLANK_FRAME_MAX
 
 
-def extract_keyframes(path: Path, max_frames: int = MAX_VIDEO_KEYFRAMES) -> list[tuple[float, Image.Image]]:
+def _usable_frames(frames: list[tuple[float, Image.Image]]) -> list[tuple[float, Image.Image]]:
+    return [(t, f) for t, f in frames if max(f.size) >= MIN_IMAGE_LONGEST_SIDE and not is_blank_frame(f)]
+
+
+# The long-GOP fallback (see index_video_file) keeps one frame per this many seconds.
+FALLBACK_SAMPLE_SECONDS = 1.0
+
+
+def frame_to_image(frame, max_side: int | None = None) -> Image.Image:
+    """A decoded frame as an upright RGB image, optionally shrunk so its
+    longest side is at most `max_side` — in ffmpeg's scaler, so the
+    full-size picture never exists in Python memory. Phones store portrait
+    video as sideways pixels plus a display-rotation tag (the video twin of
+    EXIF orientation); without applying it CLIP sees the scene on its side."""
+    width, height = frame.width, frame.height
+    if max_side is not None and max(width, height) > max_side:
+        scale = max_side / max(width, height)
+        frame = frame.reformat(width=max(1, round(width * scale)), height=max(1, round(height * scale)), format="rgb24", interpolation="AREA")
+    image = frame.to_image()
+    if frame.rotation % 360:  # degrees counter-clockwise, as PIL's rotate() takes them
+        image = image.rotate(frame.rotation, expand=True)
+    return image
+
+
+def _start_seconds(stream) -> float:
+    """Where the stream's clock starts. MPEG program and transport streams
+    (.mpg, .mts, .m2ts) start at 0.5-1.4 s or later, not 0; players count
+    from that start, so stored moments do too (2026-10-05: a .mpg's blue
+    square at 0:03 was reported at 0:03.5)."""
+    return float(stream.start_time * stream.time_base) if stream.start_time is not None else 0.0
+
+
+def extract_keyframes(path: Path, max_frames: int = MAX_VIDEO_KEYFRAMES, every_seconds: float | None = None) -> list[tuple[float, Image.Image]]:
     """(timestamp_seconds, PIL image) for the video's keyframes, evenly
     sampled down to max_frames. Decoding only keyframes is what makes this
-    cheap; PyAV/ffmpeg drops the rest before they reach the decoder."""
+    cheap; PyAV/ffmpeg drops the rest before they reach the decoder.
+    With `every_seconds`, every frame is decoded instead and one kept per
+    that many seconds (the long-GOP fallback).
+
+    Memory stays bounded however long the file is: frames are shrunk to
+    VIDEO_FRAME_MAX_SIDE as they are decoded, and when 2 x max_frames are
+    held every other one is dropped (and from then on only every other
+    candidate is kept), so a two-hour film never holds more than that.
+    Raises if the file can't be opened or decoded; a stream that breaks
+    part-way keeps the frames read so far."""
     import av  # lazy: see audio_io.py
 
+    kept: list[tuple[float, Image.Image]] = []
     with av.open(str(path)) as container:
         stream = next((s for s in container.streams if s.type == "video"), None)
         if stream is None:
             return []
         stream.thread_type = "AUTO"
-        stream.codec_context.skip_frame = "NONKEY"
-        keyframes: list[tuple[float, Image.Image]] = []
-        for frame in container.decode(stream):
-            if frame.time is None:
-                continue
-            keyframes.append((float(frame.time), frame.to_image()))
-    if len(keyframes) > max_frames:
-        step = len(keyframes) / max_frames
-        keyframes = [keyframes[int(i * step)] for i in range(max_frames)]
-    return keyframes
+        start = _start_seconds(stream)
+        duration = _duration_seconds(container, stream)
+        if every_seconds is not None and duration:
+            return _sampled_frames(path, container, stream, start, duration, every_seconds, max_frames)
+        if every_seconds is None:
+            stream.codec_context.skip_frame = "NONKEY"
+        stride, candidates, last_time = 1, 0, None
+        try:
+            for frame in container.decode(stream):
+                if frame.time is None:
+                    continue
+                t = frame.time - start
+                if every_seconds is not None and last_time is not None and t < last_time + every_seconds:
+                    continue
+                last_time = t
+                candidates += 1
+                if (candidates - 1) % stride:
+                    continue
+                kept.append((float(t), frame_to_image(frame, VIDEO_FRAME_MAX_SIDE)))
+                if len(kept) >= 2 * max_frames:
+                    kept, stride = kept[::2], stride * 2
+        except av.error.FFmpegError:
+            if not kept:
+                raise
+            logger.warning("Video %s is damaged after %.1f s; indexing the part before it", path, kept[-1][0], exc_info=True)
+    if len(kept) > max_frames:
+        step = len(kept) / max_frames
+        kept = [kept[int(i * step)] for i in range(max_frames)]
+    return kept
+
+
+def _duration_seconds(container, stream) -> float | None:
+    if stream.duration is not None:
+        return float(stream.duration * stream.time_base)
+    if container.duration is not None:
+        return container.duration / 1_000_000  # AV_TIME_BASE
+    return None
+
+
+# Seek only when the next sample is further ahead than this; closer ones are
+# reached by decoding on.
+FALLBACK_SEEK_GAP_SECONDS = 2.0
+
+
+def _sampled_frames(path: Path, container, stream, start: float, duration: float, every_seconds: float, max_frames: int) -> list[tuple[float, Image.Image]]:
+    """The long-GOP fallback (2026-10-05): one frame per `every_seconds`, at
+    most `max_frames` spread over the whole video, reached by SEEKING to
+    each sample time. Before, every frame of the file was decoded: a two-hour
+    film whose keyframes are all dark decoded 180,000 frames for 120 kept.
+    A file with one keyframe (a screen recording) cannot be seeked into: the
+    first seek that lands back where decoding already was ends the seeking,
+    and the rest is decoded straight through (at most twice the file)."""
+    import av
+
+    step = max(every_seconds, duration / max_frames)
+    targets = [i * step for i in range(max_frames) if i * step < duration]
+    kept: list[tuple[float, Image.Image]] = []
+    frames, last, seeking = None, -1.0, True
+    try:
+        for target in targets:
+            jumped = False
+            if frames is None or (seeking and target - last > FALLBACK_SEEK_GAP_SECONDS):
+                container.seek(int((target + start) / stream.time_base), stream=stream, backward=True, any_frame=False)
+                frames = (f for f in container.decode(stream) if f.time is not None)
+                jumped = True
+            for frame in frames:
+                t = frame.time - start
+                if jumped:
+                    jumped = False
+                    if t <= last:  # landed where decoding already was: one long GOP
+                        seeking = False
+                last = max(last, t)
+                if t >= target - 0.01:
+                    kept.append((float(t), frame_to_image(frame, VIDEO_FRAME_MAX_SIDE)))
+                    break
+            else:
+                break  # end of the stream
+    except av.error.FFmpegError:
+        if not kept:
+            raise
+        logger.warning("Video %s is damaged after %.1f s; indexing the part before it", path, kept[-1][0], exc_info=True)
+    return kept
 
 
 def decode_frame_at(path: Path, seconds: float) -> Image.Image:
-    """The frame at (or just after) `seconds`, for a video thumbnail."""
+    """The frame at (or just after) `seconds` from the video's start, for a
+    video thumbnail."""
     import av  # lazy: see audio_io.py
 
     with av.open(str(path)) as container:
         stream = next(s for s in container.streams if s.type == "video")
-        container.seek(int(seconds / stream.time_base), stream=stream, backward=True, any_frame=False)
-        for frame in container.decode(stream):
-            if frame.time is not None and frame.time >= seconds - 0.01:
-                return frame.to_image()
+        start = _start_seconds(stream)
+        target = seconds + start
+        # MPEG program/transport streams (.mpg, .mts) seek by byte position
+        # and land on a keyframe AFTER the target, or past the end for the
+        # last one (2026-10-05): seek earlier until the first frame isn't late.
+        for back in (0.0, 1.0, 4.0, 16.0, 64.0):
+            seek_to = max(target - back, start)
+            can_go_earlier = seek_to > start and back < 64.0
+            container.seek(int(seek_to / stream.time_base), stream=stream, backward=True, any_frame=False)
+            frames = (f for f in container.decode(stream) if f.time is not None)
+            for i, frame in enumerate(frames):
+                if i == 0 and frame.time > target + 0.01 and can_go_earlier:
+                    break
+                if frame.time >= target - 0.01:
+                    return frame_to_image(frame)
+            if not can_go_earlier:
+                break
         raise ValueError("no frame at that time")
 
 
@@ -250,5 +416,5 @@ def video_captured_at(path: Path) -> str | None:
             if stamp:
                 return datetime.fromisoformat(stamp.replace("Z", "+00:00")).replace(tzinfo=None).isoformat()
     except Exception:
-        pass
+        logger.debug("No recording date in %s; using the file's date", path, exc_info=True)
     return datetime.fromtimestamp(path.stat().st_mtime).isoformat()

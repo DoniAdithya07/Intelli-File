@@ -53,3 +53,17 @@ desktop/src-tauri/resources/
 Implimentation_plan.md
 PROJECT_SUMMARY.md
 
+
+# Extra safety nets
+.env.*
+*.gguf
+*.pem
+*.log
+venv/
+*.key
+*.p12
+*.pfx
+credentials*.json
+
+# Claude Code project settings and agents (kept locally, not published)
+.claude/

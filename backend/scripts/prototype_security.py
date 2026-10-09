@@ -48,7 +48,8 @@ def wait_ready(proc, timeout=120) -> None:
 
 def main() -> None:
     workdir = Path(tempfile.mkdtemp())
-    env = {**os.environ, "INTELLIFILE_APP_DATA_DIR": str(workdir / "appdata"), "INTELLIFILE_API_TOKEN": TOKEN, "INTELLIFILE_OFFLINE_GUARD": "1"}
+    env = {**os.environ, "INTELLIFILE_APP_DATA_DIR": str(workdir / "appdata"), "INTELLIFILE_API_TOKEN": TOKEN, "INTELLIFILE_OFFLINE_GUARD": "1",
+           "INTELLIFILE_SAMPLE_DIR": str(workdir / "docs")}
     proc = subprocess.Popen([sys.executable, str(BACKEND / "run_backend.py"), "--port", str(PORT)], cwd=BACKEND, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         wait_ready(proc)
@@ -68,8 +69,28 @@ def main() -> None:
         assert h["status"] == "ok" and h["app_data_dir"] is None and h["token_required"] is True, h
         assert requests.get(f"{BASE}/health", headers=auth, timeout=10).json()["app_data_dir"]
         assert requests.get(f"{BASE}/status", headers=auth, timeout=30).ok
-        assert requests.get(f"{BASE}/status", params={"token": TOKEN}, timeout=30).ok  # query form, for <img>
-        print("1. API token: 401 without it or with a wrong one on every endpoint; /health open but blank; header and query forms accepted: OK")
+        assert requests.get(f"{BASE}/status", params={"token": TOKEN}, timeout=30).status_code == 401  # the URL form is no longer accepted
+        print("1. API token: 401 without it or with a wrong one on every endpoint; /health open but blank; header form accepted, URL form refused: OK")
+
+        # --- 1b. What the app can do is on /status (2026-10-04): a missing
+        # CLIP or Whisper folder, or no Windows OCR, used to be silent — photo
+        # or voice search just did nothing. ---
+        st = requests.get(f"{BASE}/status", headers=auth, timeout=30).json()
+        assert set(st["features"]) == {"photos_videos", "voice", "ocr"} and all(isinstance(v, bool) for v in st["features"].values()), st["features"]
+        assert isinstance(st["startup_problems"], list) and len(st["startup_problems"]) == sum(not v for v in st["features"].values()), st
+        from app.routes.system import feature_problems
+        problems = feature_problems({"photos_videos": False, "voice": True, "ocr": False})
+        assert len(problems) == 2 and "photo" in problems[0].lower() and "ocr" in problems[1].lower(), problems
+        # Opening the Index or Settings page polls /ask/status: it must never load the 1.1 GB model.
+        ask = requests.get(f"{BASE}/ask/status", headers=auth, timeout=30).json()
+        assert ask["loaded"] is False and ask["loading"] is False and ask["error"] is None, ask
+        # A voice recording bigger than any spoken query is refused before it is read into Whisper.
+        big = requests.post(f"{BASE}/transcribe", files={"audio": ("q.webm", b"\x00" * (26 * 1024 * 1024), "audio/webm")}, headers=auth, timeout=60).json()
+        assert "too long" in big.get("error", "").lower(), big
+        # Sample history needs the sample folder indexed first.
+        r = requests.post(f"{BASE}/profile/sample-history", headers=auth, timeout=30)
+        assert r.status_code == 409 and "Index the sample folder first" in r.json()["detail"], (r.status_code, r.text)
+        print(f"1b. /status features {st['features']}, startup problems {st['startup_problems']}; /ask/status does not load the model; a 26 MB recording is refused; sample history before indexing: 409: OK")
 
         # --- 2. Access policy: unset refuses; limited allows folder + single file; denied refuses ---
         a = requests.get(f"{BASE}/access", headers=auth, timeout=10).json()
@@ -105,8 +126,8 @@ def main() -> None:
         for bad in ("docs", "../../etc", "/tmp/x\x00y", ""):
             r = requests.post(f"{BASE}/index-folder", json={"folder": bad}, headers=auth, timeout=10).json()
             assert "error" in r, (bad, r)
-        assert requests.get(f"{BASE}/thumbnail", params={"path": "/etc/hosts", "token": TOKEN}, timeout=10).status_code == 404
-        assert requests.get(f"{BASE}/thumbnail", params={"path": str(docs / ".." / "single.md"), "token": TOKEN}, timeout=10).status_code in (404, 422)
+        assert requests.get(f"{BASE}/thumbnail", params={"path": "/etc/hosts"}, headers=auth, timeout=10).status_code == 404
+        assert requests.get(f"{BASE}/thumbnail", params={"path": str(docs / ".." / "single.md")}, headers=auth, timeout=10).status_code in (404, 422)
         print("3. Path validation: relative, traversal, NUL and empty paths rejected; thumbnails only for indexed files: OK")
 
         # --- 4. Document contents are data, never executed ---

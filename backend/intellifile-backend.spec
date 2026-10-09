@@ -20,7 +20,12 @@ binaries = []
 # Packages whose data files / native libraries / lazy imports PyInstaller's
 # static analysis misses. Each one was found by running the frozen bundle
 # and reading the ImportError, or is a known-lazy loader.
-for pkg in ("onnxruntime", "lancedb", "pyarrow", "av", "tokenizers", "llama_cpp", "watchdog", "pypdf", "docx", "pptx", "openpyxl", "PIL"):
+# pi_heif (HEIC photos, 2026-10-05): a native module plus libheif/libde265 DLLs and their licence file.
+# Licensing: pi_heif's DLLs are LGPL and carry no x265, but "av" brings FFmpeg 8.1.2 with the GPL
+# x264/x265 encoders (av.libs/). The bundle is therefore NOT free of GPL code; the GPL/LGPL texts
+# ship in licenses/ next to IntelliFile.exe (scripts/package_windows.py). pillow_heif (dev-only,
+# links its own x265) is excluded below.
+for pkg in ("onnxruntime", "lancedb", "pyarrow", "av", "tokenizers", "llama_cpp", "watchdog", "pypdf", "docx", "pptx", "openpyxl", "PIL", "pi_heif"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
@@ -50,7 +55,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=["torch", "torchvision", "torchaudio", "optimum", "tensorflow", "jax", "flax", "tkinter", "matplotlib", "IPython", "notebook", "pytest", "hf_xet"],  # hf_xet only speeds up model downloads, never used offline
+    excludes=["torch", "torchvision", "torchaudio", "optimum", "tensorflow", "jax", "flax", "tkinter", "matplotlib", "IPython", "notebook", "pytest", "hf_xet", "pillow_heif"],  # hf_xet only speeds up model downloads, never used offline
     noarchive=False,
 )
 pyz = PYZ(a.pure)

@@ -24,6 +24,7 @@ Prints one line per phase: PASS / FAIL / SKIP, with a reason.
 """
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -37,6 +38,19 @@ tempfile.tempdir = str(Path(__file__).resolve().parents[2] / ".local" / "tmp")
 Path(tempfile.tempdir).mkdir(parents=True, exist_ok=True)
 
 BASE_URL = "http://127.0.0.1:8756"
+
+# The backend refuses requests without its API token. Start it with
+# INTELLIFILE_API_TOKEN=<any value> set, and set the same value here.
+_API_TOKEN = os.environ.get("INTELLIFILE_API_TOKEN")
+if _API_TOKEN:
+    import requests.api
+    _plain_request = requests.api.request
+
+    def _request_with_token(method, url, **kw):
+        kw["headers"] = {**(kw.get("headers") or {}), "X-IntelliFile-Token": _API_TOKEN}
+        return _plain_request(method, url, **kw)
+
+    requests.api.request = _request_with_token
 RESULTS: list[tuple[str, str, str]] = []  # (phase, status, detail)
 
 
@@ -53,7 +67,7 @@ def check_server_up() -> bool:
         record("Server reachable", "PASS", f"app_data_dir={data.get('app_data_dir')}")
         return True
     except Exception as e:
-        record("Server reachable", "FAIL", f"{e}. Start it with: cd backend && venv/bin/uvicorn app.main:app --port 8756")
+        record("Server reachable", "FAIL", f"{e}. Start it with: cd backend && INTELLIFILE_API_TOKEN=<value> venv/bin/uvicorn app.main:app --port 8756, with the same variable set here")
         return False
 
 

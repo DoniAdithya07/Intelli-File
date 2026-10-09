@@ -85,6 +85,33 @@ def main() -> int:
         assert [b.page_number for b in blocks] == [1, 2] and "second chance" in blocks[0].text and "B204" in blocks[1].text, blocks
         print(f"2. Scanned PDF with no text layer → {len(blocks)} OCR'd blocks with page numbers 1 and 2 ({pdf_seconds:.2f} s per page): OK")
 
+        # 2b (2026-10-04). Page images wait for OCR in the app's own data
+        # folder, not %TEMP% on C:, and are gone afterwards; leftovers from a
+        # crash are cleared at startup. A huge PDF reads at most
+        # MAX_PDF_PAGES pages and OCRs at most MAX_OCR_PAGES of them.
+        from app.extraction import pdf_extractor
+        from app.paths import get_app_data_dir
+        seen_dirs = []
+        real_ocr_image = ocr._ocr_image
+        caps = (getattr(pdf_extractor, "MAX_PDF_PAGES", None), getattr(ocr, "MAX_OCR_PAGES", None))
+        ocr._ocr_image = lambda engine, path: (seen_dirs.append(path.parent), real_ocr_image(engine, path))[1]
+        try:
+            extract_document(files / "scanned lecture 7.pdf")
+            assert seen_dirs and all(d.parent == ocr.temp_dir() for d in seen_dirs), seen_dirs
+            assert ocr.temp_dir().is_relative_to(get_app_data_dir()) and not any(d.exists() for d in seen_dirs), ocr.temp_dir()
+            (ocr.temp_dir() / "left_by_a_crash").mkdir(parents=True, exist_ok=True)
+            ocr.clear_temp_dir()
+            assert not ocr.temp_dir().exists()
+            ocr.MAX_OCR_PAGES = 1
+            assert [b.page_number for b in extract_document(files / "scanned lecture 7.pdf")] == [1]
+            ocr.MAX_OCR_PAGES, pdf_extractor.MAX_PDF_PAGES = caps[1], 1
+            seen_dirs.clear()
+            assert [b.page_number for b in extract_document(files / "scanned lecture 7.pdf")] == [1] and len(seen_dirs) == 1
+        finally:
+            ocr._ocr_image = real_ocr_image
+            pdf_extractor.MAX_PDF_PAGES, ocr.MAX_OCR_PAGES = caps
+        print(f"2b. OCR page images go to {ocr.temp_dir()} (app data, cleared at startup), not %TEMP%; PDF page cap {caps[0]}, OCR page cap {caps[1]}: OK")
+
         # fixtures for search
         text_image(["Error 0x80070005: Access is denied.", "Windows Update could not install KB5031356.", "Try again later or contact your administrator."], size=(1400, 500), font_size=36).save(files / "Screenshot 2026-09-20 101512.png")
         Image.new("RGB", (1200, 800), (40, 120, 200)).save(files / "blue sky.jpg")

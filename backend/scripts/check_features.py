@@ -90,7 +90,7 @@ FORMAT_PHRASES = {
     "roadmap.pptx": "quarterly roadmap milestones for the aquarium project",
     "garden log.csv": "hydroponic basil yield",
 }
-SHAPES = {"red circle.png": ("red", "circle"), "blue square.png": ("blue", "square"), "green triangle.png": ("green", "triangle")}
+SHAPES = {"red circle.png": ("red", "circle"), "blue square.png": ("blue", "square"), "green triangle.heic": ("green", "triangle")}
 # At least 5 words: IntelliFile indexes an image's text only from OCR_MIN_WORDS
 # (app/indexing/indexer.py) words, so a photo with one stray sign stays a photo.
 SCREENSHOT_TEXT = "Payment received for invoice 4471 from Northwind Traders"
@@ -106,7 +106,11 @@ def draw_shape(path: Path, colour: str, shape: str) -> None:
         d.rectangle((170, 90, 470, 390), fill=colour)
     else:
         d.polygon([(320, 80), (120, 400), (520, 400)], fill=colour)
-    img.save(path)
+    if path.suffix == ".heic":  # an iPhone photo: proves HEIC decoding (pi-heif) made it into the build
+        import pillow_heif  # requirements-dev.txt; writes HEIC, the app only reads it
+        pillow_heif.from_pillow(img).save(str(path), quality=90)
+    else:
+        img.save(path)
 
 
 # --fault breaks one test file on purpose, to prove that the check fails and

@@ -22,7 +22,7 @@ export function Section({ title, note, action, children, className = "" }: { tit
         <h2 className="text-[15px] font-semibold">{title}</h2>
         {action && <button className="text-[13px] text-ink/65 underline-offset-2 hover:text-ink hover:underline" onClick={action.onClick}>{action.label}</button>}
       </div>
-      {note && <p className="mt-0.5 text-[12px] text-ink/60">{note}</p>}
+      {note && <p className="mt-0.5 text-[12px] text-ink/65">{note}</p>}
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -53,7 +53,7 @@ export function FileIcon({ filename, size = 36 }: { filename: string; size?: num
     >
       <span className="flex flex-col items-center leading-none">
         <span className="material-symbols-outlined" style={{ fontSize: size * 0.46 }}>{GROUP_ICON[k.group]}</span>
-        {size >= 32 && <span className="mono mt-0.5 text-[8.5px] font-medium">{k.badge.slice(0, 4)}</span>}
+        {size >= 32 && <span className="mono mt-0.5 text-[10px] font-semibold">{k.badge.slice(0, 4)}</span>}
       </span>
     </span>
   );
@@ -101,4 +101,17 @@ export function shortPlace(path: string | null): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
   parts.pop();
   return parts.slice(-2).join("\\");
+}
+
+/**
+ * In place of a section whose data the engine refused (it answered with an error).
+ * When the engine cannot be reached at all the sidebar already says so, and this is not shown.
+ */
+export function LoadFailed({ what = "this section" }: { what?: string }) {
+  return (
+    <p role="status" className="flex items-center gap-1.5 text-[12px] text-ink/70">
+      <span className="material-symbols-outlined icon-sm" aria-hidden>info</span>
+      Could not load {what}.
+    </p>
+  );
 }

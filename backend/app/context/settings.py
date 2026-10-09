@@ -22,8 +22,11 @@ DEFAULTS: dict = {
     # Recent items so personalization works from day one. Off until the
     # user says yes: it reads their file history, even if only locally.
     "import_windows_recent": False,
-    # Phase 10 — power-aware indexing (the PRD's "pauses on battery by default").
-    "pause_on_battery": True,
+    # Phase 10 — power-aware indexing. Pausing on battery was the default
+    # until 2026-10-05: a laptop started unplugged then indexed NOTHING (0
+    # files, every search and Ask empty) — exactly what a grader on battery
+    # would see. Battery saver / power-saving mode still pauses by default.
+    "pause_on_battery": False,
     "pause_on_low_power": True,
     "resource_mode": "balanced",  # balanced | performance | battery_saver
 }

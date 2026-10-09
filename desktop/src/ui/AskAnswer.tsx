@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AskEvent, AskSource, askStream, RouteReport } from "../backend";
 import { FILE_MANAGER } from "../platform";
 import { FileIcon, shortPlace } from "./kit";
-import { openResult, revealResult } from "./ResultCard";
+import { canOpen, openResult, revealResult } from "./ResultCard";
 
 // "Searched by" names, shared with the Search page's route line.
 const TIER_LABEL: Record<string, string> = {
@@ -15,7 +15,11 @@ const TIER_LABEL: Record<string, string> = {
 const MODE_LABEL: Record<string, string> = { auto: "Automatic", smart: "Meaning", keyword: "Keywords", exact: "Exact phrase" };
 
 // The code's own checks report problems as notes; these are the ones that are checks (docs/UI_DESIGN.md section 6).
-const CHECK_NOTES = [/^ignored filters/, /^dropped a citation/, /could not be traced/, /don't support the question's premise/, /^figure\(s\)/];
+const CHECK_NOTES = [/^ignored filters/, /^dropped a citation/, /could not be traced/, /don't support the question's premise/, /^figure\(s\)/, /figure\(s\).*none of the cited sources/];
+// Of those, the ones where a check fixed something and the answer stands: shown as
+// "Adjusted", not as a problem. Every other check note stays a "Problem" (answer
+// rejected, figure not in the sources, unsupported premise), so an unknown note errs that way.
+const ADJUSTED_NOTES = [/^ignored filters/, /^dropped a citation/];
 
 type Step =
   | { kind: "search"; call: number; firstLook: boolean; query: string; mode: string; filters: string; route?: RouteReport; found?: number }
@@ -41,12 +45,17 @@ export function AskAnswer({ question, onError }: Props) {
   const [checkNotes, setCheckNotes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showEvidence, setShowEvidence] = useState(false);
+  // Nothing back after 3 s: the language model is most likely still loading.
+  const [slow, setSlow] = useState(false);
   const answerRef = useRef("");
 
   useEffect(() => {
     const controller = new AbortController();
-    setSteps([]); setAnswer(""); setFinal(null); setDone(null); setQuick(null); setCheckNotes([]); setError(null); answerRef.current = "";
+    setSteps([]); setAnswer(""); setFinal(null); setDone(null); setQuick(null); setCheckNotes([]); setError(null); setSlow(false); answerRef.current = "";
+    const slowTimer = window.setTimeout(() => setSlow(true), 3000);
     askStream(question, (e) => {
+      window.clearTimeout(slowTimer);
+      setSlow(false);
       switch (e.type) {
         case "tool_call":
           if (e.tool === "search") {
@@ -72,12 +81,14 @@ export function AskAnswer({ question, onError }: Props) {
         default: break;
       }
     }, controller.signal).catch((err) => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : String(err)); });
-    return () => controller.abort();
+    return () => { window.clearTimeout(slowTimer); controller.abort(); };
   }, [question]);
 
   const working = !done && !error;
   const citations = final?.citations ?? [];
   const usedFilters = steps.some((s) => s.kind === "search" && s.filters);
+  // Grounded, but a check left a warning: not the plain "from your files" verdict.
+  const unverified = Boolean(final?.grounded && !final.from_index && final.warnings?.length);
   const passed: string[] = [];
   if (final?.grounded && !final.from_index) passed.push("Citations support the answer");
   if (final && !final.warnings?.length && final.grounded && !final.from_index) passed.push("All figures found in the cited sources");
@@ -90,10 +101,11 @@ export function AskAnswer({ question, onError }: Props) {
       <div className="panel p-5">
         <div className="flex items-center gap-2 text-[13px]">
           <span className="font-semibold">IntelliFile</span>
-          <span className="text-ink/60">
-            {error ? "Could not answer" : working ? (answer ? "Writing the answer..." : "Searching your files...") : final?.from_index ? "Counted from the index" : final?.grounded ? "Answered from your files" : "Not found in your files"}
+          <span className={`flex items-center gap-1 ${unverified ? "text-[rgb(var(--c-amber-text))]" : "text-ink/70"}`}>
+            {unverified && <span className="material-symbols-outlined icon-sm" aria-hidden>warning</span>}
+            {error ? "Could not answer" : working ? (answer ? "Writing the answer..." : slow ? "Loading the language model and reading your files. The first question can take up to a minute..." : "Searching your files...") : final?.from_index ? "Counted from the index" : unverified ? "Answer not fully verified" : final?.grounded ? "Answered from your files" : "Not found in your files"}
           </span>
-          {done && !final?.from_index && <span className="ml-auto text-[12px] text-ink/60">{done.tool_calls} tool call{done.tool_calls === 1 ? "" : "s"}, <span className="mono">{done.seconds} s</span>, on this computer</span>}
+          {done && !final?.from_index && <span className="ml-auto text-[12px] text-ink/65">{done.tool_calls} tool call{done.tool_calls === 1 ? "" : "s"}, <span className="mono">{done.seconds} s</span>, on this computer</span>}
         </div>
 
         {working && !answer && <div className="progress-indeterminate mt-3" role="progressbar" aria-label="Searching your files" />}
@@ -101,7 +113,7 @@ export function AskAnswer({ question, onError }: Props) {
         {quick && !answer && !error && (
           <figure className="mt-3 border-l-2 border-rule-strong pl-3">
             <blockquote className="text-[14px] leading-relaxed text-ink/85">{quick.text}</blockquote>
-            <figcaption className="mt-1 text-[12px] text-ink/60">Closest passage, in {quick.source.filename}{quick.source.page ? `, page ${quick.source.page}` : ""}. The checked answer follows.</figcaption>
+            <figcaption className="mt-1 text-[12px] text-ink/65">Closest passage, in {quick.source.filename}{quick.source.page ? `, page ${quick.source.page}` : ""}. The checked answer follows.</figcaption>
           </figure>
         )}
 
@@ -110,7 +122,7 @@ export function AskAnswer({ question, onError }: Props) {
             <Cited text={answer} sources={citations} />
           </p>
         )}
-        {final?.from_index && <p className="mt-2 text-[12px] text-ink/60">Counted exactly from the index, not from the contents of a file.</p>}
+        {final?.from_index && <p className="mt-2 text-[12px] text-ink/65">Counted exactly from the index, not from the contents of a file.</p>}
         {final?.warnings?.map((w, i) => (
           <div key={i} className="mt-3 flex items-start gap-2 rounded-md border border-rule-strong bg-amber-soft px-3 py-2 text-[13px] text-[rgb(var(--c-amber-text))]">
             <span className="material-symbols-outlined icon-sm" aria-hidden>warning</span>{w}
@@ -133,10 +145,10 @@ export function AskAnswer({ question, onError }: Props) {
                   <FileIcon filename={c.filename} size={28} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium">{c.filename}</span>
-                    <span className="block truncate text-[12px] text-ink/60">{shortPlace(c.path)}</span>
+                    <span className="block truncate text-[12px] text-ink/65">{shortPlace(c.path)}</span>
                   </span>
                   {c.page ? <span className="shrink-0 text-[12px] text-ink/65">Page {c.page}</span> : null}
-                  <button className="btn-secondary shrink-0 px-2 py-0.5 text-[12px]" onClick={() => openResult(c.path, onError, c.file_id)}>Open</button>
+                  {canOpen(c.path) && <button className="btn-secondary shrink-0 px-2 py-0.5 text-[12px]" onClick={() => openResult(c.path, onError, c.file_id)}>Open</button>}
                   <button className="btn-ghost shrink-0 px-2 py-0.5 text-[12px]" onClick={() => revealResult(c.path, onError, c.file_id)} aria-label={`Show ${c.filename} in ${FILE_MANAGER}`}>Show</button>
                 </li>
               ))}
@@ -150,7 +162,7 @@ export function AskAnswer({ question, onError }: Props) {
                 {citations.map((c) => (
                   <figure key={c.file_id} className="rounded-md border border-rule bg-canvas px-3 py-2">
                     <blockquote className="text-[13px] leading-relaxed text-ink/85 select-text">"{c.snippet.replace(/\*\*/g, "")}"</blockquote>
-                    <figcaption className="mt-1 text-[12px] text-ink/60">{c.filename}{c.page ? `, page ${c.page}` : ""}</figcaption>
+                    <figcaption className="mt-1 text-[12px] text-ink/65">{c.filename}{c.page ? `, page ${c.page}` : ""}</figcaption>
                   </figure>
                 ))}
               </div>
@@ -170,7 +182,7 @@ export function AskAnswer({ question, onError }: Props) {
                     <>
                       <span className="font-medium text-ink">{s.firstLook ? "First look" : "Search"}</span>{" "}
                       <span className="mono">"{s.query}"</span>
-                      <span className="text-ink/60">
+                      <span className="text-ink/65">
                         {!s.firstLook && <>, mode {MODE_LABEL[s.mode] ?? s.mode}</>}
                         {s.filters && <>, filters {s.filters}</>}
                         {s.route && <>, route {TIER_LABEL[s.route.tier] ?? s.route.tier}, <span className="mono">{s.route.total_ms.toFixed(0)} ms</span></>}
@@ -179,7 +191,7 @@ export function AskAnswer({ question, onError }: Props) {
                     </>
                   )}
                   {s.kind === "read" && <><span className="font-medium text-ink">Read more</span> <span className="text-ink/70">{s.found?.filename ?? `source ${s.source}`}</span></>}
-                  {s.kind === "note" && <span className="text-ink/60">{s.text}</span>}
+                  {s.kind === "note" && <span className="text-ink/65">{s.text}</span>}
                 </li>
               ))}
               {final && <li className="font-medium text-ink">Answer written</li>}
@@ -187,14 +199,20 @@ export function AskAnswer({ question, onError }: Props) {
           </section>
           <section className="panel p-4">
             <h3 className="text-[13px] font-semibold">Checks</h3>
-            {!final && !error && <p className="mt-2 text-[12.5px] text-ink/60">Made by IntelliFile's code once the answer is written.</p>}
+            {!final && !error && <p className="mt-2 text-[12.5px] text-ink/65">Made by IntelliFile's code once the answer is written.</p>}
             <ul className="mt-2 space-y-1.5 text-[12.5px]">
               {passed.map((p) => (
                 <li key={p} className="flex gap-2"><span className="material-symbols-outlined icon-sm text-marker" aria-hidden>check</span><span>Passed: {p}</span></li>
               ))}
               {[...new Set(checkNotes)].map((n) => {
                 const times = checkNotes.filter((x) => x === n).length;
-                return <li key={n} className="flex gap-2"><span className="material-symbols-outlined icon-sm text-error" aria-hidden>close</span><span>Problem: {n}{times > 1 ? ` (${times} times)` : ""}</span></li>;
+                const adjusted = ADJUSTED_NOTES.some((re) => re.test(n));
+                return (
+                  <li key={n} className="flex gap-2">
+                    <span className={`material-symbols-outlined icon-sm ${adjusted ? "text-ink/70" : "text-error"}`} aria-hidden>{adjusted ? "info" : "close"}</span>
+                    <span>{adjusted ? "Adjusted" : "Problem"}: {n}{times > 1 ? ` (${times} times)` : ""}</span>
+                  </li>
+                );
               })}
             </ul>
           </section>

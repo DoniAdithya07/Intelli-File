@@ -29,12 +29,12 @@
   --c-error: 179 38 30;
   --c-error-soft: 249 227 225;
   --c-highlight: 255 236 153;  /* matched words in a passage */
-  --ft-pdf: 180 35 24;         /* file-type icons */
+  --ft-pdf: 180 35 24;         /* file-type icons: each >= 4.5:1 on its own tint, also on a selected row */
   --ft-doc: 48 86 181;
-  --ft-slides: 194 65 12;
-  --ft-sheet: 30 123 69;
-  --ft-image: 14 116 144;
-  --ft-audio: 154 91 0;
+  --ft-slides: 168 52 8;
+  --ft-sheet: 24 105 58;
+  --ft-image: 10 98 122;
+  --ft-audio: 133 78 0;
   --ft-video: 75 85 99;
   --ft-text: 82 90 102;
   --ft-code: 71 85 105;

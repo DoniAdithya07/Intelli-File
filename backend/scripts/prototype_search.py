@@ -195,6 +195,39 @@ def main():
         )
         print("11. Filename matching: a file named in the query ranks first, spoken/typo forms included, and one shared word does not: OK")
 
+        # --- Regression 2026-10-05: "notes" found no file by name, because
+        # note/notes/photo/document were dropped from every query as noise,
+        # and "notes.odt" missed notes.odt because only the stem was compared.
+        # A generic word is still noise next to real words ("notes about
+        # scaling servers" must not rank every *notes* file first). ---
+        for name, text in [("meeting notes.txt", "Agenda for Thursday: budget review and hiring."),
+                           ("coffee notes.txt", "Ethiopian beans, light roast, pour over at 94 degrees.")]:
+            path = workdir / name
+            path.write_text(text)
+            record = build_file_record(path)
+            file_record_store.upsert(record)
+            indexer.index_file(path, record.file_id, record.hash)
+        odt_path = workdir / "notes.odt"
+        odt_path.write_bytes(b"PK\x03\x04 not a real document")  # named only: no extractor needed for a name match
+        file_record_store.upsert(build_file_record(odt_path))
+        named = {r["filename"] for r in search_service.search("notes") if r["why"][0].startswith("Filename contains:")}
+        assert {"meeting notes.txt", "coffee notes.txt", "notes.odt"} <= named, named
+        exact_name = search_service.search("notes.odt")
+        assert exact_name and exact_name[0]["filename"] == "notes.odt", [r["filename"] for r in exact_name]
+        meaning = search_service.search("notes about scaling servers")
+        assert meaning and meaning[0]["filename"] == "scaling.txt", [r["filename"] for r in meaning]
+        assert not any(r["why"][0].startswith("Filename contains:") for r in meaning), "a generic word next to real words is not a filename match"
+        print("12. Generic name words: 'notes' finds every *notes* file, 'notes.odt' puts notes.odt first, 'notes about scaling servers' still answers by meaning: OK")
+
+        # --- Regression 2026-10-05: a query of made-up words returned
+        # "loosely related" files. No word known to the files or to English
+        # means nothing to search for: no results, and the words are named. ---
+        gibberish, route = search_service.search_routed("asdf qwerty")
+        assert gibberish == [] and route.get("unrecognized") == ["asdf", "qwerty"], ([r["filename"] for r in gibberish], route.get("unrecognized"))
+        assert search_service.search("sourdogh starter"), "a typo the files' words correct is still searched"
+        assert search_service.search_routed("bread")[1].get("unrecognized") is None
+        print("13. A query with no recognised word returns nothing and names the words; typos of known words still search: OK")
+
         print("\nPhase 5 search pipeline OK: RRF fusion, file aggregation, exact-phrase override, type filtering, explanations, punctuation-safety, and filename matching all work as expected.")
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

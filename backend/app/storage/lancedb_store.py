@@ -24,8 +24,19 @@ class LanceDBVectorStore(VectorStore):
 
     def __init__(self, db_path: str):
         self.db = lancedb.connect(db_path)
+        # open_table() costs ~10 ms (manifest read) and every search / index
+        # step opened one or two. This store is the only writer, and a handle
+        # sees its own writes, so one handle per table is kept.
+        self._tables: dict[str, Any] = {}
+
+    def _open(self, name: str):
+        tbl = self._tables.get(name)
+        if tbl is None:
+            tbl = self._tables[name] = self.db.open_table(name)
+        return tbl
 
     def drop_table(self, name: str) -> None:
+        self._tables.pop(name, None)
         if name in self.db.table_names():
             self.db.drop_table(name)
 
@@ -52,17 +63,19 @@ class LanceDBVectorStore(VectorStore):
         if table not in self.db.table_names():
             return
         try:
-            self.db.open_table(table).optimize(cleanup_older_than=KEEP_OLD_VERSIONS_FOR)
+            self._open(table).optimize(cleanup_older_than=KEEP_OLD_VERSIONS_FOR)
         except Exception:
             # Maintenance must never take the index down with it.
             logger.exception("optimize() failed for table %s", table)
 
-    def upsert(self, table: str, records: list[dict[str, Any]]) -> None:
+    def upsert(self, table: str, records: list[dict[str, Any]], replace: bool = True) -> None:
+        """`replace=False` promises every id is new (the indexer mints fresh
+        uuids), which skips a delete that cost ~25 ms per file."""
         if not records:
             return
-        tbl = self.db.open_table(table)
+        tbl = self._open(table)
         ids = [r["id"] for r in records]
-        if ids:
+        if ids and replace:
             id_list = ", ".join(f"'{i}'" for i in ids)
             tbl.delete(f"id IN ({id_list})")
         rows = [
@@ -76,9 +89,15 @@ class LanceDBVectorStore(VectorStore):
         ]
         tbl.add(rows)
 
-    def query(self, table: str, vector: list[float], top_k: int = 20) -> list[dict[str, Any]]:
-        tbl = self.db.open_table(table)
-        results = tbl.search(vector).limit(top_k).to_list()
+    def query(self, table: str, vector: list[float], top_k: int = 20, payload_equals: dict[str, str] | None = None) -> list[dict[str, Any]]:
+        tbl = self._open(table)
+        search = tbl.search(vector)
+        for key, value in (payload_equals or {}).items():
+            # The payload column is the json.dumps() text written by upsert(),
+            # so the pair appears in it exactly as json.dumps spells it.
+            pair = json.dumps({key: value})[1:-1].replace("'", "''")
+            search = search.where(f"payload LIKE '%{pair}%'", prefilter=True)
+        results = search.limit(top_k).to_list()
         return [
             {
                 "id": r["id"],
@@ -92,12 +111,12 @@ class LanceDBVectorStore(VectorStore):
     def delete(self, table: str, ids: list[str]) -> None:
         if not ids:
             return
-        tbl = self.db.open_table(table)
+        tbl = self._open(table)
         id_list = ", ".join(f"'{i}'" for i in ids)
         tbl.delete(f"id IN ({id_list})")
 
     def delete_by_file_id(self, table: str, file_id: str) -> None:
-        tbl = self.db.open_table(table)
+        tbl = self._open(table)
         escaped = file_id.replace("'", "''")
         tbl.delete(f"file_id = '{escaped}'")
 
@@ -107,13 +126,13 @@ class LanceDBVectorStore(VectorStore):
         keyword table stores no metadata (2026-09-21)."""
         if not ids:
             return {}
-        tbl = self.db.open_table(table)
+        tbl = self._open(table)
         id_list = ", ".join("'" + i.replace("'", "''") + "'" for i in ids)
         rows = tbl.search().where(f"id IN ({id_list})").select(["id", "payload"]).to_list()
         return {r["id"]: (json.loads(r["payload"]) if r.get("payload") else {}) for r in rows}
 
     def get_by_file_id(self, table: str, file_id: str) -> list[dict[str, Any]]:
-        tbl = self.db.open_table(table)
+        tbl = self._open(table)
         escaped = file_id.replace("'", "''")
         rows = tbl.search().where(f"file_id = '{escaped}'").to_list()
         return [

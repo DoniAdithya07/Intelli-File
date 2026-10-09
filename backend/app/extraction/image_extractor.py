@@ -7,6 +7,7 @@ has no text to extract. Images go through the CLIP vision tower instead
 "when was this taken" metadata the PRD asks results to display.
 """
 
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from PIL import ExifTags, Image
 _EXIF_DATE_TIME_ORIGINAL = 36867  # when the shot was actually taken
 _EXIF_DATE_TIME = 306  # file/image last-modified per EXIF, a weaker fallback
 _EXIF_DATE_FORMAT = "%Y:%m:%d %H:%M:%S"
+
+logger = logging.getLogger(__name__)
 
 
 def extract_captured_at(path: Path) -> str:
@@ -29,5 +32,6 @@ def extract_captured_at(path: Path) -> str:
             if raw:
                 return datetime.strptime(str(raw).strip(), _EXIF_DATE_FORMAT).isoformat()
     except Exception:
-        pass
+        # (2026-10-05) Was silent: the reason is now in the debug log.
+        logger.debug("No EXIF capture date in %s; using the file's date", path, exc_info=True)
     return datetime.fromtimestamp(path.stat().st_mtime).isoformat()

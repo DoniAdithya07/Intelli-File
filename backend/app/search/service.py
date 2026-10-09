@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from ..embeddings.model import EmbeddingModel
 from ..indexing import CHUNKS_TABLE
 from ..storage import FileRecordStore, KeywordStore, LanceDBVectorStore
+from .dictionary import shared_dictionary
 from .explain import explain_match
 from .filenames import filename_vocabulary, match_filenames
 from .grammar import tidy_query
@@ -21,7 +22,7 @@ from .fusion import aggregate_chunks_to_files, reciprocal_rank_fusion
 from .query_parsing import parse_query
 from .reranker import RERANK_TOP_N, Reranker
 from .router import NEXT_TIER, PLANS, Plan, RouteDecision, plan_for_mode, route
-from .spelling import correct_query
+from .spelling import _plural_of_known, correct_query
 
 if TYPE_CHECKING:
     from ..context.profile import ProfileBuilder
@@ -79,6 +80,21 @@ def _reorder_duplicates_by_boost(group: list[dict]) -> list[dict]:
         members.sort(key=lambda x: -x["personal"]["boost"])
         out.extend(members)
     return out
+
+
+def hide_if_missing(file_record_store: FileRecordStore, path: str) -> bool:
+    """True when the file is not on disk, so a result must not show it.
+    It is tombstoned (and purged by cleanup) only when its folder is still
+    there — deleted or renamed. When the folder is gone too (unplugged
+    drive, offline network share) nothing is written: until 2026-10-04 one
+    search while a USB stick was out tombstoned every hit on it, and the
+    drive had to be re-indexed. The folder scan reconciles it once it is back."""
+    file = Path(path)
+    if file.exists():
+        return False
+    if file.parent.is_dir():
+        file_record_store.mark_deleted(path)
+    return True
 
 
 def _ms(t0: float) -> float:
@@ -170,6 +186,33 @@ class SearchService:
         self.learned_router = None
         # Improvement 2; the evaluation switches it off to see what it hides.
         self.weak_pruning = True
+        # The bundled English list (None when missing): a common word is never
+        # "corrected", and a query with no known word at all is not searched.
+        self.dictionary = shared_dictionary()
+
+    def _is_word(self, word: str) -> bool:
+        return self.dictionary is not None and self.dictionary.is_word(word)
+
+    def _unrecognized(self, typed: str, corrected: str, vocabulary: dict[str, int]) -> list[str]:
+        """The query's words when NONE of them means anything here: not in the
+        files' words or names (nor a plural or the start of one), not in the
+        English list, and not correctable to a file word. Until 2026-10-05
+        "asdf qwerty" was embedded anyway and came back with three "loosely
+        related" invoices; there is nothing to search for, so the answer is
+        no results, naming the words (as photo search does). A number or an
+        ID is always searchable; without the list nothing is ruled out."""
+        if self.dictionary is None:
+            return []
+        words = _KW_TOKEN_RE.findall(typed.lower())
+        corrected_words = set(_KW_TOKEN_RE.findall(corrected.lower()))
+        candidates = [w for w in words if len(w) >= 2]
+        if not candidates or any(c.isdigit() for w in candidates for c in w):
+            return []
+        for w in candidates:
+            if (w in vocabulary or w in self.dictionary.counts or w not in corrected_words or _plural_of_known(w, vocabulary)
+                    or (len(w) >= 4 and any(known.startswith(w) for known in vocabulary))):
+                return []
+        return candidates
 
     def _first_chunk(self, file_id: str) -> dict:
         """Snippet for a file that matched by name only. Photos and audio
@@ -208,7 +251,7 @@ class SearchService:
         parsed = parse_query(raw_query)
         if parsed.exact_phrase is not None or not parsed.text:
             return None
-        corrected = correct_query(parsed.text, self._correction_vocabulary(self._active_records()))
+        corrected = correct_query(parsed.text, self._correction_vocabulary(self._active_records()), is_word=self._is_word)
         corrected = tidy_query(corrected)
         if corrected == parsed.text:
             return None
@@ -263,8 +306,14 @@ class SearchService:
             # Same two steps as suggest(): until 2026-09-21 search skipped
             # tidy_query, so the chip could offer "bread, making" while
             # search itself would never have made that change.
-            keyword_query_text = tidy_query(correct_query(query_text, vocabulary))
+            keyword_query_text = tidy_query(correct_query(query_text, vocabulary, is_word=self._is_word))
             stages.append({"stage": "understand", "ms": _ms(t0)})
+            unrecognized = self._unrecognized(query_text, keyword_query_text, vocabulary)
+            if unrecognized:
+                report = self._route_report("keyword", "keyword", 0, "no word of the query is in your files or in English", {}, False, stages, t_start, None)
+                report["unrecognized"] = unrecognized
+                report["suggest_ask"] = False
+                return [], report
 
         if mode == "auto":
             t0 = time.perf_counter()
@@ -477,8 +526,7 @@ class SearchService:
             if len(results) >= top_k:
                 break
             record = match.record
-            if not Path(record.path).exists():
-                self.file_record_store.mark_deleted(record.path)
+            if hide_if_missing(self.file_record_store, record.path):
                 continue
             agg = file_score.get(record.file_id)
             best_chunk = chunk_info[agg.best_chunk_id] if agg else self._first_chunk(record.file_id)
@@ -499,11 +547,10 @@ class SearchService:
             # (2026-09-11): renamed files came back with their old path and
             # "No such file or directory" on click. The folder scan and the
             # watcher reconcile the index, but between those a result must
-            # still be honest — tombstone it here so cleanup purges it.
+            # still be honest — tombstone it here so cleanup purges it (hide_if_missing).
             if record is None or record.deleted:
                 continue
-            if not Path(record.path).exists():
-                self.file_record_store.mark_deleted(record.path)
+            if hide_if_missing(self.file_record_store, record.path):
                 continue
             why = explain_match(keyword_query_text, best_chunk, record.path)
             if best_chunk.get("reranker_score", None) is not None and best_chunk["reranker_score"] > RERANK_CONFIDENT_LOGIT:

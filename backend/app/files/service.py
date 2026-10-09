@@ -13,7 +13,7 @@ from watchdog.observers import Observer
 from ..storage.sqlite_store import FileRecordStore
 from .debounce import DEFAULT_DEBOUNCE_SECONDS, Debouncer
 from .discovery import SUPPORTED_EXTENSIONS, discover_files, is_indexable
-from .identity import build_file_record, compute_file_hash
+from .identity import ONLINE_ONLY_REASON, OnlineOnlyFile, build_file_record, compute_file_hash
 from .jobs import Job, JobQueue
 
 
@@ -106,6 +106,10 @@ class FileWatchService:
         # Photos join the watch set only when the app has a CLIP model
         # (see folder_scan.py for the same rule on the scan side).
         self.extensions = extensions if extensions is not None else SUPPORTED_EXTENSIONS
+        # on_skip(path, reason): a file left alone on purpose (too large, path
+        # too long, online-only). Set by the app so the Status screen lists the
+        # watcher's skips like the scan's (2026-10-05: they were silent).
+        self.on_skip = None
 
     def initial_scan(self, root_paths: list[str]) -> None:
         """One-time recursive scan of the selected folders, run at startup
@@ -195,9 +199,9 @@ class FileWatchService:
         roots = [Path(_real(r)) for r in self._watched if real.is_relative_to(Path(_real(r)))]
         if not roots:
             real_files = {_real(f) for f in self._watched_files}
-            return str(real) in real_files and is_indexable(path, self.extensions, must_exist=must_exist)
+            return str(real) in real_files and is_indexable(path, self.extensions, must_exist=must_exist, on_skip=self.on_skip)
         root = max(roots, key=lambda r: len(r.parts))
-        return is_indexable(real, self.extensions, root=root, must_exist=must_exist)
+        return is_indexable(real, self.extensions, root=root, must_exist=must_exist, on_skip=self.on_skip)
 
     def stop(self) -> None:
         if self._observer.is_alive():
@@ -219,6 +223,10 @@ class FileWatchService:
         existing = self._record_store.get_by_path(str(path))
         try:
             new_hash = compute_file_hash(path)
+        except OnlineOnlyFile:
+            if self.on_skip is not None:
+                self.on_skip(path, ONLINE_ONLY_REASON)
+            return
         except OSError:
             return  # gone or unreadable right now; the next event or scan will see it
         if existing is not None and existing.hash == new_hash and not existing.deleted and existing.indexed:
@@ -226,7 +234,7 @@ class FileWatchService:
         file_id = existing.file_id if existing is not None else None
         record = build_file_record(path, file_id=file_id, file_hash=new_hash, indexed=False)
         self._record_store.upsert(record)
-        self._job_queue.submit(Job(kind="index", path=str(path), file_id=record.file_id))
+        self._job_queue.submit(Job(kind="index", path=str(path), file_id=record.file_id, new=existing is None))
 
     def _on_deleted(self, path: str) -> None:
         self._debouncer.cancel(path)

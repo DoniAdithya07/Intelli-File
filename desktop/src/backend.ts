@@ -6,10 +6,11 @@ export const BACKEND_URL: string = import.meta.env.VITE_BACKEND_URL ?? "http://1
 
 // Phase 12: inside the desktop shell every request carries the per-launch
 // API token the shell gave the backend. In a plain browser tab (dev) there
-// is no shell and the dev backend requires no token.
+// is no shell: a dev backend started by hand prints its token, and
+// VITE_API_TOKEN (same value) lets the tab send it.
 let apiToken: string | null = null;
 const tokenReady: Promise<string | null> = (async () => {
-  if (!("__TAURI_INTERNALS__" in window)) return null;
+  if (!("__TAURI_INTERNALS__" in window)) return import.meta.env.VITE_API_TOKEN ?? null;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     apiToken = await invoke<string>("api_token");
@@ -24,10 +25,27 @@ export async function authHeaders(): Promise<Record<string, string>> {
   return token ? { "X-IntelliFile-Token": token } : {};
 }
 
+// One wording for "the engine is not answering", shared by the sidebar and every page.
+// "Starting" only until the engine first answers; after that, or once App.tsx's
+// health probe hears of a problem (from the desktop shell, or health dropping), it has stopped.
+export const ENGINE_STARTING = "The search engine isn't running yet. It starts with the app and is usually ready within 15 seconds.";
+export const ENGINE_STOPPED_TITLE = "Search engine stopped";
+export const ENGINE_STOPPED_HINT = "Quit IntelliFile fully and open it again.";
+export const ENGINE_STOPPED = `The search engine stopped. ${ENGINE_STOPPED_HINT}`;
+let engineSeenUp = false;
+let engineStopped = false;
+/** Called by App.tsx's health probe with what the sidebar shows. */
+export function setEngineStopped(stopped: boolean): void {
+  engineStopped = stopped;
+}
+
+/** True when a request failed because the engine could not be reached at all: the sidebar already says so. */
+export const engineUnreachable = (e: unknown) => e instanceof TypeError && /fetch|network/i.test(e.message); // not a programming TypeError
+
 /** A connection failure (engine not up yet, or gone) reads as a sentence, not "TypeError: Failed to fetch". */
 export function describeError(e: unknown, path = ""): string {
   if (e instanceof DOMException && e.name === "AbortError") return "";
-  if (e instanceof TypeError) return "The search engine isn't running yet. It starts with the app and is usually ready within 15 seconds.";
+  if (engineUnreachable(e)) return engineStopped || engineSeenUp ? ENGINE_STOPPED : ENGINE_STARTING;
   const msg = e instanceof Error ? e.message : String(e);
   if (/ 401$/.test(msg)) return "The app lost its connection key to the search engine. Quit IntelliFile fully and open it again.";
   return path ? `${path}: ${msg}` : msg;
@@ -37,6 +55,7 @@ async function getJson<T>(path: string, params?: Record<string, string | number>
   const url = new URL(`${BACKEND_URL}${path}`);
   if (params) for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   const res = await fetch(url.toString(), { headers: await authHeaders(), signal });
+  engineSeenUp = true; // any reply at all: the engine was running
   if (!res.ok) throw new Error(`${path} failed: ${res.status}`);
   return res.json();
 }
@@ -71,6 +90,7 @@ export interface RouteReport {
   stages: RouteStage[];
   total_ms: number;
   corrected_query: string | null;
+  unrecognized?: string[]; // words the index and the English list don't know: nothing was searched (2026-10-05)
   suggest_ask?: boolean; // Phase 19: a question the retrieval tiers could not answer confidently
 }
 export type Confidence = "strong" | "weak";
@@ -122,16 +142,24 @@ export interface VisualSearchResult {
   confidence: Confidence;
 }
 export type VisualKind = "all" | "photo" | "video";
-export const searchVisual = (q: string, kind: VisualKind = "all", top_k = 24) =>
+export const searchVisual = (q: string, kind: VisualKind = "all", top_k = 24, signal?: AbortSignal) =>
   getJson<{ results?: VisualSearchResult[]; error?: string; unrecognized?: string[]; corrected_query?: string | null }>(
     "/search-visual",
     kind === "all" ? { q, top_k } : { q, top_k, kind },
+    signal,
   );
 export const suggestVisual = (q: string) => getJson<{ suggestion: string | null }>("/suggest-visual", { q });
 
-// <img> tags cannot send headers, so the thumbnail URL carries the token as a query parameter.
-export const thumbnailUrl = (path: string, size = 320, atSeconds: number | null = null) =>
-  `${BACKEND_URL}/thumbnail?path=${encodeURIComponent(path)}&size=${size}${atSeconds != null ? `&t=${atSeconds}` : ""}${apiToken ? `&token=${apiToken}` : ""}`;
+// <img> tags cannot send headers, so thumbnails are fetched with the token header and shown from a blob URL.
+export async function fetchThumbnail(path: string, size = 320, atSeconds: number | null = null, signal?: AbortSignal): Promise<string> {
+  const url = new URL(`${BACKEND_URL}/thumbnail`);
+  url.searchParams.set("path", path);
+  url.searchParams.set("size", String(size));
+  if (atSeconds != null) url.searchParams.set("t", String(atSeconds));
+  const res = await fetch(url.toString(), { headers: await authHeaders(), signal });
+  if (!res.ok) throw new Error(`thumbnail failed: ${res.status}`);
+  return URL.createObjectURL(await res.blob());
+}
 
 export function formatTimestamp(seconds: number): string {
   const s = Math.floor(seconds);
@@ -158,7 +186,10 @@ export interface IndexJob {
   error: string | null;
   queued: string[];
   paused_reason?: string | null; // Phase 10: set while the job is held for battery / low-power
-  recent_failures?: { path: string; error: string; at: number }[]; // Phase 11
+  recent_failures?: { path: string; error: string; reason?: string; at: number }[]; // Phase 11; `reason` is a readable sentence
+  // Files a scan left alone on purpose (not failures): counts by reason, and the latest few by name.
+  skipped?: { too_large?: number; online_only?: number; path_too_long?: number };
+  recent_skips?: { path: string; reason: string }[];
   recovered_at_start?: number; // Phase 11: files re-indexed after a crash mid-index
 }
 export type ResourceMode = "balanced" | "performance" | "battery_saver";
@@ -219,8 +250,31 @@ export interface StatusResponse {
     reranker: { name: string } | null;
     ocr?: { name: string; language: string } | null;
   };
+  // Which optional parts loaded; missing on an older backend (treat as available).
+  features?: { photos_videos: boolean; voice: boolean; ocr: boolean };
+  // Problems found while the engine started, as sentences for the user.
+  startup_problems?: string[];
 }
 export const getStatus = () => getJson<StatusResponse>("/status");
+
+// Whether voice works does not change while the engine runs: asked once, on first use.
+let voiceReady: Promise<boolean> | null = null;
+export function voiceAvailable(): Promise<boolean> {
+  voiceReady ??= getStatus().then((s) => s.features?.voice !== false, () => { voiceReady = null; return true; });
+  return voiceReady;
+}
+export const VOICE_MISSING = "Voice search needs its speech model, which did not load. Extract IntelliFile-windows.zip again, completely. Typing works as before.";
+
+/** The sentence a refused request carries (FastAPI's {"detail": ...}, or plain text). */
+async function errorSentence(res: Response): Promise<string> {
+  const text = await res.text();
+  try {
+    const j = JSON.parse(text);
+    const msg = j?.detail ?? j?.error ?? j?.message;
+    if (typeof msg === "string") return msg;
+  } catch { /* plain text */ }
+  return text || `Request failed: ${res.status}`;
+}
 
 // ---- activity memory (Phase 16) ----
 export type EventKind = "result_clicked" | "file_opened" | "file_revealed" | "recommendation_clicked";
@@ -263,8 +317,21 @@ export interface ProfileResponse {
   heatmap: number[][]; // [weekday][slot]
   slot_hours: number;
   now_slot: { weekday: number; slot: number; label: string };
+  sample_history?: boolean; // made-up history of the sample folder is loaded
 }
 export const getProfile = () => getJson<ProfileResponse>("/profile");
+/** Made-up four weeks of use of the sample folder. `error` is the backend's sentence (e.g. the folder is not indexed yet). */
+export async function loadSampleHistory(): Promise<{ events?: number; error?: string }> {
+  const res = await fetch(`${BACKEND_URL}/profile/sample-history`, { method: "POST", headers: await authHeaders() });
+  if (res.status === 409) return { error: await errorSentence(res) };
+  if (!res.ok) throw new Error(`/profile/sample-history failed: ${res.status}`);
+  return res.json();
+}
+export async function removeSampleHistory(): Promise<{ removed: number }> {
+  const res = await fetch(`${BACKEND_URL}/profile/sample-history`, { method: "DELETE", headers: await authHeaders() });
+  if (!res.ok) throw new Error(`/profile/sample-history failed: ${res.status}`);
+  return res.json();
+}
 export interface Recommendation { file_id: string; path: string; filename: string; reason: string }
 export interface RecommendationsResponse {
   enabled: boolean;
@@ -297,29 +364,83 @@ export type AskEvent =
   | { type: "done"; seconds: number; tool_calls: number; strategies: { query: string; mode: string; filters: string; route: string; results: number }[]; sources: AskSource[] }
   | { type: "error"; message: string };
 
-/** Streams the agent's trace for a question; resolves when the stream ends. */
+export const ASK_STOPPED = "The search engine stopped while answering. Details are in backend.log in %LOCALAPPDATA%\\IntelliFile\\logs.";
+
+/**
+ * Streams the agent's trace for a question; resolves when the stream ends.
+ * Always ends with a "done" or "error" event unless the caller aborted:
+ * a stream cut short (the engine crashed) reports ASK_STOPPED instead of
+ * leaving the answer spinning forever.
+ */
 export async function askStream(q: string, onEvent: (e: AskEvent) => void, signal?: AbortSignal): Promise<void> {
   const url = new URL(`${BACKEND_URL}/ask`);
   url.searchParams.set("q", q);
-  const res = await fetch(url.toString(), { signal, headers: await authHeaders() });
-  if (!res.ok || !res.body) throw new Error(`/ask failed: ${res.status}`);
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buffer.indexOf("\n\n")) >= 0) {
-      const frame = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 2);
-      const line = frame.split("\n").find((l) => l.startsWith("data: "));
-      if (line) onEvent(JSON.parse(line.slice(6)) as AskEvent);
+  let finished = false;
+  // Once the question is cancelled nothing more reaches the page, not even frames already read.
+  const emit = (e: AskEvent) => {
+    if (signal?.aborted) return;
+    if (e.type === "done" || e.type === "error") finished = true;
+    onEvent(e);
+  };
+  const frame = (f: string) => {
+    const line = f.split("\n").find((l) => l.startsWith("data: "));
+    if (line) emit(JSON.parse(line.slice(6)) as AskEvent);
+  };
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), { signal, headers: await authHeaders() });
+  } catch (e) {
+    if (!signal?.aborted) emit({ type: "error", message: describeError(e) });
+    return;
+  }
+  if (!res.ok || !res.body) { emit({ type: "error", message: describeError(new Error(`/ask failed: ${res.status}`)) }); return; }
+  try {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) >= 0) {
+        frame(buffer.slice(0, idx));
+        buffer = buffer.slice(idx + 2);
+      }
     }
+    if (buffer.trim()) frame(buffer); // a last frame without its blank line
+  } catch {
+    if (signal?.aborted) return;
+  }
+  if (!finished && !signal?.aborted) emit({ type: "error", message: ASK_STOPPED });
+}
+
+export interface AskStatus {
+  available: boolean;
+  model: string | null;
+  loaded: boolean;
+  loading?: boolean;
+  error?: string | null;
+  tokens_per_second: number | null;
+  prompt_chars_per_second?: number | null;
+}
+/** preload=true starts loading the language model in the background; only the Ask page asks for that. */
+export const askStatus = (preload = false) => getJson<AskStatus>("/ask/status", preload ? { preload: 1 } : undefined);
+
+// ---- desktop shell (Tauri commands; null in a plain browser tab) ----
+async function shellCommand<T>(cmd: string): Promise<T | null> {
+  if (!("__TAURI_INTERNALS__" in window)) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<T>(cmd);
+  } catch {
+    return null;
   }
 }
-export const askStatus = () => getJson<{ available: boolean; model: string | null; loaded: boolean; tokens_per_second: number | null }>("/ask/status");
+/** Why the search engine is not running (port taken, start failed, crashed), or null. */
+export const backendProblem = () => shellCommand<string | null>("backend_problem");
+/** False when Ctrl+Space could not be registered; null outside the desktop shell. */
+export const shortcutOk = () => shellCommand<boolean>("shortcut_ok");
 
 // ---- voice ----
 // `heard` is set only when the backend snapped a misheard file name (2026-09-20).
@@ -357,12 +478,12 @@ const CODE_EXTS = ["PY", "JS", "TS", "TSX", "JSX", "JAVA", "C", "CPP", "H", "HPP
 
 export function fileKind(filename: string): { badge: string; group: FileGroup } {
   const ext = (filename.split(".").pop() || "").toUpperCase();
-  if (["M4A", "MP3", "WAV", "FLAC", "OGG", "AIFF", "AIF"].includes(ext)) return { badge: ext, group: "audio" };
-  if (["JPG", "JPEG", "PNG", "GIF", "BMP", "WEBP", "AVIF"].includes(ext)) return { badge: ext, group: "image" };
-  if (["MP4", "MOV", "M4V", "MKV", "WEBM", "AVI"].includes(ext)) return { badge: ext, group: "video" };
-  if (["PDF", "DOCX", "DOC", "RTF"].includes(ext)) return { badge: ext, group: "doc" };
-  if (["CSV", "TSV", "XLSX", "XLSM"].includes(ext)) return { badge: ext, group: "sheet" };
-  if (ext === "PPTX") return { badge: ext, group: "slides" };
+  if (["M4A", "MP3", "WAV", "FLAC", "OGG", "AIFF", "AIF", "WMA", "AAC", "OPUS"].includes(ext)) return { badge: ext, group: "audio" };
+  if (["JPG", "JPEG", "PNG", "GIF", "BMP", "WEBP", "AVIF", "HEIC", "HEIF", "TIF", "TIFF"].includes(ext)) return { badge: ext, group: "image" };
+  if (["MP4", "MOV", "M4V", "MKV", "WEBM", "AVI", "3GP", "WMV", "MTS", "M2TS", "MPG", "MPEG"].includes(ext)) return { badge: ext, group: "video" };
+  if (["PDF", "DOCX", "DOC", "RTF", "ODT", "EPUB", "EML", "MSG"].includes(ext)) return { badge: ext, group: "doc" };
+  if (["CSV", "TSV", "XLSX", "XLSM", "XLS", "ODS"].includes(ext)) return { badge: ext, group: "sheet" };
+  if (["PPTX", "PPT", "ODP"].includes(ext)) return { badge: ext, group: "slides" };
   if (CODE_EXTS.includes(ext)) return { badge: ext, group: "code" };
   return { badge: ext || "FILE", group: "text" };
 }

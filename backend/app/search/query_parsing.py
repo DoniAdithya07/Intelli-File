@@ -31,6 +31,9 @@ TYPE_GROUPS: dict[str, frozenset[str]] = {
     "image": frozenset(e.lstrip(".") for e in IMAGE_EXTENSIONS),
     "audio": frozenset(e.lstrip(".") for e in AUDIO_EXTENSIONS),
     "video": frozenset(e.lstrip(".") for e in VIDEO_EXTENSIONS),  # the Photos page's newest-first grid
+    "email": frozenset({"eml", "msg"}),
+    # Two spellings of one format (2026-10-05): type:tif also keeps .tiff files.
+    **{ext: frozenset(pair) for pair in (("jpg", "jpeg"), ("tif", "tiff"), ("heic", "heif"), ("mpg", "mpeg"), ("mts", "m2ts")) for ext in pair},
 }
 
 _QUOTED_PHRASE_RE = re.compile(r'"([^"]+)"')
@@ -130,7 +133,7 @@ def parse_query(raw_query: str) -> ParsedQuery:
         key, value = m.group(1).lower(), m.group(2)
         if key in ("type", "ext"):
             file_type = value.lower().lstrip(".")
-            file_type = {"documents": "document", "images": "image", "videos": "video"}.get(file_type, file_type)
+            file_type = {"documents": "document", "images": "image", "videos": "video", "emails": "email"}.get(file_type, file_type)
         elif key == "after":
             after = _parse_date(value)
         elif key == "before":

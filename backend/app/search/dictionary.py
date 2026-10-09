@@ -85,6 +85,12 @@ class Dictionary:
                     best = key
         return (best[2], -best[1]) if best else None
 
+    def is_word(self, word: str) -> bool:
+        """A common English word: text search never "corrects" one (2026-10-05,
+        "servers" became "server"). Only the common part of the list counts —
+        its rare tail holds junk and real misspellings ("recieve", 125)."""
+        return self.counts.get(word, 0) >= RARE_COUNT
+
     def check(self, text: str, user_vocabulary: dict[str, int]) -> QueryCheck:
         corrected: dict[str, str] = {}
         unrecognized: list[str] = []
@@ -110,3 +116,10 @@ class Dictionary:
             return word
 
         return QueryCheck(text=_TOKEN_RE.sub(replace, text), corrected=corrected, unrecognized=unrecognized)
+
+
+@lru_cache(maxsize=1)
+def shared_dictionary() -> Dictionary | None:
+    """The bundled list, loaded once per process (about 20 MB in memory) and
+    shared by text and photo search; None when the file is missing."""
+    return Dictionary() if DEFAULT_PATH.exists() else None

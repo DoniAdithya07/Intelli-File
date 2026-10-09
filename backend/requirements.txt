@@ -1,13 +1,13 @@
-fastapi
-uvicorn[standard]
-lancedb
-pyarrow
-watchdog
-pypdf
-python-docx
-numpy
-tokenizers
-huggingface_hub
+fastapi==0.141.1
+uvicorn[standard]==0.54.0
+lancedb==0.39.0
+pyarrow==25.0.1
+watchdog==6.0.0
+pypdf==6.19.0
+python-docx==1.2.0
+numpy==2.4.6
+tokenizers==0.23.2
+huggingface_hub==1.33.0
 # DirectML gives GPU acceleration but only exists on Windows; everywhere
 # else (including this Mac dev machine) falls back to plain CPU. Picking
 # the package via an environment marker keeps this the ONE place the
@@ -15,39 +15,51 @@ huggingface_hub
 # execution providers are available and picks the best one (see
 # app/embeddings/hardware.py).
 onnxruntime; sys_platform != "win32"
-onnxruntime-directml; sys_platform == "win32"
+onnxruntime-directml==1.24.4; sys_platform == "win32"
 # Voice search (Phase 7): local speech-to-text via Whisper base.en (ONNX).
 # Since Phase 14 the decoding loop is our own (app/transcription/
 # whisper_onnx.py) on onnxruntime; `transformers` stays only for the
 # log-mel feature extractor and must be installed WITHOUT torch
 # (it is pure Python on that path). optimum and torch are gone: 600 MB
 # that shipped for one greedy loop.
-transformers
-av
-python-multipart
+transformers==5.17.0
+# PyAV (BSD) decodes audio/video. Its Windows wheel bundles FFmpeg 8.1.2
+# linked with the GPL x264 and x265 encoders (av.libs/), so the shipped
+# app contains GPL code even though it only decodes. The licence
+# texts are in licenses/.
+av==18.1.0
+python-multipart==0.0.32
 # Visual search (Phase 8): image decoding/preprocessing/thumbnailing for
 # CLIP-based photo search.
-pillow
+pillow==12.3.0
 # More file types (2026-09-20): Excel and PowerPoint. CSV/TSV, HTML, code
 # and RTF use the stdlib only. Both are pure Python and work offline.
-openpyxl
-python-pptx
+openpyxl==3.1.5
+python-pptx==1.0.2
+# More file types (2026-10-05):
+# Office 97-2003 .doc/.ppt and Outlook .msg are compound (OLE) files; olefile reads them. Pure Python, BSD.
+olefile==0.47
+# Excel 97-2003 .xls (xlrd 2 reads only .xls). Pure Python, BSD.
+xlrd==2.0.2
+# HEIC/HEIF photos: decode-only libheif 1.23.0 + libde265 1.1.1 (LGPL v3). Not pillow-heif: its Windows wheel
+# also links the GPL x265 encoder. (This keeps x265 out of the HEIC path only; PyAV above still bundles x265.)
+pi-heif==1.4.0
 
 # Phase 19: the local LLM agent (Qwen2.5 GGUF via llama.cpp, CPU, offline).
-llama-cpp-python
+llama-cpp-python==0.3.35
 
 # Phase 10: battery / AC / CPU state for power-aware indexing.
-psutil
+psutil==7.2.2
 
 # Next-round improvement 4: offline OCR with Windows' built-in engine
 # (Windows.Media.Ocr). Only the Python projections are installed — the
 # engine ships with Windows 10/11. (Windows.Data.Pdf is deliberately not
 # used: see app/extraction/ocr.py.)
-winrt-runtime; sys_platform == "win32"
-winrt-Windows.Media.Ocr; sys_platform == "win32"
-winrt-Windows.Graphics.Imaging; sys_platform == "win32"
-winrt-Windows.Storage; sys_platform == "win32"
-winrt-Windows.Storage.Streams; sys_platform == "win32"
-winrt-Windows.Foundation; sys_platform == "win32"
-winrt-Windows.Foundation.Collections; sys_platform == "win32"
-winrt-Windows.Globalization; sys_platform == "win32"
+winrt-runtime==3.2.1; sys_platform == "win32"
+winrt-Windows.Media.Ocr==3.2.1; sys_platform == "win32"
+winrt-Windows.Graphics.Imaging==3.2.1; sys_platform == "win32"
+winrt-Windows.Storage==3.2.1; sys_platform == "win32"
+winrt-Windows.Storage.Streams==3.2.1; sys_platform == "win32"
+winrt-Windows.Foundation==3.2.1; sys_platform == "win32"
+winrt-Windows.Foundation.Collections==3.2.1; sys_platform == "win32"
+winrt-Windows.Globalization==3.2.1; sys_platform == "win32"

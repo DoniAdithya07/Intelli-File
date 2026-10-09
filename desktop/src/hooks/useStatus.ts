@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getStatus, StatusResponse } from "../backend";
+import { describeError, getStatus, StatusResponse } from "../backend";
 
 /** Polls /status — fast while a job runs (the progress bar), slowly otherwise. */
 export function useStatus(enabled = true) {
@@ -19,7 +19,7 @@ export function useStatus(enabled = true) {
         timer = window.setTimeout(tick, s.job.state === "running" || s.job.queued.length ? 700 : 4000);
       } catch (e) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
+        setError(describeError(e, "/status") || null);
         timer = window.setTimeout(tick, 3000);
       }
     };

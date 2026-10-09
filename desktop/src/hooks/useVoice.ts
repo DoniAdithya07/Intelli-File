@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { transcribeAudio } from "../backend";
+import { transcribeAudio, VOICE_MISSING, voiceAvailable } from "../backend";
 import { Recorder } from "../recorder";
 
 // idle → warming (mic pipeline starting, ~0.7 s, we don't invite speech yet)
@@ -10,6 +10,17 @@ export function useVoice(onText: (text: string, heard?: string | null, suggestio
   const [state, setState] = useState<VoiceState>("idle");
   const [level, setLevel] = useState(0);
   const recorderRef = useRef<Recorder | null>(null);
+  const mounted = useRef(true);
+
+  // Leaving the page (or the overlay being hidden) must turn the microphone off.
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      recorderRef.current?.stop();
+      recorderRef.current = null;
+    };
+  }, []);
 
   // Sample the recorder's RMS ~20×/s while recording, for the bars.
   useEffect(() => {
@@ -20,10 +31,13 @@ export function useVoice(onText: (text: string, heard?: string | null, suggestio
 
   const toggle = useCallback(async () => {
     if (state === "idle") {
+      if (!(await voiceAvailable())) { onError(VOICE_MISSING); return; }
       setState("warming");
       try {
         const recorder = new Recorder();
         await recorder.start();
+        // Unmounted during the warm-up: release the microphone at once.
+        if (!mounted.current) { recorder.stop(); return; }
         recorderRef.current = recorder;
         setState("recording");
       } catch (e) {

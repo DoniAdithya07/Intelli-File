@@ -204,6 +204,7 @@ def main():
         hits = search_service.search("zebra migration river", top_k=3)
         assert hits and hits[0]["filename"] == "quarterly.pdf", "previous chunks must survive a failed re-index"
         print("10. Failed extraction keeps the old chunks searchable and the old hash (will retry), instead of wiping the file: OK")
+        check_keyword_rollback(workdir)
 
         print(
             "\nPhase 4 indexing pipeline OK: embedding, vector search, keyword search, "
@@ -212,6 +213,23 @@ def main():
         )
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def check_keyword_rollback(workdir: Path) -> None:
+    """11. (2026-10-05) A keyword write that fails half-way leaves nothing:
+    before, its first rows stayed in the open transaction and the NEXT
+    file's commit saved them, rows of a file whose index step had failed."""
+    store = KeywordStore(workdir / "rollback.db")
+    try:
+        store.add_chunks([{"chunk_id": "a", "file_id": "f1", "content": "marmoset orphan row"}, {"chunk_id": "b", "file_id": "f1"}])
+        raise AssertionError("a chunk without content must fail the write")
+    except Exception as e:  # noqa: BLE001 - sqlite reports the missing binding
+        assert not isinstance(e, AssertionError), e
+    store.add_chunks([{"chunk_id": "c", "file_id": "f2", "content": "unrelated heron notes"}])
+    assert store.search("marmoset orphan") == [], "rows of a failed write were committed by the next one"
+    assert store.search("heron")[0]["file_id"] == "f2"
+    store.close()
+    print("11. A keyword write that fails half-way is rolled back; the next file's commit saves only its own rows: OK")
 
 
 if __name__ == "__main__":

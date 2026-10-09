@@ -26,7 +26,11 @@ class _TextCollector(HTMLParser):
         self._skip_depth = 0
 
     def handle_starttag(self, tag, attrs):
-        if tag in _SKIPPED:
+        if tag == "body":
+            # (2026-10-05) A <head> never closed hid the whole page; the
+            # body starts here whatever was left open before it.
+            self._skip_depth = 0
+        elif tag in _SKIPPED:
             self._skip_depth += 1
         elif tag in _BLOCK:
             self._parts.append("\n")
@@ -45,13 +49,19 @@ class _TextCollector(HTMLParser):
         return "".join(self._parts)
 
 
+def html_to_text(raw: str) -> str:
+    """Visible text of an HTML document (also e-book chapters and HTML
+    e-mail bodies, 2026-10-05)."""
+    collector = _TextCollector()
+    collector.feed(raw)
+    collector.close()
+    return collector.text().strip()
+
+
 def extract_html(path: Path) -> list[ExtractedBlock]:
     try:
         raw = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         raw = path.read_text(encoding="latin-1")
-    collector = _TextCollector()
-    collector.feed(raw)
-    collector.close()
-    text = collector.text().strip()
+    text = html_to_text(raw)
     return [ExtractedBlock(text=text)] if text else []

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { describeError, formatAgo, getRecommendations, listEvents, Recommendation, RouteReport, search, SearchResult, suggest } from "../backend";
+import { describeError, engineUnreachable, formatAgo, getRecommendations, listEvents, Recommendation, RouteReport, search, SearchResult, suggest } from "../backend";
 import { useVoice } from "../hooks/useVoice";
 import { FILE_MANAGER, MOD_KEY } from "../platform";
 import { Omnibox } from "../ui/Omnibox";
-import { FileIcon, PageHeader, shortPlace } from "../ui/kit";
+import { FileIcon, LoadFailed, PageHeader, shortPlace } from "../ui/kit";
 import { Highlighted, openResult, revealResult } from "../ui/ResultCard";
 import { SearchPreview } from "../ui/SearchPreview";
 import { recordEvent } from "../backend";
@@ -131,6 +131,7 @@ function ResultRow({ r, index, selected, onSelect, onOpen }: { r: SearchResult; 
   const weak = r.confidence === "weak";
   return (
     <div
+      id={`result-${index}`}
       role="option"
       aria-selected={selected}
       data-index={index}
@@ -141,14 +142,14 @@ function ResultRow({ r, index, selected, onSelect, onOpen }: { r: SearchResult; 
       <FileIcon filename={r.filename} />
       <div className="min-w-0 flex-1">
         <div className={`truncate text-[14px] ${weak ? "font-medium text-ink/85" : "font-semibold"}`}>{r.filename}</div>
-        {r.path && <div className="truncate text-[12px] text-ink/60" title={r.path}>{shortPlace(r.path)}</div>}
+        {r.path && <div className="truncate text-[12px] text-ink/65" title={r.path}>{shortPlace(r.path)}</div>}
         {r.matched_chunk && <div className="mt-1 line-clamp-1 text-[13px] text-ink/80"><Highlighted text={r.matched_chunk} /></div>}
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {r.why.slice(0, 2).map((w) => (
             <span key={w} className={`chip max-w-[260px] truncate ${PERSONAL_PREFIXES.some((p) => w.startsWith(p)) ? "chip-personal" : ""}`}>{w}</span>
           ))}
           <span className={`chip ${weak ? "" : "chip-accent"}`}>{weak ? "Weaker match" : "Strong match"}</span>
-          <span className="ml-auto text-[12px] text-ink/55">Modified {formatAgo(r.modified_time)}</span>
+          <span className="ml-auto text-[12px] text-ink/65">Modified {formatAgo(r.modified_time)}</span>
         </div>
       </div>
     </div>
@@ -159,6 +160,9 @@ function ResultRow({ r, index, selected, onSelect, onOpen }: { r: SearchResult; 
 function SearchHome({ onRun, onSeeAll, onError }: { onRun: (q: string) => void; onSeeAll: () => void; onError: (m: string) => void }) {
   const [recent, setRecent] = useState<string[] | null>(null);
   const [picks, setPicks] = useState<Recommendation[]>([]);
+  // A section whose call the engine refused says so; an engine that is down is the sidebar's to report.
+  const [recentFailed, setRecentFailed] = useState(false);
+  const [picksFailed, setPicksFailed] = useState(false);
   useEffect(() => {
     listEvents(200).then((r) => {
       const seen: string[] = [];
@@ -169,15 +173,21 @@ function SearchHome({ onRun, onSeeAll, onError }: { onRun: (q: string) => void; 
         if (seen.length === 6) break;
       }
       setRecent(seen);
-    }).catch(() => setRecent([]));
+    }).catch((e) => { setRecent([]); setRecentFailed(!engineUnreachable(e)); });
     getRecommendations().then((r) => {
       if (!r.enabled) return;
       const all = [...r.likely_next, ...r.usual_now, ...r.recent];
       setPicks(all.filter((x, i) => all.findIndex((y) => y.file_id === x.file_id) === i).slice(0, 4));
-    }).catch(() => { /* nothing to show */ });
+    }).catch((e) => setPicksFailed(!engineUnreachable(e)));
   }, []);
   return (
     <div className="space-y-6">
+      {recentFailed && (
+        <section>
+          <h2 className="text-[15px] font-semibold">Recent searches</h2>
+          <div className="mt-2"><LoadFailed what="your recent searches" /></div>
+        </section>
+      )}
       {recent && recent.length > 0 && (
         <section>
           <h2 className="text-[15px] font-semibold">Recent searches</h2>
@@ -186,6 +196,12 @@ function SearchHome({ onRun, onSeeAll, onError }: { onRun: (q: string) => void; 
               <button key={q} className="btn-secondary max-w-[260px] truncate px-3 py-1.5 text-[13px]" onClick={() => onRun(q)}>{q}</button>
             ))}
           </div>
+        </section>
+      )}
+      {picksFailed && (
+        <section>
+          <h2 className="text-[15px] font-semibold">For You</h2>
+          <div className="mt-2"><LoadFailed what="files picked for you" /></div>
         </section>
       )}
       {picks.length > 0 && (
@@ -204,9 +220,9 @@ function SearchHome({ onRun, onSeeAll, onError }: { onRun: (q: string) => void; 
                   <FileIcon filename={r.filename} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[14px] font-medium">{r.filename}</span>
-                    <span className="block truncate text-[12px] text-ink/60">{shortPlace(r.path)}</span>
+                    <span className="block truncate text-[12px] text-ink/65">{shortPlace(r.path)}</span>
                   </span>
-                  <span className="max-w-[45%] shrink-0 truncate text-right text-[12px] text-ink/60">{r.reason}</span>
+                  <span className="max-w-[45%] shrink-0 truncate text-right text-[12px] text-ink/65">{r.reason}</span>
                 </button>
               </li>
             ))}
@@ -221,7 +237,7 @@ function SearchHome({ onRun, onSeeAll, onError }: { onRun: (q: string) => void; 
               <li key={ex.q} className="border-b border-rule last:border-b-0">
                 <button className="flex w-full items-baseline gap-3 px-4 py-2 text-left hover:bg-ink/[0.03]" onClick={() => onRun(ex.q)}>
                   <span className="mono text-[13px] text-ink">{ex.q}</span>
-                  <span className="ml-auto shrink-0 text-[12px] text-ink/60">{ex.why}</span>
+                  <span className="ml-auto shrink-0 text-[12px] text-ink/65">{ex.why}</span>
                 </button>
               </li>
             ))}
@@ -235,9 +251,10 @@ function SearchHome({ onRun, onSeeAll, onError }: { onRun: (q: string) => void; 
 // ---- the page ----
 
 const EXAMPLES = [
-  { q: "notes about the project deadline", why: "describe what it is about" },
-  { q: "type:pdf after:2026-01-01 invoice", why: "narrow by type and date" },
-  { q: "? when is the rent due", why: "ask a question, answered from your files" },
+  // Each one is answered by the sample folder (checked against src-tauri/resources/sample-folder).
+  { q: "notes about adding servers when traffic grows", why: "describe what it is about" },
+  { q: "type:txt in:invoices euros", why: "narrow by type and folder" },
+  { q: "? when is the march invoice due and how much", why: "ask a question, answered from your files" },
 ];
 
 interface Props {
@@ -391,6 +408,8 @@ export function SearchPage({ active, folderCount, fileCount, onError, onAsk, onS
           onSubmit={submit}
           onEscape={clear}
           onArrow={move}
+          listId={total > 0 ? "search-results" : undefined}
+          activeId={total > 0 && current ? `result-${selected}` : undefined}
           placeholder="Search files, or ask a question with ?"
           searching={searching}
           voice={voice}
@@ -446,7 +465,7 @@ export function SearchPage({ active, folderCount, fileCount, onError, onAsk, onS
           </div>
         </div>
         {tokens.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 pb-2 text-[12px] text-ink/60">
+          <div className="flex flex-wrap items-center gap-1.5 pb-2 text-[12px] text-ink/65">
             Filtered by {tokens.map((t) => <span key={t} className="mono chip">{t}</span>)}
           </div>
         )}
@@ -463,6 +482,7 @@ export function SearchPage({ active, folderCount, fileCount, onError, onAsk, onS
             {failure && (
               <div role="alert" className="rounded-md border border-error/40 bg-error-soft px-3 py-2.5 text-[13px] text-error">
                 {failure} Your search is kept: press Enter to try again.
+                <button className="btn-secondary ml-2 px-2 py-0.5 text-[12px]" onClick={() => runSearch(query, tokens)}>Retry</button>
               </div>
             )}
 
@@ -476,6 +496,11 @@ export function SearchPage({ active, folderCount, fileCount, onError, onAsk, onS
             {results && total === 0 && !failure && (
               <div className="py-10">
                 <p className="text-[15px] font-semibold">Nothing on this computer matches "{[lastQuery, ...tokens].join(" ").trim()}".</p>
+                {route?.unrecognized && route.unrecognized.length > 0 && (
+                  <p className="mt-1 text-[13px] text-ink/80">
+                    Check the spelling of {route.unrecognized.map((w, i) => <span key={w}>{i > 0 && ", "}<i className="text-accent">“{w}”</i></span>)}: no file uses {route.unrecognized.length === 1 ? "that word" : "those words"}.
+                  </p>
+                )}
                 <p className="mt-1 text-[13px] text-ink/70">
                   Checked file contents, spoken audio and file names in {folderCount} folder{folderCount === 1 ? "" : "s"} ({fileCount.toLocaleString()} files).
                   {tokens.length > 0 && " Removing a filter may help."}
@@ -484,7 +509,7 @@ export function SearchPage({ active, folderCount, fileCount, onError, onAsk, onS
             )}
 
             {total > 0 && (
-              <div role="listbox" aria-label="Search results">
+              <div id="search-results" role="listbox" aria-label="Search results">
                 {strong.length === 0 && (
                   <p className="mb-2 text-[13px] text-ink/75"><b className="font-medium text-ink">No confident match.</b> The files below are only loosely related.</p>
                 )}
@@ -514,7 +539,7 @@ export function SearchPage({ active, folderCount, fileCount, onError, onAsk, onS
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-4 border-t border-rule px-5 py-2 text-[12px] text-ink/60">
+          <div className="flex shrink-0 items-center gap-4 border-t border-rule px-5 py-2 text-[12px] text-ink/65">
             <span><span className="kbd">Up</span> <span className="kbd">Down</span> move</span>
             <span><span className="kbd">Enter</span> open</span>
             <span><span className="kbd">{MOD_KEY}+Enter</span> show in {FILE_MANAGER}</span>

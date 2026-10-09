@@ -80,7 +80,10 @@ def main() -> int:
 
     # log_config=None: uvicorn's loggers propagate to the root logger the app
     # configures, so requests and errors reach <app data>/logs/backend.log too.
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info", log_config=None)
+    # access_log=False (2026-10-05): the access log wrote every request URL,
+    # i.e. what the user searched or asked and the paths of their files, to
+    # backend.log — the file we ask people to send when something breaks.
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info", log_config=None, access_log=False)
     return 0
 
 

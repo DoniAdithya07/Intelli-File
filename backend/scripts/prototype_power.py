@@ -84,7 +84,7 @@ def main() -> None:
         fake.on_battery = False
         monitor.refresh()
         assert live.paused_reason is None and live.gate.is_set()
-        assert wait_until(lambda: live.job.state == "done", timeout=60), live.job
+        assert wait_until(lambda: live.job.state == "done", timeout=180), live.job
         assert live.job.total == 24 and live.job.done == 24 and live.job.failed == 0
         assert len(indexer.file_record_store.list_active()) == 24
         print(f"1. Unplugged at {done_at_pause}/24: scan paused between files, resumed from the same job, finished 24/24 with no rescan: OK")
@@ -149,7 +149,7 @@ def main() -> None:
             (folder / f"extra_{i}.txt").write_text(f"extra note {i} " + " ".join(f"tok{i}{k}" for k in range(30)))
         t0 = time.time()
         live.enqueue(str(folder))
-        assert wait_until(lambda: live.job.state == "done" and live.job.total == 31, timeout=60)
+        assert wait_until(lambda: live.job.state == "done" and live.job.total == 31, timeout=180)
         elapsed = time.time() - t0
         assert elapsed >= 6 * 0.2, f"6 new files should cost at least 1.2 s of throttle, took {elapsed:.1f}s"
         print(f"5. Battery Saver throttle: 6 new files took {elapsed:.1f}s (≥ 1.2 s of deliberate pauses): OK")

@@ -1,6 +1,8 @@
 # Dev/test-only dependencies — used to generate test fixtures (e.g. real
 # PDFs for extraction tests). Never bundled into the shipped app.
 -r requirements.txt
-fpdf2
-pyflakes
-requests
+fpdf2==2.8.8
+pyflakes==4.0.0
+requests==2.34.2
+# Writes the test .heic files (prototype_more_formats.py, check_features.py); the app only reads HEIC, with pi-heif. Excluded from the bundle in the .spec (GPL x265 inside).
+pillow-heif==1.8.0

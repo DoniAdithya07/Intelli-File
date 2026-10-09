@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { checkBackendHealth } from "./backend";
+import { backendProblem, checkBackendHealth, setEngineStopped, shortcutOk } from "./backend";
 import { useStatus } from "./hooks/useStatus";
 import { AskPage } from "./pages/AskPage";
 import { ActivityPage } from "./pages/ActivityPage";
@@ -26,24 +26,40 @@ function App() {
   const [appDataDir, setAppDataDir] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { status, error: statusError, refresh } = useStatus();
+  // Why the engine is down, from the desktop shell (port taken, crashed, would not start).
+  const [problem, setProblem] = useState<string | null>(null);
+  const [shortcut, setShortcut] = useState<boolean | null>(null);
+  const [dismissedProblems, setDismissedProblems] = useState(false);
+  useEffect(() => { shortcutOk().then(setShortcut); }, []);
+  // A page's error belongs to that page.
+  useEffect(() => { setError(null); }, [tab]);
 
-  // Poll until the backend answers — a one-shot check left this at
-  // "disconnected" forever if the backend came up after the window (2026-09-11 audit).
+  // Keep checking /health: every 2 s until the engine answers (a one-shot
+  // check stayed "disconnected" forever, 2026-09-11 audit), then every 5 s,
+  // so an engine that crashes later shows as stopped instead of "Works offline".
   useEffect(() => {
     let cancelled = false;
     let timer: number | undefined;
+    let wasConnected = false;
+    let misses = 0; // consecutive failed probes once connected: one miss is a blip, not a crash
     const probe = async () => {
-      try {
-        const h = await checkBackendHealth();
-        if (cancelled) return;
-        setBackendStatus("connected");
-        setAppDataDir(h.app_data_dir);
-      } catch {
-        if (!cancelled) {
-          setBackendStatus(Date.now() - launchedAt.current < 90_000 ? "checking" : "disconnected");
-          timer = window.setTimeout(probe, 2000);
-        }
+      const why = await backendProblem();
+      let ok = false;
+      if (!why) {
+        try {
+          const h = await checkBackendHealth();
+          ok = true;
+          if (!cancelled) setAppDataDir(h.app_data_dir);
+        } catch { /* not up, or gone */ }
       }
+      if (cancelled) return;
+      wasConnected ||= ok;
+      misses = ok ? 0 : misses + 1;
+      setProblem(why);
+      const next = ok ? "connected" : why || (wasConnected && misses >= 2) || Date.now() - launchedAt.current >= 90_000 ? "disconnected" : wasConnected ? "connected" : "checking";
+      setEngineStopped(next === "disconnected"); // pages word a failed request the same way as the sidebar
+      setBackendStatus(next);
+      timer = window.setTimeout(probe, ok ? 5000 : 2000);
     };
     probe();
     return () => {
@@ -65,18 +81,29 @@ function App() {
   const videoCount = status?.totals.videos ?? 0;
 
   return (
-    <AppShell tab={tab} onTab={setTab} backendStatus={backendStatus} fileCount={status ? status.totals.files : null} error={error ?? statusError} onDismissError={() => setError(null)}>
+    <AppShell
+      tab={tab}
+      onTab={setTab}
+      backendStatus={backendStatus}
+      backendProblem={backendStatus === "disconnected" ? problem : null}
+      shortcutOk={shortcut !== false}
+      notices={dismissedProblems || backendStatus !== "connected" ? [] : status?.startup_problems ?? []}
+      onDismissNotices={() => setDismissedProblems(true)}
+      fileCount={status ? status.totals.files : null}
+      error={error ?? statusError}
+      onDismissError={() => setError(null)}
+    >
       {/* Search stays mounted so its results survive a visit to another page. */}
       <div className={tab === "search" ? "anim-page h-full" : "hidden"}>
         <SearchPage active={tab === "search"} folderCount={folderCount} fileCount={fileCount} onError={setError} onAsk={onAsk} onSeeAll={() => setTab("foryou")} />
       </div>
       {/* Ask stays mounted too: its session list survives, and a hand-over is answered only once. */}
       <div className={tab === "ask" ? "anim-page h-full overflow-hidden px-6 py-5" : "hidden"}>
-        <AskPage request={askQuestion} onError={setError} />
+        <AskPage request={askQuestion} active={tab === "ask"} onError={setError} />
       </div>
       {tab !== "search" && tab !== "ask" && (
         <div key={tab} className="anim-page h-full overflow-hidden px-6 py-5">
-          {tab === "photos" && <PhotosPage photoCount={photoCount} videoCount={videoCount} onError={setError} />}
+          {tab === "photos" && <PhotosPage photoCount={photoCount} videoCount={videoCount} available={status?.features?.photos_videos !== false} onError={setError} />}
           {tab === "foryou" && <ForYouPage onError={setError} onSettings={() => setTab("settings")} />}
           {tab === "activity" && <ActivityPage onError={setError} />}
           {tab === "index" && <IndexPage status={status} onError={setError} refresh={refresh} />}

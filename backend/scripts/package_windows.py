@@ -37,7 +37,9 @@ OLD_ZIPS = ["IntelliFile-part1.zip", "IntelliFile-part2.zip"]  # the two-part do
 LLM_DIR = Path("models") / "llm"  # relative to APP_DIR
 GITHUB_ASSET_LIMIT = 2 * 1024**3
 RESOURCES = ["backend", "models", "data", "sample-folder", "HOW_TO_RUN.md"]
-LEGAL_FILES = ["LICENSE", "THIRD_PARTY_NOTICES.md", "PRIVACY.md", "TERMS.md"]  # from the repository root
+# From the repository root. licenses/ holds the GPL/LGPL texts that the
+# bundled FFmpeg (with GPL x264/x265), libheif and the GCC runtime require.
+LEGAL_FILES = ["LICENSE", "licenses"]
 # Only files that are already compressed are stored. Native libraries and
 # ONNX models were stored too until 2026-09-27; deflated, _lancedb.pyd goes
 # from 327 to 103 MB and the download shrinks by about 650 MB in total, with
@@ -62,7 +64,10 @@ def main() -> int:
     APP_DIR.mkdir()
     shutil.copy2(exe, APP_DIR / exe.name)
     for name in LEGAL_FILES:  # the licence and policies travel with the app
-        shutil.copy2(ROOT / name, APP_DIR / name)
+        if (ROOT / name).is_dir():
+            shutil.copytree(ROOT / name, APP_DIR / name)
+        else:
+            shutil.copy2(ROOT / name, APP_DIR / name)
     for name in RESOURCES:
         src = RELEASE / name
         if name == "models":  # only the shipped models, never a stale one left in the release folder

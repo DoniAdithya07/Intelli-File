@@ -22,13 +22,17 @@ Every step is emitted as an event so the UI can show the trace.
 """
 
 import json
+import logging
 import re
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from .library import library_answer
+from .llm import CONTEXT_TOKENS
 from .tools import Toolbox
+
+logger = logging.getLogger(__name__)
 
 MAX_TOOL_CALLS = 4
 BUDGET_SECONDS = 25.0
@@ -39,13 +43,59 @@ ANSWER_MAX_SOURCES = 6            # sources the answering model reads (strong ma
 ANSWER_SOURCE_CHARS = 700         # per source, normally (= SNIPPET_CHARS)
 ANSWER_SOURCE_CHARS_TIGHT = 350   # per source when little time is left
 ANSWER_TIGHT_SECONDS = 22.0       # "little time left": under this many seconds before the 2 x budget cap
+# Speed-aware limits (2026-10-04, "Ask is not working at all" on a slower
+# laptop). With a model that reports its measured speed (LocalLLM.
+# estimate_seconds), a planning turn runs only if the answer still fits
+# after it, and the answer reads only as many source characters as this
+# computer can read before the cap. Typical sizes: a plan is 40-80 tokens,
+# an answer 15-40.
+PLAN_EST_TOKENS = 60
+ANSWER_EST_TOKENS = 40
+# A first planning turn estimated to take longer than this is skipped when
+# the first look already found strong matches: on a fast laptop a turn is
+# 3-6 s and the model may still refine; on a slow one it was 15-25 s, mostly
+# to say "answer" (measured 2026-10-04).
+SLOW_PLAN_SECONDS = 12.0
+# (sources, characters per source) the answer may read, largest first.
+ANSWER_SIZES = ((ANSWER_MAX_SOURCES, ANSWER_SOURCE_CHARS), (ANSWER_MAX_SOURCES, ANSWER_SOURCE_CHARS_TIGHT),
+                (ANSWER_MAX_SOURCES // 2, ANSWER_SOURCE_CHARS_TIGHT), (2, 250), (1, 250))
+# An answer that has started is finished, not cut at the cap and then
+# rejected as ungrounded: past the cap it may write this many more tokens,
+# and stops at the first sentence end once it has cited a source.
+ANSWER_GRACE_TOKENS = 48
+_ANSWER_END_RE = re.compile(r"(\[\d{1,2}\]\s*[.!?]?|[.!?])\s*$")
+# The context window (llm.CONTEXT_TOKENS) holds the prompt AND the reply.
+# Each search adds its results to the planning prompt, and with long
+# passages the fourth planning turn or a six-source answer passed 4,096
+# tokens: llama.cpp raised "Requested tokens exceed context window" and Ask
+# ended in an error (2026-10-04). Before every model call the prompt is
+# measured with the model's own tokenizer and shrunk to leave room for the
+# reply plus this margin. MESSAGE_OVERHEAD_TOKENS covers the chat template's
+# role markers around each message.
+CONTEXT_MARGIN_TOKENS = 64
+MESSAGE_OVERHEAD_TOKENS = 6
 
 
-def _answer_sources(sources: list, remaining_seconds: float) -> list:
+def _prompt_tokens(llm, messages: list[dict]) -> int | None:
+    """Prompt size in the model's tokens; None for a model without a
+    tokenizer (the scripted stand-ins in the tests)."""
+    tokenize = getattr(llm, "tokenize", None)
+    if tokenize is None:
+        return None
+    return sum(len(tokenize(m["content"])) + MESSAGE_OVERHEAD_TOKENS for m in messages) + MESSAGE_OVERHEAD_TOKENS
+
+
+def _fits(llm, messages: list[dict], reply_tokens: int) -> bool:
+    used = _prompt_tokens(llm, messages)
+    return used is None or used + reply_tokens + CONTEXT_MARGIN_TOKENS <= getattr(llm, "n_ctx", CONTEXT_TOKENS)
+
+
+def _answer_sources(sources: list, remaining_seconds: float, limit: int | None = None) -> list:
     """The sources the answer is written from: strong matches before weak
     ones, in the order they were found, at most ANSWER_MAX_SOURCES, and
-    half as many when time is short."""
-    limit = ANSWER_MAX_SOURCES if remaining_seconds > ANSWER_TIGHT_SECONDS else ANSWER_MAX_SOURCES // 2
+    half as many when time is short (or `limit`)."""
+    if limit is None:
+        limit = ANSWER_MAX_SOURCES if remaining_seconds > ANSWER_TIGHT_SECONDS else ANSWER_MAX_SOURCES // 2
     ranked = sorted(sources, key=lambda s: (s.confidence != "strong", s.number))
     return sorted(ranked[:limit], key=lambda s: s.number)
 
@@ -91,8 +141,47 @@ class Agent:
             return True
         try:
             return self.llm.chat(messages, max_tokens=3, deadline=deadline).strip().lower().startswith("yes")
-        except Exception:  # noqa: BLE001 — a judge failure must never block an answer
+        except Exception:  # noqa: BLE001 — a judge failure must never block an answer...
+            # ...but it must not pass silently either (2026-10-05: it was
+            # swallowed and counted as "yes"). Logged, and run() tells the
+            # user the check could not run (PREMISE_UNCHECKED_WARNING).
+            logger.warning("premise judge failed on %r; the answer is kept unverified", word, exc_info=True)
+            self._judge_failed = True
             return True
+
+    def _answer_messages(self, question: str, tools: Toolbox, remaining: float) -> tuple[list[dict], set[int]]:
+        """The answer prompt, and the source numbers it shows. With a measured
+        speed: the largest of ANSWER_SIZES this computer can read and answer
+        in `remaining` seconds (the smallest if none fits). Without one: the
+        fixed rule, shorter passages when little time is left. Either way a
+        smaller size is taken while the prompt would not fit the context
+        window with the answer (see CONTEXT_MARGIN_TOKENS)."""
+        estimate = getattr(self.llm, "estimate_seconds", None)
+        if estimate is None:
+            tight = remaining <= ANSWER_TIGHT_SECONDS
+            fixed = (ANSWER_MAX_SOURCES // 2 if tight else ANSWER_MAX_SOURCES, ANSWER_SOURCE_CHARS_TIGHT if tight else ANSWER_SOURCE_CHARS)
+            sizes = [fixed] + [size for size in ANSWER_SIZES if size[0] * size[1] < fixed[0] * fixed[1]]
+        else:
+            sizes = ANSWER_SIZES
+        for count, chars in sizes:
+            shown = _answer_sources(tools.sources, remaining, limit=count)
+            messages = [
+                {"role": "system", "content": ANSWER_SYSTEM},
+                {"role": "user", "content": f"Question: {question}\n\nSources:\n{tools.render(shown, chars)}\n\nAnswer with citations:"},
+            ]
+            if (estimate is None or estimate(messages, ANSWER_EST_TOKENS) <= remaining) and _fits(self.llm, messages, MAX_ANSWER_TOKENS):
+                break
+        return messages, {s.number for s in shown}
+
+    def _answer_reserve(self, question: str, tools: Toolbox) -> float:
+        """Seconds to keep for the answer: the estimate for a mid-size answer
+        prompt (0 when nothing was found: no answer turn runs then)."""
+        estimate = getattr(self.llm, "estimate_seconds", None)
+        if estimate is None or not tools.sources:
+            return 0.0
+        count, chars = ANSWER_SIZES[2]
+        shown = _answer_sources(tools.sources, 0, limit=count)
+        return estimate([{"role": "system", "content": ANSWER_SYSTEM}, {"role": "user", "content": f"Question: {question}\n\nSources:\n{tools.render(shown, chars)}"}], ANSWER_EST_TOKENS)
 
     def run(self, question: str) -> Iterator[dict]:
         """Yields trace events: {"type": ...}. Types: context, thought,
@@ -152,6 +241,33 @@ class Agent:
                 reason = "tool-call limit reached" if calls >= self.max_tool_calls else "time budget reached" if elapsed > self.budget_seconds else "planning limit reached"
                 yield {"type": "thought", "text": f"{reason}, answering with what was found.", "system": True}
                 break
+            # Keep the planning prompt inside the context window: drop the
+            # oldest search round (its plan + its results). Its sources stay
+            # in the toolbox, so the answer can still use and cite them.
+            dropped = 0
+            while len(messages) > 2 and not _fits(self.llm, messages, MAX_PLAN_TOKENS):
+                del messages[2:4]
+                dropped += 1
+            if dropped:
+                yield {"type": "thought", "text": f"the planning prompt outgrew the model's context window, so the oldest search results ({dropped} round{'s' if dropped != 1 else ''}) were left out of it; the answer still reads them.", "system": True}
+            if not _fits(self.llm, messages, MAX_PLAN_TOKENS):
+                yield {"type": "thought", "text": "the question is too long to plan with, answering with what was found.", "system": True}
+                break
+            # On a slow or busy computer one planning turn can take 15-30 s
+            # (measured 2026-10-04). Plan only if the answer still fits
+            # inside the hard cap afterwards, by this computer's measured speed.
+            estimate = getattr(self.llm, "estimate_seconds", None)
+            reserve = self._answer_reserve(question, tools)
+            plan_deadline = t_start + self.budget_seconds * PLAN_DEADLINE_FACTOR
+            if estimate is not None:
+                plan_seconds = estimate(messages, PLAN_EST_TOKENS)
+                if turns == 0 and plan_seconds > SLOW_PLAN_SECONDS and any(s.confidence == "strong" for s in first_found):
+                    yield {"type": "thought", "text": "this computer is slow and the first search found strong matches, so they are answered from directly.", "system": True}
+                    break
+                if elapsed + plan_seconds + reserve > self.budget_seconds * 2:
+                    yield {"type": "thought", "text": "another planning turn would not leave time for the answer on this computer, answering with what was found.", "system": True}
+                    break
+                plan_deadline = min(plan_deadline, self._hard_deadline - reserve)
             turns += 1
             t0 = time.perf_counter()
             try:
@@ -163,7 +279,7 @@ class Agent:
                 # turn 3-4x slower (9.1 s vs 2.0 s, 4.3 s vs 1.3 s) for the
                 # same action and valid JSON every time; _parse_plan tolerates
                 # stray text and anything unparseable means "answer now".
-                raw = self.llm.chat(messages, max_tokens=MAX_PLAN_TOKENS, json_only=False, deadline=t_start + self.budget_seconds * PLAN_DEADLINE_FACTOR, label="plan")
+                raw = self.llm.chat(messages, max_tokens=MAX_PLAN_TOKENS, json_only=False, deadline=plan_deadline, label="plan")
             except Exception as e:  # the model failing must surface, not hang the UI
                 yield {"type": "error", "message": f"The local model failed: {type(e).__name__}: {e}"}
                 return
@@ -247,22 +363,31 @@ class Agent:
         # cap (56.3 s and 51.7 s, 2026-09-27). So the answer gets the best
         # sources only, strong matches first, and shorter passages when
         # little time is left.
+        # With a measured speed, the prompt is sized so this computer can read
+        # it and answer before the cap (_answer_messages).
         remaining = self.budget_seconds * 2 - (time.perf_counter() - t_start)
-        shown = _answer_sources(tools.sources, remaining)
-        shown_numbers = {s.number for s in shown}
-        chars = ANSWER_SOURCE_CHARS if remaining > ANSWER_TIGHT_SECONDS else ANSWER_SOURCE_CHARS_TIGHT
-        answer_messages = [
-            {"role": "system", "content": ANSWER_SYSTEM},
-            {"role": "user", "content": f"Question: {question}\n\nSources:\n{tools.render(shown, chars)}\n\nAnswer with citations:"},
-        ]
+        answer_messages, shown_numbers = self._answer_messages(question, tools, remaining)
+        if not _fits(self.llm, answer_messages, MAX_ANSWER_TOKENS):
+            # Even one short source does not fit: the question itself fills the window.
+            yield {"type": "error", "message": "The question is too long for the local language model. Please ask it in fewer words."}
+            return
         yield {"type": "answer_start"}
         pieces: list[str] = []
+        past_cap = 0
         try:
             for token in self.llm.stream(answer_messages, max_tokens=MAX_ANSWER_TOKENS):
                 pieces.append(token)
                 yield {"type": "token", "text": token}
-                if time.perf_counter() - t_start > self.budget_seconds * 2:
-                    break
+                if time.perf_counter() > self._hard_deadline:
+                    # Reading the prompt cannot be interrupted, so the first
+                    # token may itself arrive past the cap. Cutting there left
+                    # 1-3 tokens that grounding rejected: "I couldn't find
+                    # that" with the answer in the sources (slow laptop,
+                    # 2026-10-04). Finish the sentence instead, bounded.
+                    past_cap += 1
+                    so_far = "".join(pieces).rstrip()
+                    if past_cap >= ANSWER_GRACE_TOKENS or (_ANSWER_END_RE.search(so_far) and _CITATION_RE.search(so_far)):
+                        break
         except Exception as e:
             yield {"type": "error", "message": f"The local model failed while answering: {type(e).__name__}: {e}"}
             return
@@ -304,6 +429,7 @@ class Agent:
         # in a cited source in some form, and a distinctive question word
         # that the answer repeats but no cited source contains means the
         # answer restated the question's premise as fact.
+        self._judge_failed = False
         if grounded:
             seen = [s for s in tools.sources if s.number not in valid]  # retrieved but not cited, cited ones first
             problem = _unsupported_premise(question, body, [tools.get(n) for n in valid], judge=self._mentions, retrieved=seen)
@@ -317,9 +443,24 @@ class Agent:
         # word matched). Every figure in the answer must appear in a cited
         # source; otherwise the answer is shown with a warning, not as fact.
         warnings = []
+        if grounded and self._judge_failed:
+            warnings.append(PREMISE_UNCHECKED_WARNING)
         if grounded:
             missing = _unverified_numbers(body, [tools.get(n) for n in valid])
-            if missing:
+            # When EVERY figure of the answer is unverified, the figure is the
+            # answer: a warning under it is not enough. Found 2026-10-05 on the
+            # built-in example "when is the rent due": "The rent is due on
+            # February 14th." came back grounded with the 14 flagged — the
+            # words matched a rent line, the date was invented. Such an answer
+            # is "not found"; one wrong figure among right ones is flagged.
+            # Only for dates and amounts (a figure of 2+ digits): a small
+            # count such as "5 invoices" can be right without the digit
+            # appearing in any snippet (code review 2026-10-06).
+            if missing and len(missing) == len(set(_NUMBER_RE.findall(body))) and any(sum(c.isdigit() for c in m) >= 2 for m in missing):
+                yield {"type": "thought", "text": f"the answer's figure(s) {', '.join(missing)} are in none of the cited sources, so no answer is given", "system": True}
+                text = "I couldn't find that in your files."
+                grounded, valid, not_found, warnings, citations = False, [], True, [], []
+            elif missing:
                 warnings.append(f"Not in the cited sources, check before relying on it: {', '.join(missing)}")
                 yield {"type": "thought", "text": f"figure(s) {', '.join(missing)} in the answer are not in the cited sources, flagged", "system": True}
         yield {"type": "answer", "text": text, "citations": citations, "grounded": grounded, "citations_inferred": inferred, "warnings": warnings}
@@ -412,6 +553,7 @@ _PREMISE_FILLER = _GROUND_STOPWORDS | {
 PREMISE_JUDGE_MAX_WORDS = 3
 PREMISE_JUDGE_CHARS = 900
 PREMISE_JUDGE_MAX_SOURCES = 4
+PREMISE_UNCHECKED_WARNING = "The premise check could not run; check the answer against the sources"
 
 
 _IRREGULAR_FORMS = {
@@ -590,17 +732,42 @@ def _quick_answer(question: str, found: list) -> tuple[str, object] | None:
     return choice
 
 
-def _parse_plan(raw: str) -> dict:
-    """The model is asked for one JSON object; be tolerant of stray text."""
-    raw = raw.strip()
+def _json_object(text: str) -> dict | None:
     try:
-        return json.loads(raw)
-    except ValueError:
-        pass
-    match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except ValueError:
-            pass
-    return {"action": "answer", "thought": "", "malformed": True}
+        value = json.loads(text)
+    except (ValueError, RecursionError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _as_text(value) -> str:
+    """A plan field as text: a list becomes its words, an object or null nothing."""
+    if isinstance(value, list):
+        return " ".join(_as_text(v) for v in value).strip()
+    if value is None or isinstance(value, dict):
+        return ""
+    return str(value)
+
+
+def _parse_plan(raw: str) -> dict:
+    """The model is asked for one JSON object; be tolerant of stray text.
+    Only an object is a plan, and its fields are coerced to what the loop
+    expects (2026-10-04): JSON that parsed to a list or a number, a query
+    written as a list and a source written as "[2]" each raised inside the
+    loop and ended Ask with a server error. A read_more whose source holds
+    no number is malformed, like anything unparseable: answer now."""
+    raw = raw.strip()
+    plan = _json_object(raw)
+    if plan is None:
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        plan = _json_object(match.group(0)) if match else None
+    malformed = {"action": "answer", "thought": "", "malformed": True}
+    if plan is None:
+        return malformed
+    for key in ("thought", "query", "filters"):
+        plan[key] = _as_text(plan.get(key))
+    number = re.search(r"\d+", _as_text(plan.get("source")))
+    plan["source"] = int(number.group(0)) if number else None
+    if plan["source"] is None and _ACTION_ALIASES.get(str(plan.get("action", "")).strip().lower()) == "read_more":
+        return malformed
+    return plan

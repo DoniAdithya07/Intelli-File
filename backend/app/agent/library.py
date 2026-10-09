@@ -19,8 +19,10 @@ from ..files.discovery import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, TEXT_EXTENSION
 KINDS = {
     "document": (r"documents?|docs?|text files?|notes", "document", "documents", TEXT_EXTENSIONS),
     "pdf": (r"pdfs?|pdf files?", "PDF", "PDFs", {".pdf"}),
-    "spreadsheet": (r"spreadsheets?|excel files?|csv files?", "spreadsheet", "spreadsheets", {".xlsx", ".xlsm", ".csv", ".tsv"}),
-    "presentation": (r"presentations?|slides?|powerpoints?|pptx files?", "presentation", "presentations", {".pptx"}),
+    "spreadsheet": (r"spreadsheets?|excel files?|csv files?", "spreadsheet", "spreadsheets", {".xlsx", ".xlsm", ".xls", ".ods", ".csv", ".tsv"}),
+    "presentation": (r"presentations?|slides?|powerpoints?|pptx files?", "presentation", "presentations", {".pptx", ".ppt", ".odp"}),
+    "email": (r"e-?mails?|saved e-?mails?", "email", "emails", {".eml", ".msg"}),
+    "ebook": (r"e-?books?|epubs?", "e-book", "e-books", {".epub"}),
     "photo": (r"photos?|pictures?|images?|screenshots?|jpgs?|pngs?", "photo", "photos", IMAGE_EXTENSIONS),
     "video": (r"videos?|video files?|movies?|clips?|mp4s?", "video", "videos", VIDEO_EXTENSIONS),
     "audio": (r"audio(?: files?)?|recordings?|voice notes?|songs?|music|mp3s?", "audio file", "audio files", AUDIO_EXTENSIONS),

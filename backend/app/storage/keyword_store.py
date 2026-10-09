@@ -17,6 +17,22 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
 );
 """
 
+# FTS5 columns cannot be indexed, so "DELETE ... WHERE file_id = ?" read
+# every row: re-indexing one file cost a scan of the whole keyword index,
+# and 1,000 new files in a watched folder indexed at 0.6 files/s, slower
+# with each file (2026-10-05). chunk_files maps each FTS row to its file,
+# with an index, so a file's rows are found directly. Filled from the
+# existing rows once, the first time an older index is opened.
+_FILE_MAP = """
+BEGIN;
+CREATE TABLE chunk_files (fts_rowid INTEGER PRIMARY KEY, file_id TEXT NOT NULL);
+CREATE INDEX chunk_files_file ON chunk_files (file_id);
+INSERT INTO chunk_files (fts_rowid, file_id) SELECT rowid, file_id FROM chunks_fts;
+COMMIT;
+"""
+# One transaction: a launch killed mid-fill leaves no table at all, so the
+# next launch fills it again (an empty map would hide old rows from deletes).
+
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 
 
@@ -54,8 +70,13 @@ class KeywordStore:
         self._vocabulary_cache: dict[int, dict[str, int]] = {}
         self.version = 0  # bumped on every write; search caches derived data by it
         self._conn.row_factory = sqlite3.Row
+        # WAL + NORMAL: a commit no longer waits on two fsyncs (one commit per file indexed).
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
         with self._lock:
             self._conn.executescript(_SCHEMA)
+            if self._conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'chunk_files'").fetchone() is None:
+                self._conn.executescript(_FILE_MAP)
             # fts5vocab exposes the index's own vocabulary (every distinct
             # term + how many rows it appears in) — used for typo
             # correction against words that actually appear in the user's
@@ -72,11 +93,18 @@ class KeywordStore:
         with self._lock:
             self._vocabulary_cache.clear()
             self.version += 1
-            self._conn.executemany(
-                "INSERT INTO chunks_fts (chunk_id, file_id, content) VALUES (:chunk_id, :file_id, :content)",
-                chunks,
-            )
-            self._conn.commit()
+            try:
+                for chunk in chunks:
+                    rowid = self._conn.execute(
+                        "INSERT INTO chunks_fts (chunk_id, file_id, content) VALUES (:chunk_id, :file_id, :content)", chunk
+                    ).lastrowid
+                    self._conn.execute("INSERT INTO chunk_files (fts_rowid, file_id) VALUES (?, ?)", (rowid, chunk["file_id"]))
+                self._conn.commit()
+            except BaseException:
+                # (2026-10-05) Rows written before the failure stayed in the
+                # open transaction and the next file's commit saved them.
+                self._conn.rollback()
+                raise
 
     def clear(self) -> None:
         """Drop every chunk (an embedding-model change re-indexes everything)."""
@@ -84,13 +112,15 @@ class KeywordStore:
             self._vocabulary_cache.clear()
             self.version += 1
             self._conn.execute("DELETE FROM chunks_fts")
+            self._conn.execute("DELETE FROM chunk_files")
             self._conn.commit()
 
     def delete_by_file_id(self, file_id: str) -> None:
         with self._lock:
             self._vocabulary_cache.clear()
             self.version += 1
-            self._conn.execute("DELETE FROM chunks_fts WHERE file_id = ?", (file_id,))
+            self._conn.execute("DELETE FROM chunks_fts WHERE rowid IN (SELECT fts_rowid FROM chunk_files WHERE file_id = ?)", (file_id,))
+            self._conn.execute("DELETE FROM chunk_files WHERE file_id = ?", (file_id,))
             self._conn.commit()
 
     def search_terms(self, terms: list[str], top_k: int = 20, require: int | None = None) -> list[dict]:

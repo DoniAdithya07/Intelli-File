@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api"] }
+tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
@@ -27,6 +27,8 @@ tauri-plugin-global-shortcut = "2"
 # A second launch focuses the running window instead of starting a second
 # backend that fails on the port.
 tauri-plugin-single-instance = "2"
+# The operating system random generator, for the API token (already in Cargo.lock).
+getrandom = "0.3"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

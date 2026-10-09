@@ -79,6 +79,77 @@ def main() -> None:
         assert cold["cold_start"] and cold["recent"] and "learning" in cold["recent"][0]["reason"] and not cold["likely_next"]
         print("1. Cold start: profile flagged, ranking untouched, recommendations fall back to recently modified: OK")
 
+        # --- 1b. "Load sample history" (2026-10-04): on a fresh install the
+        # For You page had nothing to show. A made-up, clearly labelled four
+        # weeks of use of the SAMPLE folder fills it; removing it takes out
+        # only those events. Driven through the real routes. ---
+        import os
+        from types import SimpleNamespace
+        from fastapi import HTTPException
+        from app.context import Settings
+        from app.routes.context import delete_sample_history_endpoint, load_sample_history_endpoint, profile_endpoint, recommendations_endpoint
+        settings = Settings(workdir / "config")
+        state = SimpleNamespace(usage_store=usage, profile_builder=builder, settings=settings, indexer=SimpleNamespace(file_record_store=record_store))
+        request = SimpleNamespace(app=SimpleNamespace(state=state))
+        os.environ["INTELLIFILE_SAMPLE_DIR"] = str(workdir / "not indexed")
+        (workdir / "not indexed").mkdir()
+        try:
+            load_sample_history_endpoint(request)
+            raise AssertionError("a sample folder that is not indexed must be refused")
+        except HTTPException as e:
+            assert e.status_code == 409 and "Index the sample folder first" in e.detail, e.detail
+        os.environ["INTELLIFILE_SAMPLE_DIR"] = str(files)
+        usage.record("file_opened", file_id=ids["croissants.txt"], path=str(files / "croissants.txt"))  # the user's own, real event
+        loaded = load_sample_history_endpoint(request)
+        assert loaded["events"] >= COLD_START_EVENTS and usage.count() == loaded["events"] + 1, (loaded, usage.count())
+        profile = profile_endpoint(request)
+        assert profile["sample_history"] is True and not profile["cold_start"], profile
+        recs = recommendations_endpoint(request)
+        assert recs["enabled"] and not recs["cold_start"] and recs["recent"], recs
+        labelled = [e for e in usage.all_events() if e["meta"]]  # the real event carries no meta
+        assert len(labelled) == loaded["events"] and all(e["meta"]["sample"] is True for e in labelled), "every made-up event is labelled"
+        assert load_sample_history_endpoint(request)["events"] == loaded["events"] and usage.count() == loaded["events"] + 1, "loading twice must not double it"
+        removed = delete_sample_history_endpoint(request)
+        assert removed == {"removed": loaded["events"]} and usage.count() == 1 and usage.all_events()[0]["file_id"] == ids["croissants.txt"], (removed, usage.count())
+        assert profile_endpoint(request)["sample_history"] is False and recommendations_endpoint(request)["cold_start"]
+        usage.clear()
+        print(f"1b. Sample history: refused (409) until the sample folder is indexed; then {loaded['events']} labelled events fill For You ({len(recs['recent'])} recent, {len(recs['usual_now'])} usual now); removing it leaves only the real event: OK")
+
+        # --- 1c. (2026-10-05) The sample habits were all at 14:xx or Monday
+        # 09:xx, so For You's "For now" (likely_next + usual_now) was empty
+        # most of the day right after loading. Loaded at any time of day,
+        # on a weekday or at the weekend, it must have something to show. ---
+        from app.context import sample_history
+        base = datetime.fromtimestamp(time.time()).replace(minute=30, second=0, microsecond=0)
+        days_to_saturday = (5 - base.weekday()) % 7
+        for day_offset in (0, days_to_saturday):
+            for hour in (1, 5, 9, 13, 17, 21):
+                fake_now = (base + timedelta(days=day_offset)).replace(hour=hour).timestamp()
+                sample_history.load_sample_history(usage, record_store, files, now=fake_now)
+                for_now = recommend(builder.get(force=True), usage, record_store, now=fake_now)
+                label = datetime.fromtimestamp(fake_now).strftime("%a %H:%M")
+                assert for_now["likely_next"] + for_now["usual_now"], f"'For now' is empty at {label}"
+        # Loading again replaces the old sample in one step: a failure while
+        # writing the new one must leave the old one whole, not half gone.
+        before = sorted((e["ts"], e["file_id"]) for e in usage.all_events())
+        import app.context.usage_store as usage_module
+        real_dumps = usage_module.json.dumps
+        def failing_dumps(value, *a, **k):
+            if isinstance(value, dict) and value.get("mode") == "auto":  # a sample search's meta: written after the opens
+                raise OSError("disk full")
+            return real_dumps(value, *a, **k)
+        usage_module.json.dumps = failing_dumps
+        try:
+            sample_history.load_sample_history(usage, record_store, files, now=time.time() - 3600)
+            raise AssertionError("the injected failure did not happen")
+        except OSError:
+            pass
+        finally:
+            usage_module.json.dumps = real_dumps
+        assert sorted((e["ts"], e["file_id"]) for e in usage.all_events()) == before, "a failed reload must leave the previous sample history untouched"
+        usage.clear()
+        print("1c. Sample history fills 'For now' at every time of day (weekday and weekend); a failed reload leaves the old sample whole: OK")
+
         # --- synthetic 4 weeks of habits, ending "now" ---
         now = time.time()
         today = datetime.fromtimestamp(now)

@@ -10,7 +10,7 @@
       "original_first": 1.0,
       "original_above_twin": 1.0,
       "mrr_original": 1.0,
-      "others_mrr": 0.9563492063492063
+      "others_mrr": 0.9682539682539681
     }
   },
   "sweep": {
@@ -36,7 +36,7 @@
       "original_first": 1.0,
       "mrr": 1.0,
       "others_worse": 0,
-      "others_mrr": 0.9563492063492063
+      "others_mrr": 0.9682539682539681
     },
     "0.0003": {
       "original_first": 0.8888888888888888,
@@ -737,8 +737,8 @@
       "query": "what caused the checkout incident, and what does the deploy checklist say about canaries?",
       "rank": 3,
       "top5": [
-        "deploy checklist old.md",
         "incident report draft.md",
+        "deploy checklist old.md",
         "incident report.md",
         "deploy checklist.md"
       ],
@@ -1233,11 +1233,11 @@
     },
     {
       "query": "what caused the checkout incident, and what does the deploy checklist say about canaries?",
-      "rank": 2,
+      "rank": 1,
       "top5": [
-        "deploy checklist old.md",
         "incident report.md",
         "incident report draft.md",
+        "deploy checklist old.md",
         "deploy checklist.md"
       ],
       "tiers": [
