@@ -676,7 +676,7 @@ The assignment asks for quality *and* efficiency; this phase produces the number
 
 **Decision (the user's, 2026-09-25): this is the final version, and it is a Windows app.** The macOS code paths stay (they cost nothing and still build), but the macOS CI workflow is manual-only and the docs are Windows-only. Machine: Windows 11 Home, 12th-gen Core i5-12450H (4P+4E cores, 12 threads), 16 GB, no discrete-GPU path used (DirectML available but off, as before).
 
-**Setup, first time on this PC:** Python 3.11.9, Rust 1.98.1, VS 2022 C++ Build Tools (winget); `llama-cpp-python` from the project's prebuilt CPU wheel index (AVX2), so no C++ compile. Steps: [`docs/BUILD_WINDOWS.md`](./docs/BUILD_WINDOWS.md).
+**Setup, first time on this PC:** Python 3.11.9, Rust 1.98.1, VS 2022 C++ Build Tools (winget); `llama-cpp-python` from the project's prebuilt CPU wheel index (AVX2), so no C++ compile. Steps: [`docs/BUILD_WINDOWS.md`](./BUILD_WINDOWS.md).
 
 **First Windows run of `run_all_phases.py`: 14/20.** Six failures, three of them real app bugs:
 
@@ -719,7 +719,7 @@ UI text fixed on the way: the engine badge and the search footer named `all-Mini
 
 ## Next round, planned improvements Not started (chosen 2026-09-26)
 
-Picked from the brainstorm in [`docs/IDEAS.md`](./docs/IDEAS.md), after the live Windows run. **Every feature is offline only:** no network calls, no cloud APIs, no downloads from inside the app. Each one is verified with `INTELLIFILE_OFFLINE_GUARD=1`, and the network-attempt count must be **0**.
+Picked from the brainstorm in [`docs/IDEAS.md`](./IDEAS.md), after the live Windows run. **Every feature is offline only:** no network calls, no cloud APIs, no downloads from inside the app. Each one is verified with `INTELLIFILE_OFFLINE_GUARD=1`, and the network-attempt count must be **0**.
 
 | # | Feature | What it does | Why it matters for the grade | How it stays offline | Effort | How to verify | Status |
 |---|---|---|---|---|---|---|---|
@@ -792,7 +792,7 @@ Windows writes a shortcut to `%APPDATA%\Microsoft\Windows\Recent` for every file
 **Goal (set 2026-09-26):** 10/10 on every area and a top 2–5 finish in the class. Self-assessed today at **8.2/10**; the weakest areas are packaging (6/10: the zip is over GitHub's 2 GB per-file limit and hasn't been run on a clean PC) and the desktop UI (7/10). The full scorecard and the path to 10/10 were kept in a private project document.
 
 **Work log, 2026-09-26:**
-- Live test of the Windows build, then a 15-idea brainstorm → [`docs/IDEAS.md`](./docs/IDEAS.md). The split download (Lite + Ask pack) was left out at the user's request.
+- Live test of the Windows build, then a 15-idea brainstorm → [`docs/IDEAS.md`](./IDEAS.md). The split download (Lite + Ask pack) was left out at the user's request.
 - The four offline features above added to this README.
 - One complete project document written (overview, architecture, features, phases, results, how to run, plan, scorecard).
 - **Both suites re-run on Windows, offline guard on:** `run_all_phases.py` **20/20** (up from 19/20; Ask passed under normal load, 286.7 s for Phase 19), `live_test_all_phases.py` **20 passed / 0 failed / 2 skipped** (human-only), **0 network attempts**, Ask 18.2 s grounded.
