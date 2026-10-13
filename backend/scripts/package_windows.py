@@ -14,9 +14,9 @@ per release file. Compressing the native libraries and models brought it
 to 1.87 GB, so one zip fits; the check below fails the build if it ever
 stops fitting.
 
-No installer: at ~2.5 GB unzipped (1.7 GB of models) the app is past the
-2 GB limit of both NSIS and WiX/MSI (makensis: "error mmapping file ...
-out of range", 2026-09-25). A portable folder also runs without admin rights.
+The setup program is made from this same folder by package_installer.py
+(2026-10-14). The first try at an installer (2026-09-25) failed on the 2 GB
+limit of NSIS and WiX/MSI; per-file LZMA brings it to 1.64 GB.
 
 Run with:  backend\\venv\\Scripts\\python.exe backend\\scripts\\package_windows.py
 """

@@ -78,6 +78,9 @@ cd ..\desktop
 npm run tauri build -- --no-bundle
 cd ..\backend
 .\venv\Scripts\python.exe scripts\package_windows.py
+.\venv\Scripts\python.exe scripts\package_installer.py   # optional: the one-file setup program, about 55 minutes
 ```
+
+`package_installer.py` wraps the same folder the zip holds in `IntelliFile-Setup.exe` (script: `desktop\installer\IntelliFile.nsi`). It needs NSIS 3 (`makensis.exe`, found through `NSIS_HOME`, then `D:\DevTools\tauri\NSIS`, then PATH). It fails if the setup program reaches 2 GB, the limit of NSIS and of a GitHub release file; with per-file LZMA compression it is 1.64 GB. Solid compression does not work at this size (makensis: "error mmapping file ... out of range").
 
 The output is one zip, `desktop\src-tauri\target\release\IntelliFile-windows.zip` (1.87 GB), under GitHub's 2 GB limit per release file; the packaging step fails if it ever is not. See `docs/HOW_TO_RUN.md` for what to hand to a user.

@@ -1,4 +1,7 @@
+import functools
+
 from ..agent.missing import Known, why_missing
+from ..files.browsing import KNOWN_FOLDERS, known_folder
 from ..indexing.folder_scan import RECENT_FAILURES, RECENT_REMOVALS, RECENT_SKIPS
 
 
@@ -25,7 +28,23 @@ def gather_known(state) -> Known:
         indexing=indexing,
         waiting=waiting if indexing else None,
         access_allowed=state.access.allows_indexing,
+        places=own_folders(),
     )
+
+
+@functools.lru_cache(maxsize=1)
+def own_folders() -> dict[str, str]:
+    """Where Windows keeps this user's Desktop, Documents, Downloads, ... (they can be
+    redirected into OneDrive). Asked once: they do not move while the app runs."""
+    found = {}
+    for name in KNOWN_FOLDERS:
+        try:
+            path = known_folder(name)
+        except OSError:
+            path = None
+        if path is not None:
+            found[name.lower()] = str(path)
+    return found
 
 
 def explain_missing(state, name: str) -> dict:

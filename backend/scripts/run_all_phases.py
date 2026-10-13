@@ -49,6 +49,7 @@ PHASES = [
     ("Security 2 — API guard: Host check, header-only token, thumbnails (source backend)", "check_api_guard.py"),
     ("Phase 19 — Local LLM agent (scripted mechanics + real model)", "prototype_agent.py"),
     ("Phase 19 — Ask cancellation (new question / closed page stops the run)", "check_ask_cancel.py"),
+    ("Phase 19 — Ask: collection questions with a time or a place, and model non-answers", "check_ask_time.py"),
     ("Phase 20 — Routing evaluation (router vs always-hybrid, reranker)", "evaluate_routing.py"),
     ("Phase 20 — Personalization evaluation (lift vs harm, weight sweep)", "evaluate_personalization.py"),
     ("Phase 13 — Retrieval / chunking / resource benchmarks", "evaluate_retrieval.py"),

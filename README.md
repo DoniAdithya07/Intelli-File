@@ -30,7 +30,11 @@ See [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for a guided walkthrough.
 
 ## Download and run
 
-IntelliFile comes as one zip file, `IntelliFile-windows.zip` (1.87 GB), with everything in it, including the Ask model. The zip bundles FFmpeg with the GPL-licensed x264 and x265 encoders (through the PyAV video library, which only decodes); their licence texts are in the `licenses` folder next to `IntelliFile.exe`, and their source is at ffmpeg.org, code.videolan.org/videolan/x264 and bitbucket.org/multicoreware/x265_git.
+IntelliFile comes two ways, each one file with everything in it, including the Ask model: a setup program, `IntelliFile-Setup.exe` (1.64 GB), and a portable zip, `IntelliFile-windows.zip` (1.87 GB). Both bundle FFmpeg with the GPL-licensed x264 and x265 encoders (through the PyAV video library, which only decodes); their licence texts are in the `licenses` folder next to `IntelliFile.exe`, and their source is at ffmpeg.org, code.videolan.org/videolan/x264 and bitbucket.org/multicoreware/x265_git.
+
+**With the setup program:** download `IntelliFile-Setup.exe` from the project's GitHub Releases page and run it. It asks for no administrator password and downloads nothing: it unpacks IntelliFile into your own programs folder (about 6 minutes, 2.6 GB of free space), adds Start menu and desktop shortcuts, and opens the app. Windows SmartScreen may warn that the publisher is unknown: click **More info**, then **Run anyway**. To remove it, use **Installed apps** in Windows Settings; what you indexed is kept unless you choose to delete it.
+
+**With the zip:**
 
 1. Download `IntelliFile-windows.zip` from the project's GitHub Releases page (or build it yourself, see below).
 2. Extract it, for example to your Desktop. This creates one `IntelliFile` folder.

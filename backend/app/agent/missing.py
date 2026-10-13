@@ -43,6 +43,7 @@ class Known:
     indexing: bool = False
     waiting: int | None = None                           # files still to read, when known
     access_allowed: bool = True
+    places: dict[str, str] = field(default_factory=dict)  # "downloads" -> the user's own Downloads folder, ...
 
 
 def _full_path(typed: str) -> Path | None:
@@ -272,4 +273,4 @@ def missing_answer(question: str, known: Known) -> str | None:
 def index_answer(question: str, known: Known) -> str | None:
     """A question the engine's own records answer, about the collection or
     about one missing file; None for everything else (the normal Ask flow)."""
-    return library_answer(question, known.active, known.failures, known.skips, known.folders) or missing_answer(question, known)
+    return library_answer(question, known.active, known.failures, known.skips, known.folders, indexing=known.indexing, places=known.places) or missing_answer(question, known)

@@ -33,6 +33,24 @@ from .library import counts_files_from_text
 from .missing import Known, index_answer
 
 FILE_COUNT_WARNING = "This number is what one of your files says, not a count of your files. To count them, ask: how many files are there"
+_FIGURE_RE = re.compile(r"\d|\b(?:none|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozen|several|hundred|thousand)\b", re.I)
+# How a small model says "I have no answer" while still writing sentences. Only the opening
+# sentence counts: "The lease does not mention pets, but the deposit is 1,800 euros" answers.
+_NO_ANSWER_RE = re.compile(
+    r"^(?:based on [^,.]{0,60},\s*)?(?:unfortunately,?\s*)?(?:"
+    r"(?:the|these|your|none of the|no)\s+(?:provided\s+|given\s+|retrieved\s+|available\s+)?(?:sources?|files?|documents?|context|information|text|passages?|excerpts?|snippets?)\s+(?:provided\s+|given\s+)?"
+    r"(?:do(?:es)?\s+not|don't|doesn't|did\s+not|didn't)\s+(?:directly\s+|explicitly\s+|clearly\s+)?(?:provide|contain|mention|include|specify|state|say|give|have|answer|indicate|offer|address|tell)"
+    r"|(?:i|we)\s+(?:could\s+not|couldn't|cannot|can't|can\s+not|was\s+unable\s+to|am\s+unable\s+to|do\s+not|don't)\s+(?:find|determine|locate|answer|have|see|know)"
+    r"|none\s+of\s+(?:the|these|your)\s+(?:sources?|files?|documents?|passages?|excerpts?)\s+(?:provides?|mentions?|contains?|says?|gives?|states?|includes?|has|have|answers?)"
+    r"|there\s+is\s+no\s+(?:direct\s+|clear\s+|specific\s+)?(?:information|mention|answer|data|indication|record)"
+    r"|(?:it|this|that)\s+(?:is\s+not|isn't|cannot\s+be|can't\s+be)\s+(?:specified|mentioned|stated|provided|determined|possible\s+to\s+(?:determine|say|tell))"
+    r")", re.I)
+
+
+def says_no_answer(answer: str) -> bool:
+    """True when the answer's opening sentence says the sources hold no answer."""
+    opening = re.split(r"(?<=[.!?])\s", answer.strip(), maxsplit=1)[0]
+    return _NO_ANSWER_RE.search(opening) is not None or re.search(r"\b(?:cannot|can't|can not) be (?:determined|answered|found) from\b", opening, re.I) is not None
 from .tools import Toolbox
 
 logger = logging.getLogger(__name__)
@@ -413,7 +431,15 @@ class Agent:
         # numbers are kept when they agree, replaced when they do not.
         supported = [n for n in _ground(body, tools) if n in shown_numbers]  # only what the model was shown
         valid = [n for n in dict.fromkeys(cited_numbers) if n in supported]
-        not_found = "couldn't find that" in text.lower() or len(body.split()) < 3
+        # "The source does not provide a direct answer to the question ... However, it
+        # mentions that the photo page has no side preview" was shown as a grounded answer
+        # with two sources (2026-10-14). An answer that opens by saying the sources have no
+        # answer is "not found", whatever it goes on to quote.
+        no_answer = says_no_answer(body)
+        if no_answer:
+            yield {"type": "thought", "text": "the model said the sources do not answer the question, so no answer is given", "system": True}
+            valid = []
+        not_found = "couldn't find that" in text.lower() or len(body.split()) < 3 or no_answer
         inferred = False
         if not valid and not not_found and supported:
             valid = supported
@@ -476,7 +502,7 @@ class Agent:
         # A count of files that reached the model is what a file says, not a
         # count of the user's files: "60 files" from a report read as the size
         # of the index (QA, 2026-10-14). The answer says which it is.
-        if grounded and counts_files_from_text(question):
+        if grounded and counts_files_from_text(question) and _FIGURE_RE.search(body):  # only when there is a number to warn about
             warnings.append(FILE_COUNT_WARNING)
         yield {"type": "answer", "text": text, "citations": citations, "grounded": grounded, "citations_inferred": inferred, "warnings": warnings}
         yield {"type": "done", "seconds": round(time.perf_counter() - t_start, 1), "tool_calls": calls, "strategies": strategies, "sources": [s.as_dict() for s in tools.sources]}

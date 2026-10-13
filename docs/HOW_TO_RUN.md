@@ -6,7 +6,11 @@ Requires Windows 10 or 11 (64-bit), about 3 GB of free disk space and 8 GB of RA
 
 ## 1. Launch
 
-IntelliFile comes as one zip, `IntelliFile-windows.zip` (1.87 GB). It holds everything, including the local language model behind **Ask mode**.
+IntelliFile comes as a setup program, `IntelliFile-Setup.exe` (1.64 GB), or as one zip, `IntelliFile-windows.zip` (1.87 GB). Each holds everything, including the local language model behind **Ask mode**.
+
+With the setup program: run `IntelliFile-Setup.exe` and follow it. It needs no administrator password and no internet, takes about 6 minutes, and opens IntelliFile at the end. Afterwards IntelliFile is in the Start menu and on the desktop. The rest of this page is the same for both.
+
+With the zip:
 
 1. Download `IntelliFile-windows.zip`, for example into `Downloads`.
 2. Right-click it, choose **Extract All**, and set the destination to a folder you can write to, for example your Desktop. Extraction takes a few minutes. It creates an `IntelliFile` folder.

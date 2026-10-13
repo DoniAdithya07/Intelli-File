@@ -6,12 +6,12 @@
     "false_answers": 1,
     "figure_warnings": 1,
     "over_cited": 0,
-    "mean_s": 14.161715626665197,
-    "max_s": 27.05606010000338,
-    "mean_plan_s": 10.995050243330478,
-    "mean_judge_s": 0.13310904000002968,
-    "mean_answer_s": 2.8707814999991874,
-    "mean_first_results_s": 0.101815226667289,
+    "mean_s": 14.533402939999359,
+    "max_s": 28.421491299988702,
+    "mean_plan_s": 11.391180246667258,
+    "mean_judge_s": 0.13675478000077418,
+    "mean_answer_s": 2.8472222866679657,
+    "mean_first_results_s": 0.09881982666702242,
     "quick_answer_right_file": 21,
     "misses": [
       [

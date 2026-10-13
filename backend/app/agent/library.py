@@ -17,13 +17,16 @@ IntelliFile did with them ("in the laptop", "do i have", "did you index").
 Any other word means the question is about content.
 """
 
+import os
 import re
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..files.discovery import AUDIO_EXTENSIONS, CODE_EXTENSIONS, IMAGE_EXTENSIONS, SUPPORTED_EXTENSIONS, TEXT_EXTENSIONS, VIDEO_EXTENSIONS, VISUAL_EXTENSIONS
 from ..search.dictionary import shared_dictionary
+from .timeframe import Narrowing, ago, narrow
 
 # kind -> (words people use for it, singular label, plural label, extensions).
 # A word's plural with "s" is accepted too. A file-type word (png, mp3, csv)
@@ -394,13 +397,98 @@ def _state_answer(about: str, entries: list[dict]) -> str:
             "The Index page lists them with the reasons.")
 
 
-def library_answer(question: str, paths: list[str], failures: list[dict] | None = None, skips: list[dict] | None = None, folders: list[str] | None = None) -> str | None:
+def _file_dates(path: str) -> tuple[float, float]:
+    """(when the file appeared on this computer, when it was last changed).
+    Read-only: os.stat. On Windows st_ctime is the creation time."""
+    info = os.stat(path)
+    return getattr(info, "st_birthtime", info.st_ctime), info.st_mtime
+
+
+def _dated_answer(asked: _Asked, when: Narrowing, scope: list[str], where: str, now: float, dates, indexing: bool) -> str:
+    """"How many images were downloaded in the last hour", "newest files on
+    the desktop": the files that passed the other filters, by their dates.
+    The index stores no dates, so they are read here, for those files only."""
+    if asked.name_word is not None:
+        stem = _singular(asked.name_word)
+        chosen = [p for p in scope if any(f in part.lower() for f in {asked.name_word, stem} for part in (Path(p).name, Path(p).parent.name))]
+        one, many = f'file with "{stem}" in its name', f'files with "{stem}" in their name'
+    elif asked.selections:
+        types = frozenset().union(*(exts for _one, _many, exts in asked.selections))
+        chosen = [p for p in scope if Path(p).suffix.lower() in types]
+        one, many = (asked.selections[0][0], asked.selections[0][1]) if len(asked.selections) == 1 else ("file", " and ".join(plural for _one, plural, _exts in asked.selections))
+    else:
+        chosen, one, many = scope, "file", "files"
+    stamped = []
+    for path in chosen:
+        try:
+            created, changed = dates(path)
+        except OSError:  # gone since it was indexed, or on a drive that is not there now
+            continue
+        stamped.append((changed if when.changed else created, path))
+    verb = "changed" if when.changed else "added"
+    if not chosen:
+        return f"No {many}{where} are indexed."
+    if not stamped:  # all on a drive that is not connected, or deleted since
+        return f"The dates of the {len(chosen):,} indexed {one if len(chosen) == 1 else many}{where} could not be read. They may be on a drive that is not connected."
+    note = ""
+    if indexing:
+        note = " Indexing is still running, so newer files may be missing."
+    elif when.short:
+        note = " A file saved in the last minute may not be indexed yet."
+    inside = [(moment, path) for moment, path in stamped if (when.since is None or moment >= when.since) and (when.until is None or moment < when.until)]
+    inside.sort(reverse=when.order != "oldest")
+    label = f" {when.label}" if when.label else ""
+
+    def dated(moment: float, path: str) -> str:
+        return f"{Path(path).name} ({verb} {ago(now - moment, moment)})"
+
+    latest = max(stamped)
+    if not inside:
+        return f"No {many}{where} were {verb}{label}. The latest is {Path(latest[1]).name}, {verb} {ago(now - latest[0], latest[0])}.{note}"
+    if when.order:
+        shown = inside[:when.limit]
+        head = f"The {len(shown):,} {when.order} {many}" if len(shown) > 1 else f"The {when.order} {one}"
+        return f"{head}{where}{' ' + verb + label if when.label else ''}: {', '.join(dated(m, p) for m, p in shown)}.{note}"
+    n = len(inside)
+    counted = f"{n:,} {one if n == 1 else many}{where} {'was' if n == 1 else 'were'} {verb}{label}"
+    names = [p for _moment, p in inside]
+    pool = f"out of {len(stamped):,} {one if len(stamped) == 1 else many} there" if where else f"out of {len(stamped):,} indexed {one if len(stamped) == 1 else many}"
+    if asked.mode == "list":
+        return f"{counted}: {_names(names, LIST_NAMES)}{_and_others(n - LIST_NAMES, exact=True)}.{note}"
+    lead = "Yes: " if asked.mode == "any" else ""
+    return f"{lead}{counted} ({_examples(names)}), {pool}.{note}"
+
+
+def library_answer(question: str, paths: list[str], failures: list[dict] | None = None, skips: list[dict] | None = None, folders: list[str] | None = None,
+                   indexing: bool = False, clock=time.time, dates=_file_dates, places: dict[str, str] | None = None) -> str | None:
     """The answer to a question about the collection itself, or None when
     the question is about the files' content. `failures` and `skips` are the
-    scan's stored reasons ({"path", "reason"}), `folders` the indexed folders."""
-    asked = _read(question)
+    scan's stored reasons ({"path", "reason"}), `folders` the indexed folders.
+    `clock` and `dates` are the time and a file's (added, changed) dates:
+    passed in by the tests, which need no real files. `places` is where
+    Windows keeps the user's own folders ({"downloads": path, ...})."""
+    # "in the last hour", "downloaded", "newest": taken out first, so the rest is read as before
+    # (timeframe.py). A question without them is read exactly as it was typed.
+    words = _words(question)
+    when = narrow(" ".join(words), clock())
+    if when is not None and not (when.timed or when.placed):
+        when = None
+    # "how many files got into the index today": when a file was indexed is not kept, and the
+    # day it appeared on the computer is another thing. Such a question gets the count, as before.
+    if when is not None and any(w in _POINTERS for w in words):
+        when = None
+    asked = _read(when.text if when else question)
+    if asked is None and when is not None and when.order:
+        asked = _read("list " + when.text)  # "newest files on the desktop" has no "list" of its own
     if asked is None:
         return None
+    if when is not None and when.timed:
+        if asked.about != "files":
+            return None
+        # "how many meetings today" is about a calendar, not about files named "meeting":
+        # a name count with a time needs "added", "downloaded" or a place said too.
+        if asked.name_word is not None and not (when.verb_said or when.placed):
+            return None
     if asked.about == "folders":
         return _folders_answer(folders or [])
     if asked.about != "files":
@@ -409,9 +497,20 @@ def library_answer(question: str, paths: list[str], failures: list[dict] | None 
     scope, where = paths, ""
     if asked.folder:
         scope = [p for p in paths if asked.folder in {same_name(part) for part in Path(p).parts[:-1]}]
+        # "downloaded", "on the desktop": the user's own Downloads or Desktop, when Windows says
+        # where it is and something in it is indexed. On 2026-10-14 "desktop" by name alone took
+        # in 220 files, a test folder called Desktop among them.
+        own = (places or {}).get(asked.folder) if when is not None and when.placed else None
+        if own:
+            prefix = own.replace("\\", "/").rstrip("/").lower() + "/"
+            mine = [p for p in scope if p.replace("\\", "/").lower().startswith(prefix)]
+            scope = mine or scope
         if not scope:
-            return f'No indexed folder is named "{asked.folder}" ({_files(total)} checked).'
+            add = " Add that folder on the Index page to count what is in it." if when is not None and when.placed else ""
+            return f'No indexed folder is named "{asked.folder}" ({_files(total)} checked).{add}'
         where = f' in the "{asked.folder}" folder'
+    if when is not None and when.timed:
+        return _dated_answer(asked, when, scope, where, clock(), dates, indexing)
     if asked.name_word is not None:
         return _count_by_name(asked.name_word, scope, where, total)
     if not asked.selections:
