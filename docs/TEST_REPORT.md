@@ -15,6 +15,7 @@ Every number on this page was measured on 27–28 September and 4–6 October 20
 | Spoken words in recordings | Working | found; silent recordings get no invented text |
 | Ask: answers from your files | Working, with limits | answer backed by its sources 25 of 25 (100%); right file cited 24 of 25 (96%); "not found" when the answer is not there 4 of 5 (80%); false answers 1 |
 | Ask: speed | Working | inside the 50 s limit every time (slowest 42.6 s on a busy laptop) |
+| Ask: time and place (14 October) | Working, not yet in the released build | "how many images are downloaded in last 1 hour", "what did i download today", "newest files on the desktop": 42 wordings exact with a fixed clock, 23 look-alike content questions left to the files; 6 of 6 over HTTP in under 0.1 s; a model answer that says it has no answer is now "not found" |
 | Ask: questions about your collection and missing files (14 October) | Working | counts, lists, file types, folders and "why is this file missing" answered exactly from the index in about 0.02 s; tested over HTTP in three QA rounds (final question set: 52 of 52 collection questions from the index, 34 of 34 content questions left to the files); details in the development log |
 | Ask: questions about your collection (September) | Working | "how many files", "any videos?", "how many photos?" answered exactly from the index |
 | Personalization | Working | the file you use first for 100% of ambiguous searches (39% without it; 18 test searches); 0 of 42 other searches made worse |

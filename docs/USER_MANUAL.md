@@ -97,6 +97,7 @@ Some questions are about your files themselves, not about what is written in the
 
 - **Counting:** `how many files are there`, `how many movies are in the laptop`, `how many png files do i have`, `how many pdfs are in the invoices folder`, `how many videos and photos do i have`. Spelling mistakes are understood.
 - **Listing:** `list my videos`, `which spreadsheets do i have`.
+- **By time and place:** `how many images did i download in the last hour`, `what did i download today`, `how many files were changed this week`, `how many photos are on the desktop`, `newest files in downloads`. "Downloaded" means your Downloads folder; "added" is the time the file appeared on this computer and "changed" the time it was last modified. Only indexed files are counted, and a file saved in the last minute may not be indexed yet.
 - **By name:** for a word that is not a kind of file, such as `how many quizzes are there`, IntelliFile counts the files and folders with that word in their name and says so. To look inside files, use **Search**.
 - **Problems:** `how many files could not be read`, `how many files were skipped`.
 - **A missing file:** `why is budget.xlsx missing`, `why can't i find report.pdf`, `where is my resume.docx`. IntelliFile says what it knows: the file is indexed and where it is, it could not be read and why, it was skipped and why, it was deleted, moved or renamed while IntelliFile was open, its type is one IntelliFile does not read, indexing is still running, or no file with that name is in the folders IntelliFile searches.
