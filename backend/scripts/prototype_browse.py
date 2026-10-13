@@ -619,9 +619,24 @@ def check_backend(work: Path) -> None:
             proc.kill()
 
 
+def check_drive_root() -> None:
+    """A watched folder that is a drive. On 2026-10-13 the user's indexed D:
+    drive (9,845 files) was missing from the file count: the prefix built for
+    "D:\\" was "D:\\\\", which no path starts with."""
+    from app.indexing.folder_scan import inside_prefix
+
+    drive, folder = "D:" + os.sep, "D:" + os.sep + "notes"
+    assert inside_prefix(drive) == drive, inside_prefix(drive)
+    assert inside_prefix(folder) == folder + os.sep and inside_prefix(folder + os.sep) == folder + os.sep
+    assert (drive + "report.pdf").startswith(inside_prefix(drive)) and (folder + os.sep + "a.txt").startswith(inside_prefix(drive))
+    assert not (folder + "book" + os.sep + "a.txt").startswith(inside_prefix(folder)), "D:\\notes must not claim D:\\notesbook"
+    print("0. A watched drive: files directly on it and in its folders are inside it; a folder does not claim its longer-named neighbour: OK")
+
+
 def main() -> int:
     work = Path(tempfile.mkdtemp(prefix="intellifile_browse_"))
     try:
+        check_drive_root()
         check_guard_rules()
         if not (WHISPER_DIR / "onnx").exists() or not (CLIP_MODEL_DIR / "onnx").exists() or not (TEXT_MODEL_DIR / "model.onnx").exists():
             print("A model is missing (run the scripts/download_*.py scripts first).")

@@ -244,6 +244,19 @@ export function SearchPage({ query, folder, run, engineReady, folderCount, fileC
   const [route, setRoute] = useState<RouteReport | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [lastQuery, setLastQuery] = useState("");
+  // The words are a file name ("budget.xlsx") and no result is that file: say why it is
+  // not here. Loose possible matches still come back for such a search, so this is a
+  // line above the results, not only on the "nothing matches" screen.
+  const [missing, setMissing] = useState<string | null>(null);
+  useEffect(() => {
+    setMissing(null);
+    const name = lastQuery.trim();
+    if (!results || !/\.[a-z0-9]{2,5}$/i.test(name)) return;
+    if (results.some((r) => r.filename.toLowerCase() === name.toLowerCase())) return;
+    let current = true;
+    whyMissing(name).then((r) => { if (current && r.status !== "invalid" && r.status !== "indexed") setMissing(r.reason); }).catch(() => { /* the results stand on their own */ });
+    return () => { current = false; };
+  }, [lastQuery, results]);
   const [scopeNote, setScopeNote] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [slow, setSlow] = useState(false);
@@ -421,6 +434,7 @@ export function SearchPage({ query, folder, run, engineReady, folderCount, fileC
           )}
           {suggestion && <Banner tone="info" action={{ label: `Search for "${suggestion}" instead`, onClick: () => onRunQuery(suggestion) }}>Did you mean <b className="font-semibold">{suggestion}</b>?</Banner>}
           {scopeNote && <Banner tone="warn">{scopeNote}</Banner>}
+          {missing && <Banner tone="info" onDismiss={() => setMissing(null)}>{missing}</Banner>}
           {results && route?.suggest_ask && <Banner tone="info" action={{ label: "Ask instead", onClick: () => onAsk(lastQuery) }}>This reads like a question. Ask instead to get an answer from your files.</Banner>}
           {showRoute && route && <RouteLine route={route} count={total} />}
           {failure && <Banner tone="error" action={{ label: "Try again", onClick: () => doSearch() }}>The search didn't finish. {failure} Your words are kept.</Banner>}
@@ -486,15 +500,6 @@ function NoResults({ text, folder, audio, hint, route, fileCount, folderCount, f
 }) {
   const typed = text || "your search";
   const unrec = route?.unrecognized ?? [];
-  // The words look like a file name ("budget.xlsx"): say why that file is not here.
-  const [missing, setMissing] = useState<string | null>(null);
-  useEffect(() => {
-    setMissing(null);
-    if (!/\.[a-z0-9]{2,5}$/i.test(text.trim())) return;
-    let current = true;
-    whyMissing(text.trim()).then((r) => { if (current && r.status !== "invalid") setMissing(r.reason); }).catch(() => { /* the search result already says nothing matched */ });
-    return () => { current = false; };
-  }, [text]);
   const spelling = unrec.length > 0 && <>Check the spelling of {unrec.map((w, i) => <span key={w}>{i > 0 && ", "}<i className="text-accent">"{w}"</i></span>)}: no file uses {unrec.length === 1 ? "that word" : "those words"}. </>;
   if (audio) {
     return (
@@ -506,7 +511,7 @@ function NoResults({ text, folder, audio, hint, route, fileCount, folderCount, f
   return (
     <EmptyState
       title={folder ? `Nothing in ${folder} matches "${typed}".` : `Nothing on this computer matches "${typed}".`}
-      text={<>{spelling}{folder ? "Checked file contents and names in this folder." : `Checked file contents, spoken audio and file names in ${folderCount} folder${folderCount === 1 ? "" : "s"} (${fileCount.toLocaleString()} files).`}{filters.length > 0 && ` Filters on: ${filters.map((f) => f.label).join(", ")}.`}{missing && <span className="mt-2 block text-ink">{missing}</span>}</>}
+      text={<>{spelling}{folder ? "Checked file contents and names in this folder." : `Checked file contents, spoken audio and file names in ${folderCount} folder${folderCount === 1 ? "" : "s"} (${fileCount.toLocaleString()} files).`}{filters.length > 0 && ` Filters on: ${filters.map((f) => f.label).join(", ")}.`}</>}
       action={folder ? { label: "Search everywhere", onClick: onEverywhere } : filters.length ? { label: "Clear filters", onClick: onClearFilters } : { label: "Clear search", onClick: onClear }}
       secondary={folder ? { label: "Clear search", onClick: onClear } : undefined} />
   );

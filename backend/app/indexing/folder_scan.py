@@ -104,7 +104,7 @@ def index_folder(
     """
     extensions = SUPPORTED_EXTENSIONS | (VISUAL_EXTENSIONS if visual_indexer is not None else set())
     record_store = indexer.file_record_store
-    folder_prefix = str(Path(folder)) + os.sep  # same form discover_files yields
+    folder_prefix = inside_prefix(folder)  # same form discover_files yields
     skipped = SKIPPED[folder] = Counter()  # live: the Status screen reads it while the scan runs
 
     # An unplugged drive or an offline network share (2026-10-04): with the
@@ -195,6 +195,15 @@ SKIP_KINDS = ("too_large", "online_only", "path_too_long")
 # out of RECENT_FAILURES (2026-10-05): ten skipped videos pushed every real
 # failure off the Status screen's list.
 RECENT_SKIPS: list[dict] = []
+
+
+def inside_prefix(folder: str | Path) -> str:
+    """What the path of every file inside `folder` starts with. For a drive
+    ("D:\\") the folder already ends in a backslash: adding one more gave
+    "D:\\\\", which no path starts with, so on 2026-10-13 a whole indexed
+    drive (9,845 of 11,780 files) was missing from the counts, deleted files
+    on it were never purged by a scan, and "Remove" took nothing out."""
+    return str(Path(folder)).rstrip("\\/") + os.sep
 
 
 # ----- failure reasons the user can read (2026-10-05) -----

@@ -11,7 +11,6 @@ watch resumes on the next launch without the user re-picking anything.
 
 import json
 import logging
-import os
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -22,7 +21,7 @@ from .files.jobs import Job, JobQueue
 from .files.service import FileWatchService
 from .indexing import Indexer, VisualIndexer, cleanup_tombstones, index_folder
 from .indexing import folder_scan
-from .indexing.folder_scan import POISONED, RECENT_FAILURES, RECENT_SKIPS, SKIP_KINDS, SKIPPED, _index_image_text, _note_failure as note_failure, _note_skip as note_skip
+from .indexing.folder_scan import POISONED, inside_prefix, RECENT_FAILURES, RECENT_SKIPS, SKIP_KINDS, SKIPPED, _index_image_text, _note_failure as note_failure, _note_skip as note_skip
 from .power import PowerMonitor, resource_mode
 
 logger = logging.getLogger(__name__)
@@ -418,9 +417,9 @@ class LiveIndexing:
         self.watcher.remove_root(folder)
         self.unreachable_roots.discard(folder)
         save_watched_folders(self.config_dir, self.roots())
-        prefix = str(Path(folder)) + os.sep
+        prefix = inside_prefix(folder)
         # A watched folder inside this one keeps its files (2026-09-21).
-        keep = [str(Path(r)) + os.sep for r in self.roots() if r.startswith(prefix)]
+        keep = [inside_prefix(r) for r in self.roots() if r.startswith(prefix)]
         store = self.indexer.file_record_store
         removed = 0
         with self.write_lock:
@@ -468,7 +467,7 @@ class LiveIndexing:
         by_depth = sorted(roots, key=lambda r: -len(Path(r).parts))
         for record in self.indexer.file_record_store.list_active():
             for root in by_depth:
-                if record.path.startswith(str(Path(root)) + os.sep):
+                if record.path.startswith(inside_prefix(root)):
                     ext = Path(record.path).suffix.lower()
                     kind = "photos" if ext in IMAGE_EXTENSIONS else "videos" if ext in VIDEO_EXTENSIONS and not record.audio_only else "audio" if ext in AUDIO_EXTENSIONS or record.audio_only else "documents"
                     counts[root][kind] += 1

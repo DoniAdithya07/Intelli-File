@@ -89,7 +89,7 @@ export function ThisPcPage({ status, onNavigate, notify, onIndexChanged, refresh
           { id: "details", label: "Details", shortcut: "Ctrl+Shift+6", checked: view === "details", onClick: () => setView("details") },
         ] }} />
       </CommandBar>
-      {failed && <EmptyState title="The drives could not be listed" text={failed || "The search engine isn't running. Browsing needs it."} action={{ label: "Try again", onClick: () => setTries((t) => t + 1) }} />}
+      {failed && <EmptyState title="The drives could not be listed" text={failed || "The search engine is not answering yet. The list loads by itself as soon as it is ready."} action={{ label: "Try again", onClick: () => setTries((t) => t + 1) }} />}
       {drives === null && <SkeletonRows n={3} h={72} />}
       {drives !== null && !failed && view === "icons" && (
         <>

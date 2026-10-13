@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BrowseDrive, backendProblem, browseDrives, browseQuickAccess, checkBackendHealth, setEngineStopped, shortcutOk } from "./backend";
+import { BrowseDrive, ENGINE_STARTING, ENGINE_STOPPED, backendProblem, browseDrives, browseQuickAccess, checkBackendHealth, setEngineStopped, shortcutOk } from "./backend";
 import { useStatus } from "./hooks/useStatus";
 import { useVoice } from "./hooks/useVoice";
 import { baseName, parentOf } from "./lib/format";
@@ -72,7 +72,23 @@ function App() {
   const notify = useCallback((message: string | null, action?: { label: string; onClick: () => void }) => setBanner(message ? { message, action } : null), []);
   useEffect(() => { setBanner(null); }, [location]);
   // A refused /status is worth saying once the engine is up; while it starts, or when it has stopped, the banners above say so.
-  useEffect(() => { if (statusError && backendStatus === "connected") setBanner({ message: statusError }); }, [statusError, backendStatus]);
+  // A failed /status is shown while it lasts, and only when it says something the footer does not.
+  // Until 2026-10-13 the first /status of every start (sent before the engine is up) left "The search
+  // engine isn't running yet" in a banner: it was shown at the moment the engine connected, and
+  // nothing took it away when the next /status worked. "Not running" and "stopped" are the footer's
+  // and the engine banner's to say, from the health check; this banner goes when /status works again.
+  const statusBanner = useRef<string | null>(null);
+  useEffect(() => {
+    const connection = statusError === ENGINE_STARTING || statusError === ENGINE_STOPPED;
+    if (statusError && !connection && backendStatus === "connected") {
+      statusBanner.current = statusError;
+      setBanner({ message: statusError });
+    } else if (statusBanner.current) {
+      const shown = statusBanner.current;
+      statusBanner.current = null;
+      setBanner((b) => (b?.message === shown ? null : b));
+    }
+  }, [statusError, backendStatus]);
 
   // Keep checking /health: every 2 s until the engine answers, then every 5 s, so an engine that crashes later shows as stopped.
   useEffect(() => {
@@ -108,6 +124,13 @@ function App() {
   useEffect(() => {
     if (status?.access?.mode === "unset" && !askedRef.current) { askedRef.current = true; navigate({ kind: "index" }); }
   }, [status?.access?.mode, navigate]);
+
+  // Home, This PC and the folder view ask the engine for their lists the moment they open. On a
+  // normal start the engine is not up yet (a few seconds, up to about 30 on a cold start), the
+  // request failed, and the page said "the search engine isn't running" until the user clicked
+  // Try again (found in use, 2026-10-13). They now load again whenever the engine starts answering,
+  // also after it was restarted.
+  useEffect(() => { if (backendStatus === "connected") setRefreshKey((k) => k + 1); }, [backendStatus]);
 
   // Drives and the Windows folders for the left tree (the engine lists them; they load when it answers).
   const [drives, setDrives] = useState<BrowseDrive[] | null>(null);

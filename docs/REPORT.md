@@ -86,8 +86,8 @@ The reranker on every query costs about 7 times the median latency and changes n
 | Offline OCR | 4/4 pixel-only phrases found | dev log, improvement 4 |
 | Real photos (26) | first 50%, top 3 78% | TEST_REPORT |
 | Video (6) | video 6/6, video and moment 5/6 | TEST_REPORT |
-| Feature check, packaged app | 28/28, 0 network attempts | dev log, 13 Oct |
-| Smoke test, packaged app | 23/23, 0 console errors | dev log, 13 Oct |
+| Feature check, packaged app | 28/28, 0 network attempts | dev log, 14 Oct |
+| Smoke test, packaged app | 31/31, 0 console errors | dev log, 14 Oct |
 | Full suite | 29 scripts (13 Oct): 28 passed in the full run, the 29th after a fix to one message; 28 of 28 on 6 Oct, 27 of 27 on 5 Oct, 26 of 26 on 30 Sep | TEST_REPORT |
 | Explorer-style window | 81/81 checks, 22/22 state screens, contrast and names clean, Day and Night | TEST_REPORT, 13 Oct |
 

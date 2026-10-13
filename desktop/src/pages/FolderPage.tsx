@@ -160,7 +160,7 @@ export function FolderPage({ path, status, nameFilter, notify, onNavigate, onInd
       : error.status === 404
         ? { title: "This folder was moved or deleted.", action: { label: "Go to Home", onClick: () => onNavigate({ kind: "home" }) } }
         : error.status === 0
-          ? { title: "This folder couldn't be listed.", text: "The search engine isn't running. Browsing needs it.", action: { label: "Try again", onClick: () => setTries((t) => t + 1) }, secondary: { label: "Go to Home", onClick: () => onNavigate({ kind: "home" }) } }
+          ? { title: "This folder isn't listed yet.", text: "The search engine is not answering yet. The list loads by itself as soon as it is ready.", action: { label: "Try again", onClick: () => setTries((t) => t + 1) }, secondary: { label: "Go to Home", onClick: () => onNavigate({ kind: "home" }) } }
           : { title: "This folder can't be opened.", text: error.message || undefined, action: { label: "Go to Home", onClick: () => onNavigate({ kind: "home" }) } });
 
   const items = useMemo(() => shown.map((e) => ({ key: e.path, data: e })), [shown]);
