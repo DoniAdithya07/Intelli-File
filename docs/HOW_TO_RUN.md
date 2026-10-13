@@ -14,7 +14,7 @@ IntelliFile comes as one zip, `IntelliFile-windows.zip` (1.87 GB). It holds ever
 
 Windows SmartScreen may say "Windows protected your PC", because the app is not signed by a registered publisher. Click **More info, then Run anyway**. It asks only once.
 
-The first launch takes 25 to 34 seconds (measured 27.8, 29.4, 33.9 s) while the search engine loads its models. The sidebar shows **Starting…** then **Works offline** when the engine is ready. Later launches are faster (about 6 to 15 seconds).
+The first launch takes 25 to 34 seconds (measured 27.8, 29.4, 33.9 s) while the search engine loads its models. The bottom of the left list shows **Starting…** then **Works offline** when the engine is ready. Later launches are faster (about 6 to 15 seconds).
 
 Closing the main window quits IntelliFile completely, including its background engine. Starting it a second time brings the open window to the front.
 
@@ -52,7 +52,7 @@ Open a result with **Enter** (pressed again on the same words) or **Open**. Show
 
 ## 4. If something looks wrong
 
-- **The sidebar says "Search engine stopped":** close IntelliFile and open it again. If it stays offline, another program is using port 8756. Run `netstat -ano | findstr 8756` in a terminal to see which one.
+- **IntelliFile says "Search engine stopped":** close IntelliFile and open it again. If it stays offline, another program is using port 8756. Run `netstat -ano | findstr 8756` in a terminal to see which one.
 - **Logs** (useful for a bug report) are in `%LOCALAPPDATA%\IntelliFile\logs\`: `backend.log`, `backend-console.log` and `shell.log`. Paste that path into the File Explorer address bar.
 - **A folder indexed 0 files and shows a red note about access:** Windows refused to let IntelliFile read it, for example a folder owned by another user or protected by Controlled Folder Access. Allow it in **Windows Security, then Virus & threat protection, then Ransomware protection**, then use Re-index.
 - **Voice search** needs microphone permission: **Settings, then Privacy & security, then Microphone, then Let desktop apps access your microphone**.

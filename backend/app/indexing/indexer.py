@@ -16,7 +16,8 @@ from ..embeddings.model import EMBEDDING_DIMENSION, EmbeddingModel
 from ..extraction.blocks import ExtractedBlock
 from ..extraction.extractor import extract_document
 from ..extraction.normalize import normalize_text
-from ..files.discovery import VISUAL_EXTENSIONS
+from ..files.discovery import VISUAL_EXTENSIONS, chunk_cap
+from ..files.media import is_audio_only_media
 from ..storage.keyword_store import KeywordStore
 from ..storage.lancedb_store import LanceDBVectorStore
 from ..storage.sqlite_store import FileRecordStore
@@ -29,6 +30,9 @@ CHUNKS_TABLE = "chunks"
 # screenshot or a whiteboard has dozens, a holiday photo has none or a
 # stray sign. Measured in prototype_ocr.py.
 OCR_MIN_WORDS = 5
+# "Search what is said in videos": only the start of the soundtrack is read,
+# so one long recording cannot hold the indexing lane for an hour.
+VIDEO_SPEECH_SECONDS = 10 * 60
 
 
 class Indexer:
@@ -102,7 +106,19 @@ class Indexer:
             # already cleaned up) — index normally instead.
 
         blocks = extract_document(path, transcriber=self.transcriber)
-        return self._store_blocks(file_id, blocks, replace)
+        # Audio is never cut short; an audio-only ".mpeg" has a video extension (and a document's cap).
+        max_chunks = None if is_audio_only_media(path) else chunk_cap(path.suffix.lower())
+        return self._store_blocks(file_id, blocks, replace, max_chunks=max_chunks)
+
+    def index_video_speech(self, path: Path, file_id: str) -> int:
+        """What is said in the first VIDEO_SPEECH_SECONDS of a video's
+        soundtrack, stored as text chunks next to its keyframe vectors (the
+        same pattern as a photo's OCR text). Music and silence give no text
+        (see transcription/guard.py). Returns the number of chunks stored."""
+        from ..extraction.audio_extractor import extract_audio
+
+        blocks = [ExtractedBlock(text=normalize_text(b.text)) for b in extract_audio(path, self.transcriber, max_seconds=VIDEO_SPEECH_SECONDS)]
+        return self._store_blocks(file_id, blocks)
 
     def index_image_text(self, path: Path, file_id: str) -> int:
         """Next-round improvement 4: the text in a screenshot, a photographed
@@ -121,8 +137,10 @@ class Indexer:
             return 0
         return self._store_blocks(file_id, [ExtractedBlock(text=text)])
 
-    def _store_blocks(self, file_id: str, blocks: list, replace: bool = True) -> int:
+    def _store_blocks(self, file_id: str, blocks: list, replace: bool = True, max_chunks: int | None = None) -> int:
         chunks = chunk_document(blocks, chunk_size=self.chunk_tokens, overlap=self.chunk_overlap, token_spans=self.embedding_model.token_spans)
+        if max_chunks is not None:
+            chunks = chunks[:max_chunks]  # see DATA_CODE_CHUNK_CAP in files/discovery.py
         if not chunks:
             if replace:
                 self.delete_file(file_id)  # the file is now genuinely empty

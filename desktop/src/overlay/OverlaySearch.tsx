@@ -157,7 +157,7 @@ export function OverlaySearch({ onError, onEscape }: Props) {
                     <span className={`block truncate text-[14px] ${r.confidence === "weak" ? "font-medium text-ink/80" : "font-semibold"}`}>{r.filename}</span>
                     <span className="block truncate text-[12px] text-ink/65" title={r.path}>{shortPlace(r.path)}</span>
                   </span>
-                  {r.confidence && <span className={`shrink-0 text-[12px] ${r.confidence === "weak" ? "text-ink/65" : "text-marker"}`}>{r.confidence === "weak" ? "Weaker match" : "Strong match"}</span>}
+                  {r.confidence === "weak" && <span className="shrink-0 text-[12px] text-ink/65">Possible match</span>}
                 </li>
               ))}
             </ul>

@@ -64,6 +64,7 @@ def main() -> None:
         assert requests.get(f"{BASE}/search", params={"q": "venue"}, timeout=10).status_code == 401
         assert requests.post(f"{BASE}/index-folder", json={"folder": str(docs)}, timeout=10).status_code == 401
         assert requests.get(f"{BASE}/status", timeout=10).status_code == 401
+        assert requests.get(f"{BASE}/files/why-missing", params={"name": "venue.txt"}, timeout=10).status_code == 401
         assert requests.get(f"{BASE}/search", params={"q": "venue", "token": "wrong"}, timeout=10).status_code == 401
         h = requests.get(f"{BASE}/health", timeout=10).json()
         assert h["status"] == "ok" and h["app_data_dir"] is None and h["token_required"] is True, h
@@ -128,7 +129,15 @@ def main() -> None:
             assert "error" in r, (bad, r)
         assert requests.get(f"{BASE}/thumbnail", params={"path": "/etc/hosts"}, headers=auth, timeout=10).status_code == 404
         assert requests.get(f"{BASE}/thumbnail", params={"path": str(docs / ".." / "single.md")}, headers=auth, timeout=10).status_code in (404, 422)
-        print("3. Path validation: relative, traversal, NUL and empty paths rejected; thumbnails only for indexed files: OK")
+        # "Why is this file missing" answers about known files and indexed
+        # folders only; a path outside them is not looked at on disk.
+        def why(name):
+            return requests.get(f"{BASE}/files/why-missing", params={"name": name}, headers=auth, timeout=10).json()
+        assert why("Venue")["status"] == "indexed" and why("venue")["path"] == str(docs / "venue.txt"), why("Venue")
+        assert why(str(single))["status"] == "indexed" and why(str(docs / ".." / "docs" / "venue.txt"))["status"] == "indexed"
+        assert why(str(docs / "never.txt"))["status"] == "not_on_disk" and why(str(BACKEND / "run_backend.py"))["status"] == "outside_folders", why(str(BACKEND / "run_backend.py"))
+        assert why("")["status"] == "invalid" and why("a\x00b")["status"] == "invalid" and why("payroll.exe")["status"] == "unsupported"
+        print("3. Path validation: relative, traversal, NUL and empty paths rejected; thumbnails only for indexed files; /files/why-missing answers for indexed files and folders only: OK")
 
         # --- 4. Document contents are data, never executed ---
         (docs / "venue.txt").write_text("The reunion venue is the old boathouse by the lake, booked for 14 June. Parking behind the sailing club.")

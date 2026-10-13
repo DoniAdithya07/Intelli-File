@@ -69,7 +69,40 @@ def main() -> None:
         assert requests.get(f"{base}/thumbnail", params={"path": str(img), "token": TOKEN}, timeout=10).status_code == 401
         assert requests.get(f"{base}/is-indexed", params={"path": str(img)}, headers=auth, timeout=10).json() == {"indexed": True}
         assert requests.get(f"{base}/is-indexed", params={"path": str(work / "nope.png")}, headers=auth, timeout=10).json() == {"indexed": False}
-        print("3. Thumbnail loads with the header, refused with the token in the URL; /is-indexed answers: OK")
+        why = f"{base}/files/why-missing"
+        assert requests.get(why, params={"name": "red.png"}, timeout=10).status_code == 401
+        assert requests.get(why, params={"name": "red.png", "token": TOKEN}, timeout=10).status_code == 401
+        assert requests.get(why, params={"name": "red.png"}, headers={**auth, "Host": "evil.example"}, timeout=10).status_code == 400
+        # The picture is searchable before its text has been read: until then the answer is "waiting to be read".
+        end = time.time() + 120
+        while True:
+            found = requests.get(why, params={"name": "RED"}, headers=auth, timeout=10).json()
+            if found["status"] != "indexing" or time.time() > end:
+                break
+            time.sleep(1)
+        assert found["status"] == "indexed" and found["path"] == str(img) and found["name"] == "RED" and "is indexed" in found["reason"], found
+        assert requests.get(why, params={"name": "nope.png"}, headers=auth, timeout=10).json()["status"] in ("unknown", "indexing")
+        assert requests.get(why, params={"name": "setup.exe"}, headers=auth, timeout=10).json()["status"] == "unsupported"
+        assert requests.get(why, params={"name": "*.png"}, headers=auth, timeout=10).json()["status"] == "invalid"
+
+        # A file deleted while the app runs is still "deleted" after its record
+        # is purged (which takes a fraction of a second), for this run of the app.
+        def status_of(name: str, wanted: str, seconds: int = 90) -> dict:
+            end = time.time() + seconds
+            while True:
+                body = requests.get(why, params={"name": name}, headers=auth, timeout=10).json()
+                if body["status"] == wanted or time.time() > end:
+                    return body
+                time.sleep(1)
+        blue = photos / "blue.png"
+        Image.new("RGB", (64, 64), "blue").save(blue)
+        assert status_of("blue.png", "indexed")["status"] == "indexed"
+        blue.unlink()
+        gone = status_of("blue.png", "deleted")
+        time.sleep(5)
+        later = requests.get(why, params={"name": "blue.png"}, headers=auth, timeout=10).json()
+        assert gone["status"] == "deleted" and later["status"] == "deleted" and "this run of the app" in later["reason"] and later["path"] == str(blue), (gone, later)
+        print("3. Thumbnail loads with the header, refused with the token in the URL; /is-indexed answers; /files/why-missing is behind the token and the Host check and answers, and still says 'deleted' 5 s after a file was removed: OK")
         print("API guard OK.")
     finally:
         proc.terminate()

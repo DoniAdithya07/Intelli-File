@@ -7,6 +7,7 @@ vectors. Kept as its own small module so it can be swapped later without
 touching the vector storage code.
 """
 
+import dataclasses
 import sqlite3
 import threading
 from pathlib import Path
@@ -34,7 +35,13 @@ CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);
 # existing databases migrate in place.
 _MIGRATIONS = [
     ("indexed", "ALTER TABLE files ADD COLUMN indexed INTEGER NOT NULL DEFAULT 1"),
+    # 2026-10-12: NULL = a video-extension file not probed yet (see files/media.py).
+    ("audio_only", "ALTER TABLE files ADD COLUMN audio_only INTEGER"),
+    ("speech_indexed", "ALTER TABLE files ADD COLUMN speech_indexed INTEGER NOT NULL DEFAULT 0"),
 ]
+
+
+_PATHS_PER_QUERY = 500  # SQLite allows 999 bound parameters in older builds
 
 
 class FileRecordStore:
@@ -68,11 +75,25 @@ class FileRecordStore:
             hash=row["hash"],
             deleted=bool(row["deleted"]),
             indexed=bool(row["indexed"]) if "indexed" in row.keys() else True,
+            audio_only=None if row["audio_only"] is None else bool(row["audio_only"]),
+            speech_indexed=bool(row["speech_indexed"]),
         )
 
     def mark_indexed(self, file_id: str, indexed: bool = True) -> None:
         with self._lock:
             self._conn.execute("UPDATE files SET indexed = ? WHERE file_id = ?", (int(indexed), file_id))
+            self._conn.commit()
+            self.version += 1
+
+    def set_audio_only(self, file_id: str, audio_only: bool) -> None:
+        self._set_flag(file_id, "audio_only", int(audio_only))
+
+    def set_speech_indexed(self, file_id: str, done: bool = True) -> None:
+        self._set_flag(file_id, "speech_indexed", int(done))
+
+    def _set_flag(self, file_id: str, column: str, value: int) -> None:
+        with self._lock:
+            self._conn.execute(f"UPDATE files SET {column} = ? WHERE file_id = ?", (value, file_id))  # column is ours, never user input
             self._conn.commit()
             self.version += 1
 
@@ -93,20 +114,35 @@ class FileRecordStore:
             row = self._conn.execute("SELECT * FROM files WHERE file_id = ?", (file_id,)).fetchone()
         return self._row_to_record(row) if row else None
 
+    def get_by_paths(self, paths: list[str]) -> dict[str, FileRecord]:
+        """Active records for these exact paths in a few queries, not one
+        per path (a folder listing asks for up to a thousand)."""
+        found: dict[str, FileRecord] = {}
+        for start in range(0, len(paths), _PATHS_PER_QUERY):
+            batch = paths[start:start + _PATHS_PER_QUERY]
+            with self._lock:
+                rows = self._conn.execute(
+                    f"SELECT * FROM files WHERE deleted = 0 AND path IN ({', '.join('?' for _ in batch)})", batch
+                ).fetchall()
+            found.update((r["path"], self._row_to_record(r)) for r in rows)
+        return found
+
     def upsert(self, record: FileRecord) -> None:
         self._vacate_path(record.path, record.file_id)
         with self._lock:
             self._conn.execute(
                 """
-                INSERT INTO files (file_id, path, size, modified_time, hash, deleted, indexed)
-                VALUES (:file_id, :path, :size, :modified_time, :hash, :deleted, :indexed)
+                INSERT INTO files (file_id, path, size, modified_time, hash, deleted, indexed, audio_only, speech_indexed)
+                VALUES (:file_id, :path, :size, :modified_time, :hash, :deleted, :indexed, :audio_only, :speech_indexed)
                 ON CONFLICT(file_id) DO UPDATE SET
                     path=excluded.path,
                     size=excluded.size,
                     modified_time=excluded.modified_time,
                     hash=excluded.hash,
                     deleted=excluded.deleted,
-                    indexed=excluded.indexed
+                    indexed=excluded.indexed,
+                    audio_only=excluded.audio_only,
+                    speech_indexed=excluded.speech_indexed
                 """,
                 {
                     "file_id": record.file_id,
@@ -116,6 +152,8 @@ class FileRecordStore:
                     "hash": record.hash,
                     "deleted": int(record.deleted),
                     "indexed": int(record.indexed),
+                    "audio_only": None if record.audio_only is None else int(record.audio_only),
+                    "speech_indexed": int(record.speech_indexed),
                 },
             )
             self._conn.commit()
@@ -147,15 +185,7 @@ class FileRecordStore:
         if existing is None:
             return None
         self._vacate_path(new_path, existing.file_id)
-        updated = FileRecord(
-            file_id=existing.file_id,
-            path=new_path,
-            size=existing.size,
-            modified_time=existing.modified_time,
-            hash=existing.hash,
-            deleted=existing.deleted,
-            indexed=existing.indexed,
-        )
+        updated = dataclasses.replace(existing, path=new_path)
         self.upsert(updated)
         return updated
 
@@ -163,15 +193,7 @@ class FileRecordStore:
         existing = self.get_by_path(path)
         if existing is None:
             return None
-        tombstoned = FileRecord(
-            file_id=existing.file_id,
-            path=existing.path,
-            size=existing.size,
-            modified_time=existing.modified_time,
-            hash=existing.hash,
-            deleted=True,
-            indexed=existing.indexed,
-        )
+        tombstoned = dataclasses.replace(existing, deleted=True)
         self.upsert(tombstoned)
         return tombstoned
 

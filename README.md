@@ -2,9 +2,9 @@
 
 Find a file on your Windows PC by describing what is in it. IntelliFile searches the contents of your documents, spoken audio, photos and scanned pages, answers questions from your own files with citations, and learns which files you use. It runs entirely on your computer: no account, no internet, nothing uploaded.
 
-![IntelliFile search results, day theme](docs/screenshots/ui/day-search-results.png)
+![IntelliFile search results with the matching passage, night theme](docs/screenshots/ui/night-search-results.png)
 
-![The same search in the night theme](docs/screenshots/ui/night-search-results.png)
+![Browsing a folder, day theme](docs/screenshots/ui/day-folder.png)
 
 ## Course objectives
 
@@ -25,7 +25,7 @@ See [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for a guided walkthrough.
 - **Choose the cheapest search that works.** Each query is routed to file-name, metadata, keyword or hybrid search, with re-ranking only when needed. On the labelled test set this keeps full hybrid quality (100% of the right files in the top 5) at about 76% of the time.
 - **Learn how you work.** Files you open often, at a given time of day, of your usual types and topics rank a little higher, and each result says why. For You shows what has been learned, and Activity everything it remembered. Optionally, it can start from Windows' own Recent items list.
 - **Read more than text.** Documents: PDF, Word, Excel, PowerPoint, text, Markdown, CSV, HTML, code. Audio transcribed (speech becomes searchable). Photos and video (searched by description and by text in the frames). Scanned PDFs and screenshots (read with Windows' built-in text recognition). Old Office formats (.doc, .xls, .ppt) supported best-effort; password-protected or damaged files listed with a reason.
-- **Looks like Windows.** Designed after Windows 11 File Explorer, in Day and Night; follow Windows or pick one in Settings or with the sidebar button.
+- **Looks like Windows.** Designed after Windows 11 File Explorer, in Day and Night; follow Windows or pick one in Settings or with the button at the bottom of the left list. Browse folders and drives as in Explorer (Home, This PC, back, forward, up, the path bar), with one search box for the folder you are in or everything.
 - **Stay out of the way.** Folders are watched for changes, indexing pauses in power-saving mode, broken files are skipped and listed, and the quick-search window opens anywhere with Ctrl+Space.
 
 ## Download and run
@@ -34,7 +34,7 @@ IntelliFile comes as one zip file, `IntelliFile-windows.zip` (1.87 GB), with eve
 
 1. Download `IntelliFile-windows.zip` from the project's GitHub Releases page (or build it yourself, see below).
 2. Extract it, for example to your Desktop. This creates one `IntelliFile` folder.
-3. Open the `IntelliFile` folder and run `IntelliFile.exe`. The first start takes 25 to 34 seconds while the search engine loads its models; the sidebar shows "Starting" then "Works offline" at the bottom left. Later launches are faster.
+3. Open the `IntelliFile` folder and run `IntelliFile.exe`. The first start takes 25 to 34 seconds while the search engine loads its models; the left list shows "Starting" then "Works offline" at the bottom. Later launches are faster.
 
 The app is not code-signed, so Windows SmartScreen may say "Windows protected your PC". Choose **More info**, then **Run anyway**.
 

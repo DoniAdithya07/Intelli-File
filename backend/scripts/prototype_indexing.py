@@ -205,6 +205,7 @@ def main():
         assert hits and hits[0]["filename"] == "quarterly.pdf", "previous chunks must survive a failed re-index"
         print("10. Failed extraction keeps the old chunks searchable and the old hash (will retry), instead of wiping the file: OK")
         check_keyword_rollback(workdir)
+        check_chunk_caps(workdir, indexer)
 
         print(
             "\nPhase 4 indexing pipeline OK: embedding, vector search, keyword search, "
@@ -230,6 +231,26 @@ def check_keyword_rollback(workdir: Path) -> None:
     assert store.search("heron")[0]["file_id"] == "f2"
     store.close()
     print("11. A keyword write that fails half-way is rolled back; the next file's commit saves only its own rows: OK")
+
+
+def check_chunk_caps(workdir: Path, indexer) -> None:
+    """12. (2026-10-12) A .json is embedded only up to DATA_CODE_CHUNK_CAP chunks, a .txt up to
+    PLAIN_TEXT_CHUNK_CAP; the first scan is faster and documents are scanned before data files."""
+    from app.files.discovery import DATA_CODE_CHUNK_CAP, PLAIN_TEXT_CHUNK_CAP, chunk_cap
+    from app.indexing.folder_scan import _scan_order
+
+    body = " ".join(f"word{i} alpha beta gamma delta" for i in range(6000))
+    for name, cap in (("big.json", DATA_CODE_CHUNK_CAP), ("big.txt", PLAIN_TEXT_CHUNK_CAP)):
+        path = workdir / name
+        path.write_text(name + " " + body)  # distinct bytes: identical files reuse each other's chunks
+        record = build_file_record(path)
+        indexer.file_record_store.upsert(record)
+        stored = indexer.index_file(path, record.file_id, record.hash)
+        assert stored == cap, f"{name}: {stored} chunks stored, cap is {cap}"
+    assert chunk_cap(".mp3") is None and chunk_cap(".rtf") > DATA_CODE_CHUNK_CAP
+    order = sorted([Path("a.mp4"), Path("a.json"), Path("a.jpg"), Path("a.pdf")], key=_scan_order)
+    assert [p.suffix for p in order] == [".pdf", ".json", ".jpg", ".mp4"], order
+    print(f"12. Long files stop at their chunk cap ({DATA_CODE_CHUNK_CAP} data/code, {PLAIN_TEXT_CHUNK_CAP} text); scan order is documents, data, photos, video: OK")
 
 
 if __name__ == "__main__":

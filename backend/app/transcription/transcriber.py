@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from .audio_io import WHISPER_SAMPLE_RATE, load_audio_as_mono_16k
+from .guard import clean_transcript, clean_window
 from .whisper_onnx import WhisperOnnx
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,11 @@ WINDOW_SECONDS = 30
 CUT_SEARCH_SECONDS = 3.0
 CUT_FRAME_SECONDS = 0.1
 SILENCE_RMS = 1e-4
+# Whisper's own rule for throwing a window away (openai/whisper, transcribe.py):
+# it probably holds no speech AND what it decoded was low-confidence. Music is
+# the usual case; the loop and filler rules in guard.py catch what slips past.
+NO_SPEECH_PROB = 0.6
+LOW_AVG_LOGPROB = -1.0
 
 
 class Transcriber:
@@ -54,7 +60,7 @@ class Transcriber:
         self.model = WhisperOnnx(model_dir)
         self.active_provider = self.model.active_provider
 
-    def transcribe(self, audio_source: bytes | Path, vocabulary_hint: list[str] | None = None) -> str:
+    def transcribe(self, audio_source: bytes | Path, vocabulary_hint: list[str] | None = None, max_seconds: float | None = None) -> str:
         """`vocabulary_hint`: names Whisper should be able to spell — in
         practice the user's own file names. Whisper decodes conditioned on
         a text prompt, and words in that prompt become far more likely
@@ -64,8 +70,13 @@ class Transcriber:
         "gurtucheyatam" went from "good 2 chair tomorrow" to the right
         word, "Abhisek" from "Abhishek" to the user's spelling, with no
         change on ordinary sentences. A natural-sentence prompt works; a
-        bare comma list made the model emit comma-separated fragments."""
-        audio = load_audio_as_mono_16k(audio_source)
+        bare comma list made the model emit comma-separated fragments.
+
+        `max_seconds`: only the start of the recording (a video's soundtrack).
+        A file (a Path) also has filler Whisper invents on music ("Thank you
+        for watching") dropped; a spoken query (bytes) may really say it."""
+        audio = load_audio_as_mono_16k(audio_source, max_seconds=max_seconds)
+        is_file = isinstance(audio_source, Path)
         if audio.size == 0:
             return ""
         prompt_ids = self._prompt_ids(vocabulary_hint)
@@ -81,7 +92,7 @@ class Transcriber:
         if audio.size <= window:
             # A recording that fits one window (every voice-search clip) is
             # transcribed exactly as before.
-            return self._transcribe_window(audio, prompt_ids)
+            return self._transcribe_window(audio, prompt_ids, is_file)
 
         pieces: list[str] = []
         start = 0
@@ -91,11 +102,11 @@ class Transcriber:
                 end = _quietest_cut(audio, end - int(CUT_SEARCH_SECONDS * WHISPER_SAMPLE_RATE), end)
             piece = audio[start:end]
             if _rms(piece) >= SILENCE_RMS:
-                text = self._transcribe_window(piece, prompt_ids)
+                text = self._transcribe_window(piece, prompt_ids, is_file)
                 if text:
                     pieces.append(text)
             start = end
-        return " ".join(pieces)
+        return clean_transcript(" ".join(pieces))
 
     def _prompt_ids(self, vocabulary_hint: list[str] | None):
         if not vocabulary_hint:
@@ -114,8 +125,11 @@ class Transcriber:
             hints.pop()
         return None
 
-    def _transcribe_window(self, audio: np.ndarray, prompt_ids) -> str:
-        return self.model.transcribe_window(audio, prompt_ids)
+    def _transcribe_window(self, audio: np.ndarray, prompt_ids, is_file: bool = True) -> str:
+        text, no_speech_prob, avg_logprob = self.model.transcribe_window_scored(audio, prompt_ids)
+        if no_speech_prob > NO_SPEECH_PROB and avg_logprob < LOW_AVG_LOGPROB:
+            return ""
+        return clean_window(text, drop_filler=is_file)
 
 
 def _rms(audio: np.ndarray) -> float:

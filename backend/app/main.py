@@ -28,7 +28,7 @@ from .model_locations import (  # noqa: F401  (re-exported: scripts import CLIP_
 from .paths import data_dir, ensure_app_dirs, models_dir
 from .power import PowerMonitor
 from .extraction import ocr
-from .routes import agent, context, files, index, search, settings, system
+from .routes import agent, browse, context, files, index, search, settings, system
 from .routes import router as router_routes
 from .routes.system import feature_problems
 from .search import SearchService
@@ -231,5 +231,5 @@ def health(request: Request):
     return {"status": "ok", "app_data_dir": str(app.state.dirs["root"]) if trusted else None, "token_required": True}
 
 
-for _module in (system, index, files, search, context, settings, router_routes, agent):
+for _module in (system, index, files, search, context, settings, router_routes, agent, browse):
     app.include_router(_module.router)

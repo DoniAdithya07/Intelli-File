@@ -63,6 +63,10 @@ class FileRecord:
     hash: str
     deleted: bool = False
     indexed: bool = True  # False from record creation until the chunks are stored (Phase 11 crash recovery)
+    # Video-extension files only (2026-10-12): True = the container holds audio and no video
+    # (a WhatsApp ".mpeg" voice note), so it is transcribed, not looked at; None = not probed yet.
+    audio_only: bool | None = None
+    speech_indexed: bool = False  # a video whose soundtrack was transcribed ("Search what is said in videos")
 
 
 def build_file_record(path: Path, file_id: str | None = None, file_hash: str | None = None, indexed: bool = True) -> FileRecord:

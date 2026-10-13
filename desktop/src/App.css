@@ -12,17 +12,24 @@
    "Same as Windows" while Windows is in dark mode (theme.ts sets
    data-theme on <html>). */
 :root {
-  --c-shell: 243 243 243;      /* the window and the navigation pane */
-  --c-canvas: 249 249 249;     /* the content panel */
-  --c-content: 255 255 255;    /* cards and lists */
+  --c-shell: 243 243 243;      /* the window: address row, title bar */
+  --c-canvas: 255 255 255;     /* the content area (same as content: Explorer is flat) */
+  --c-content: 255 255 255;    /* content, lists and menus */
+  --c-nav: 249 249 249;        /* the left tree */
+  --c-status: 243 243 243;     /* the status bar */
+  --c-field: 255 255 255;      /* search box, address field, unselected pills */
   --c-ink: 26 26 26;
+  --c-sub: 94 94 94;           /* secondary text, 6.5:1 on white */
+  --c-dim: 107 107 107;        /* column headers, placeholders, 5.3:1 */
   --c-rule: 229 229 229;
-  --c-rule-strong: 208 208 208;
-  --c-accent: 0 95 184;        /* Windows blue: actions */
+  --c-rule-strong: 207 207 207;
+  --c-accent: 0 103 192;       /* Windows blue: actions */
   --c-accent-strong: 0 80 160;
   --c-on-accent: 255 255 255;
   --c-accent-soft: 219 234 250; /* Explorer's selection fill */
-  --c-marker: 0 95 184;        /* "found" and "you are here" */
+  --c-accent-soft-hover: 207 227 247;
+  --c-nav-selected: 230 230 230;
+  --c-marker: 0 103 192;       /* "found" and "you are here" */
   --c-amber: 161 92 0;         /* reasons from your own habits */
   --c-amber-soft: 246 235 218;
   --c-amber-text: 122 70 0;
@@ -42,16 +49,23 @@
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --c-shell: 32 32 32;
-  --c-canvas: 39 39 39;
-  --c-content: 45 45 45;
+  --c-shell: 44 44 44;
+  --c-canvas: 25 25 25;
+  --c-content: 25 25 25;
+  --c-nav: 25 25 25;
+  --c-status: 28 28 28;
+  --c-field: 56 56 56;
   --c-ink: 255 255 255;
+  --c-sub: 197 197 197;
+  --c-dim: 157 157 157;
   --c-rule: 58 58 58;
   --c-rule-strong: 80 80 80;
   --c-accent: 96 205 255;
   --c-accent-strong: 130 216 255;
   --c-on-accent: 0 0 0;
-  --c-accent-soft: 44 62 78;
+  --c-accent-soft: 36 54 62;
+  --c-accent-soft-hover: 42 64 74;
+  --c-nav-selected: 51 51 51;
   --c-marker: 96 205 255;
   --c-amber: 252 225 0;
   --c-amber-soft: 70 60 20;
@@ -79,13 +93,13 @@
   --ink: rgb(var(--c-ink));
   --rule: rgb(var(--c-rule));
   --rule-strong: rgb(var(--c-rule-strong));
-  --hover: rgb(var(--c-ink) / 0.05);
+  --hover: rgb(var(--c-ink) / 0.06);
   --pressed: rgb(var(--c-ink) / 0.09);
   --selected: rgb(var(--c-accent-soft));
   --marker: rgb(var(--c-marker));
   --fg: rgb(var(--c-ink));
-  --fg-muted: rgb(var(--c-ink) / 0.7);
-  --fg-dim: rgb(var(--c-ink) / 0.52);
+  --fg-muted: rgb(var(--c-sub));
+  --fg-dim: rgb(var(--c-dim));
   --accent: rgb(var(--c-accent));
   --accent-strong: rgb(var(--c-accent-strong));
   --amber: rgb(var(--c-amber));
@@ -128,30 +142,65 @@ body.overlay-window { background: transparent; }
 .icon-sm { font-size: 16px; }
 
 /* ---- the window ---- */
-.sidebar { background: var(--shell); }
-/* The content sits in a panel with a rounded top-left corner, as in Windows 11 apps. */
-.app-main {
-  background: var(--canvas);
-  border-top: 1px solid var(--rule);
-  border-left: 1px solid var(--rule);
-  border-top-left-radius: 8px;
-  margin-top: 6px;
-}
+/* Windows' own icon font (installed with Windows 11): nothing ships for the shell's icons. */
+.fi { font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif; font-style: normal; font-weight: 400; line-height: 1; display: inline-block; font-size: 16px; flex-shrink: 0; }
 
-/* Navigation: a quiet fill on the current page and one short blue bar that
-   slides to it (AppShell moves .nav-indicator). */
-.nav-item { border-radius: 4px; transition: background-color var(--fast) linear; }
-.nav-item:hover { background: var(--hover); }
-.nav-item:active { background: var(--pressed); }
-.nav-item[aria-current="page"] { background: rgb(var(--c-ink) / 0.06); font-weight: 600; }
-.nav-indicator {
-  position: absolute; left: 8px; top: 0; width: 3px; height: 16px; border-radius: 2px;
-  background: var(--accent);
-  transition: transform var(--normal) var(--ease);
+/* Tree rows: a quiet fill on the current place and a short accent bar drawn on the row itself. */
+.tree-row { position: relative; border-radius: 4px; transition: background-color var(--fast) linear; }
+.tree-row:hover { background: var(--hover); }
+.tree-row[aria-current="page"] { background: rgb(var(--c-nav-selected)); }
+.tree-row[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 8px; width: 3px; height: 16px; border-radius: 2px; background: var(--accent); }
+.tree-row:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }
+
+/* Command bar and address row buttons: 32 px targets, flat. */
+.cmd { display: inline-flex; align-items: center; gap: 8px; height: 32px; min-width: 32px; justify-content: center; padding: 0 8px; border-radius: 4px; color: var(--fg); white-space: nowrap; transition: background-color var(--fast) linear; }
+.cmd:hover:not(:disabled) { background: var(--hover); }
+.cmd:active:not(:disabled) { background: var(--pressed); }
+.cmd:disabled { opacity: 0.4; }
+.cmd[aria-pressed="true"] { background: var(--pressed); }
+
+/* Pills: Recent / Favorites, and the kind-of-file filters. */
+.pill { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 16px; background: rgb(var(--c-field)); border: 1px solid transparent; color: var(--fg); }
+:root:not([data-theme="dark"]) .pill { border-color: var(--rule-strong); }
+.pill:hover { background: color-mix(in srgb, rgb(var(--c-field)), rgb(var(--c-ink)) 6%); }
+.pill[aria-selected="true"] { background: var(--accent); color: rgb(var(--c-on-accent)); border-color: var(--accent); }
+
+/* A menu or flyout. */
+.menu { background: color-mix(in srgb, rgb(var(--c-content)), rgb(var(--c-ink)) 4%); border: 1px solid var(--rule-strong); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.14); }
+:root[data-theme="dark"] .menu { box-shadow: 0 8px 24px rgb(0 0 0 / 0.4); }
+.menu-item { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 8px; border-radius: 4px; text-align: left; font-size: 14px; }
+.menu-item:hover, .menu-item:focus-visible { background: var(--hover); outline: none; }
+.menu-sep { height: 1px; margin: 4px 0; background: var(--rule); }
+
+/* File lists: Explorer rows, flat. The focused row (keyboard) gets a ring while the list has focus. */
+.row { transition: background-color var(--fast) linear; }
+.row:hover { background: var(--hover); }
+.row[aria-selected="true"] { background: rgb(var(--c-accent-soft)); }
+.row[aria-selected="true"]:hover { background: rgb(var(--c-accent-soft-hover)); }
+.list-wrap:focus { outline: none; }
+.list-wrap:focus-visible [data-focus="true"] { outline: 2px solid var(--fg); outline-offset: -2px; }
+.tile { border-radius: 4px; }
+.tile:hover { background: var(--hover); }
+.tile[aria-selected="true"] { background: rgb(var(--c-accent-soft)); }
+
+/* The scope switch: two always-visible options. */
+.seg { display: inline-flex; height: 32px; border: 1px solid var(--rule-strong); border-radius: 4px; overflow: hidden; flex-shrink: 0; background: rgb(var(--c-field)); }
+.seg button { padding: 0 10px; font-size: 13px; color: var(--fg); }
+.seg button[aria-checked="true"] { background: var(--accent); color: rgb(var(--c-on-accent)); }
+.seg button:not([aria-checked="true"]):hover { background: var(--hover); }
+
+.drive-bar { height: 12px; background: #E6E6E6; border-radius: 2px; overflow: hidden; }
+.drive-bar > i { display: block; height: 100%; background: #0070CB; }
+.drive-bar > i.full { background: #C42B1C; }
+
+/* Windows high contrast: system colours, outlines for selection. */
+@media (forced-colors: active) {
+  .row[aria-selected="true"], .tile[aria-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .pill[aria-selected="true"], .seg button[aria-checked="true"] { background: Highlight; color: HighlightText; }
 }
 
 /* ---- surfaces ---- */
-.panel { background: var(--content); border: 1px solid var(--rule); border-radius: 8px; box-shadow: var(--panel-lift); }
+.panel { background: var(--content); border: 1px solid var(--rule); border-radius: 8px; }
 /* File-type tile: the kind's colour for the icon, faint for the ground. */
 .ft { color: rgb(var(--ft)); background: rgb(var(--ft) / 0.08); border: 1px solid rgb(var(--ft) / 0.28); }
 .kbd {
@@ -176,7 +225,7 @@ body.overlay-window { background: transparent; }
 .chip { font-size: 12px; padding: 1px 7px; border-radius: 4px; background: rgb(var(--c-ink) / 0.07); color: var(--fg-muted); white-space: nowrap; }
 .chip-accent { background: var(--selected); color: var(--marker); }
 .chip-personal { background: rgb(var(--c-amber-soft)); color: rgb(var(--c-amber-text)); }
-mark.hl { background: rgb(var(--c-highlight)); color: inherit; border-radius: 2px; padding: 0 1px; }
+mark.hl { background: rgb(var(--c-highlight)); color: rgb(var(--c-ink)); border-radius: 2px; padding: 0 1px; }
 
 /* ---- controls (Windows 11 buttons: 4px corners, a darker bottom edge on the secondary) ---- */
 .btn-primary, .btn-secondary, .btn-ghost { border-radius: 4px; transition: background-color var(--fast) linear, color var(--fast) linear; }
@@ -194,10 +243,6 @@ mark.hl { background: rgb(var(--c-highlight)); color: inherit; border-radius: 2p
 /* The search box: a Windows text box, whose bottom edge turns blue when focused. */
 .omnibox { border-radius: 6px; border-color: var(--rule) !important; border-bottom: 1px solid rgb(var(--c-ink) / 0.45) !important; }
 .omnibox:focus-within { border-bottom: 2px solid var(--accent) !important; }
-
-/* Result rows: Explorer's hover, and its light-blue selection. */
-.result-row { transition: background-color var(--fast) linear; }
-.result-row[aria-selected="true"] { background: var(--selected); }
 
 /* Windows switch: a rounded track and a small round knob that slides. */
 .toggle { border-radius: 999px !important; transition: background-color var(--fast) linear, border-color var(--fast) linear; }

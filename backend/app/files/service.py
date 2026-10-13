@@ -110,6 +110,10 @@ class FileWatchService:
         # too long, online-only). Set by the app so the Status screen lists the
         # watcher's skips like the scan's (2026-10-05: they were silent).
         self.on_skip = None
+        # on_removed(path, moved_to=None): a record left its path because the
+        # file was deleted, moved or renamed. Set by the app (folder_scan.
+        # note_removal), so "why is this file missing" can say so.
+        self.on_removed = None
 
     def initial_scan(self, root_paths: list[str]) -> None:
         """One-time recursive scan of the selected folders, run at startup
@@ -240,7 +244,12 @@ class FileWatchService:
         self._debouncer.cancel(path)
         record = self._record_store.mark_deleted(path)
         if record is not None:
+            self._removed(path)
             self._job_queue.submit(Job(kind="delete", path=path, file_id=record.file_id))
+
+    def _removed(self, path: str, moved_to: str | None = None) -> None:
+        if self.on_removed is not None:
+            self.on_removed(path, moved_to)
 
     def _on_directory_gone(self, dir_path: str) -> None:
         """Every record under a removed directory is tombstoned."""
@@ -262,6 +271,7 @@ class FileWatchService:
             new_path = dest_prefix + record.path[len(prefix):]
             if self.is_indexable_here(Path(new_path), must_exist=False):
                 self._record_store.rename(record.path, new_path)
+                self._removed(record.path, new_path)
             else:
                 self._on_deleted(record.path)
 
@@ -276,6 +286,7 @@ class FileWatchService:
             return
         if existing is not None and dest_supported:
             self._record_store.rename(src_path, dest_path)
+            self._removed(src_path, dest_path)
         elif existing is not None:
             # Renamed to an extension we don't index (notes.txt -> notes.bak):
             # from the index's point of view the document is gone.

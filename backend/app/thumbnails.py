@@ -12,11 +12,17 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from .files.discovery import VIDEO_EXTENSIONS
+from .files.discovery import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
+from .files.media import is_audio_only_media
 from .indexing.visual_indexer import decode_frame_at
 
 DEFAULT_MAX_SIZE = 256
 JPEG_QUALITY = 85
+
+
+class NoThumbnail(Exception):
+    """The file has no picture to show (audio). Not a failure: the caller
+    answers "no thumbnail" quietly, the UI shows its audio icon."""
 
 
 def generate_thumbnail(
@@ -30,6 +36,8 @@ def generate_thumbnail(
     For a video, `timestamp_offset_seconds` is the moment to show (the
     keyframe that matched); for a photo it is ignored.
     """
+    if path.suffix.lower() in AUDIO_EXTENSIONS or is_audio_only_media(path):
+        raise NoThumbnail(path.name)
     if path.suffix.lower() in VIDEO_EXTENSIONS:
         image = decode_frame_at(path, timestamp_offset_seconds or 0.0).convert("RGB")
         image.thumbnail((max_size, max_size), Image.BICUBIC)

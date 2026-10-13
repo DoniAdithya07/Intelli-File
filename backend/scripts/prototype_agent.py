@@ -286,6 +286,256 @@ def main() -> None:
             assert library_answer(content_question, lib) is None, content_question
         print("A8. Collection questions (how many files, any videos, any audio, how many photos) are counted from the index; content questions still go to the agent: OK")
 
+        # --- A8b. The same questions however they are worded (2026-10-13, from
+        # real use on a 2,019-file index): "how many movies are theere in the
+        # laptop" missed the anchored patterns (the typo, "in the laptop"),
+        # went to the model and came back as "28 files ... according to the
+        # TEST report". Typos, no question mark, any location phrase. ---
+        videos = [f"C:/movies/{n}" for n in ("a.mp4", "b.mkv", "c.mov")] + [f"C:/movies/d{i}.mp4" for i in range(1, 10)]
+        quizzes = ["C:/school/Quiz1.pdf", "C:/school/quizzes/week2.docx", "C:/school/math quiz.txt", "C:/school/Quizlet export.csv"]
+        big = [f"C:/docs/report {i}.pdf" for i in range(2000)] + videos + quizzes + ["C:/music/song.mp3", "C:/work/invoices/march.txt", "C:/work/april invoice.txt"]
+        assert len(big) == 2019
+        movies = library_answer("how many movies are theere in the laptop", big)
+        assert movies == "12 videos (a.mp4, b.mkv, c.mov and others), out of 2,019 indexed files.", movies
+        assert library_answer("how many files are theere in the laptop", big).startswith("IntelliFile has indexed 2,019 files: ")
+        for wording in ("hw many vidoes do i have", "number of videos", "count the videos", "count of movies", "total videos in my system", "how many movies on the computer",
+                        "how many video files in this pc", "how many movies here", "how many videos in my files", "how many movies have i got", "How many MOVIES are there ??",
+                        "what is the total number of videos in my laptop", "how many moives are there"):
+            assert library_answer(wording, big) == movies, wording
+        assert library_answer("number of pdfs", big).startswith("2,001 PDFs (report 0.pdf, "), library_answer("number of pdfs", big)
+        for wording in ("any songs on this pc?", "is there any music in my laptop", "do i have songs", "have i got any songs here"):
+            assert library_answer(wording, big) == "Yes: 1 audio file (song.mp3), out of 2,019 indexed files.", wording
+        assert library_answer("how many photos are there in the laptop", big) == "None of the 2,019 indexed files is a photo."
+        listed = library_answer("list my videos", big)
+        assert listed == "12 videos, out of 2,019 indexed files: a.mp4, b.mkv, c.mov, d1.mp4, d2.mp4, d3.mp4, d4.mp4, d5.mp4, d6.mp4, d7.mp4 and 2 others.", listed
+        which = library_answer("which pdfs do i have", big)
+        assert which.startswith("2,001 PDFs, out of 2,019 indexed files: report 0.pdf, ") and which.endswith(" and 1,991 others."), which
+        assert library_answer("show all spreadsheets", big) == "1 spreadsheet, out of 2,019 indexed files: Quizlet export.csv."
+        # A subject that is not a kind of file is counted in file and folder
+        # names, and the answer says that is all it counted.
+        quiz = library_answer("how many quizs are there in the laptop", big)
+        assert quiz == ('4 files have "quiz" in their name or folder name (Quiz1.pdf, week2.docx, math quiz.txt and 1 other), out of 2,019 indexed files. '
+                        "This counts names, not what is written inside the files. Search looks inside."), quiz
+        for wording in ("how many quizzes do i have", "how many quiz files are there", "number of quizs in my pc"):
+            assert library_answer(wording, big) == quiz, wording
+        assert library_answer("how many invoices do i have", big).startswith('2 files have "invoice" in their name or folder name (march.txt, april invoice.txt), out of 2,019 indexed files. This counts names')
+        nothing = library_answer("how many zebras are there in the laptop", big)
+        assert nothing == 'No indexed file has "zebra" in its name or folder name (2,019 files checked). This counts names, not what is written inside the files. Search looks inside.', nothing
+        import evaluate_agent
+        content_questions = ["how many euros was the march invoice", "how many pages is the lease", "how many days until the dentist appointment", "are there any notes about zebras",
+                             "what is the wifi password", "when is the march invoice due, and how much is it", "how many miles did I run in March", "what is the invoice total",
+                             "how may i find my files", "which band do I use for the clamshell exercise", "list the steps for the sourdough", "where is my resume.docx", "any news about the lease?",
+                             "too many files are in the lease folder, which one is signed"]
+        content_questions += [q for q, _ in evaluate_agent.ANSWERABLE] + evaluate_agent.UNANSWERABLE + [q for q, _ in QUESTIONS]
+        for content_question in content_questions:
+            assert library_answer(content_question, big) is None, (content_question, library_answer(content_question, big))
+        print(f"A8b. Collection questions however worded (typos, 'in the laptop', 'number of', 'count the', list, any) are answered from the index: {movies!r}; "
+              f"a subject that is not a file kind is counted in names and says so: {quiz!r}; {len(content_questions)} content questions (the whole Ask benchmark among them) still go to the agent: OK")
+
+        # --- A8c. A count must be about what was asked (2026-10-13). The same
+        # question, once it reached the model, was answered "There are 28 files
+        # listed ..." from a screenshot that never mentions movies. The word
+        # rule only looked at question words the answer repeats, and the answer
+        # had swapped the subject, so "movies" was never checked. ---
+        from app.agent.loop import _unsupported_premise
+        shot = Source(1, "s", "TEST report.png", "TEST report.png", None, "TEST report. Index status: 28 files listed in the laptop's index, 0 failed.", "strong")
+        yes = lambda word, text: True  # noqa: E731 (a judge that agrees with everything)
+        wrong_subject = _unsupported_premise("how many movies are theere in the laptop", "There are 28 files listed in the laptop's index, according to the TEST report", [shot], judge=yes)
+        assert wrong_subject and "movies" in wrong_subject, wrong_subject
+        assert _unsupported_premise("number of movies in the laptop", "28 files are listed in the index", [shot], judge=None), "the count rule needs no judge"
+        assert _unsupported_premise("how many files are listed in the index", "28 files are listed in the laptop's index", [shot], judge=yes) is None
+        film = Source(2, "f", "watchlist.txt", "watchlist.txt", None, "Watchlist: 14 movie nights planned, one movie each.", "strong")
+        assert _unsupported_premise("how many movies are on the watchlist", "14 are planned", [film], judge=yes) is None, "a close form of the word (movie) counts as a mention"
+        assert _unsupported_premise("how many movies are on the watchlist", "28 files are listed", [shot], judge=yes, retrieved=[film]) is None, "a strong retrieved source that names the subject counts"
+        llm = ScriptedLLM(plans=[{"thought": "look", "action": "search", "query": "sourdough starter flour", "mode": "auto", "filters": ""}], answer="The dough ferments for five hours at 24 C [1].")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "how many movies does the sourdough need")
+        assert not answer["grounded"] and answer["text"] == "I couldn't find that in your files." and any("movies" in e.get("text", "") for e in events if e.get("system")), answer
+        llm = ScriptedLLM(plans=[{"thought": "look", "action": "search", "query": "sourdough bulk ferment hours", "mode": "auto", "filters": ""}], answer="The dough ferments for five hours at 24 C [1].")
+        events, answer, done = collect(Agent(llm, toolbox, first_look=False), "how many hours does the sourdough ferment")
+        assert answer["grounded"] and answer["citations"][0]["filename"] == "sourdough.md", answer
+        print("A8c. A 'how many <thing>' answer drawn from sources that never mention <thing> (28 'files' for 'movies') is 'couldn't find'; a close form of the word or a real subject still answers: OK")
+
+        # --- A8d. "Why is this file missing": answered from what the engine
+        # already knows, the first reason that applies, never by the model. ---
+        from app.agent.missing import Known, missing_answer, why_missing
+        known = Known(
+            active=["C:/docs/Annual Report.pdf", "C:/docs/budget.xlsx", "C:/a/notes.txt", "C:/b/notes.txt", "C:/docs/march_invoice.txt"],
+            failures=[{"path": "C:/docs/locked.pdf", "reason": "The file is password-protected."}],
+            skips=[{"path": "C:/video/holiday.mp4", "reason": "larger than 50 MB, the limit for .pdf files"}, {"path": "C:/cloud/thesis.docx", "reason": "online-only OneDrive file; make it available offline to index it"}],
+            deleted=[{"path": "C:/old/resume.docx"}, {"path": "C:/old/cv.txt", "moved_to": "C:/docs/cv 2026.txt"}],
+            folders=[f"C:/folder{i}" for i in range(1, 8)],
+        )
+        def status(name, k=known):
+            return why_missing(name, k)["status"]
+        got = why_missing("annual report.PDF", known)
+        assert got == {"name": "annual report.PDF", "status": "indexed", "reason": '"Annual Report.pdf" is indexed, so it is not missing. It is in C:/docs.', "path": "C:/docs/Annual Report.pdf"}, got
+        assert why_missing("annual report", known)["path"] == "C:/docs/Annual Report.pdf" and why_missing("anual report", known)["path"] == "C:/docs/Annual Report.pdf", "without the extension, and one letter off"
+        assert why_missing("march invoice", known)["path"] == "C:/docs/march_invoice.txt" and why_missing("C:\\docs\\BUDGET.xlsx", known)["status"] == "indexed"
+        assert why_missing("notes.txt", known)["reason"] == "2 indexed files have that name, so it is not missing: C:/a/notes.txt, C:/b/notes.txt." and status("notes") == "indexed"
+        assert status("motes.txt") == "unknown", "a typo that fits two known files is not guessed"
+        got = why_missing("locked.pdf", known)
+        assert got["status"] == "failed" and got["reason"] == '"locked.pdf" was found but could not be read: The file is password-protected.' and got["path"] == "C:/docs/locked.pdf", got
+        got = why_missing("holiday", known)
+        assert got["status"] == "skipped" and "larger than 50 MB" in got["reason"], got
+        assert "online-only OneDrive file" in why_missing("thesis.docx", known)["reason"]
+        got = why_missing("resume.docx", known)
+        assert got["status"] == "deleted" and "deleted, moved or renamed" in got["reason"] and "in this run of the app" in got["reason"], got
+        assert why_missing("cv.txt", known)["reason"].endswith("It was in C:/old. It is now indexed as C:/docs/cv 2026.txt."), why_missing("cv.txt", known)
+        got = why_missing("setup.exe", known)
+        assert got["status"] == "unsupported" and ".exe" in got["reason"] and "path" not in got, got
+        busy = Known(active=known.active, folders=known.folders, indexing=True, waiting=1234)
+        got = why_missing("holiday.mp4", busy)
+        assert got["status"] == "indexing" and "1,234 files" in got["reason"], got
+        assert why_missing("holiday.mp4", Known(active=[], indexing=True))["reason"].startswith("Indexing is still running, so")
+        assert why_missing("draft.docx", Known(active=[], unfinished=["C:/docs/draft.docx"], indexing=True))["path"] == "C:/docs/draft.docx"
+        got = why_missing("holiday photos.docx", Known(active=known.active, folders=known.folders))
+        assert got["status"] == "unknown" and "C:/folder5" in got["reason"] and "C:/folder6" not in got["reason"] and "2 more" in got["reason"] and "spelled differently" in got["reason"], got
+        assert "no folder" in why_missing("x.pdf", Known(active=[])).get("reason").lower()
+        assert status("") == "invalid" and status("   ") == "invalid" and status("a\x00b") == "invalid" and status("x" * 500) == "invalid"
+        # A full path: checked on disk (read-only) only inside an indexed folder.
+        real = workdir / "why"
+        (real / "node_modules").mkdir(parents=True)
+        (real / "node_modules" / "readme.txt").write_text("x")
+        (real / "fresh.txt").write_text("x")
+        on_disk = Known(active=[], folders=[str(real)])
+        assert status(str(real / "node_modules" / "readme.txt"), on_disk) == "skipped" and status(str(real / "fresh.txt"), on_disk) == "not_indexed_yet"
+        assert status(str(real / "gone.txt"), on_disk) == "not_on_disk" and status(str(workdir / "elsewhere" / "a.txt"), on_disk) == "outside_folders"
+        # Ask: these wordings get that answer through the from_index path.
+        for wording, part in (("why is Annual Report.pdf missing", "is indexed, so it is not missing"), ("why can't i find budget.xlsx", '"budget.xlsx" is indexed'),
+                              ("where is my resume.docx", "deleted, moved or renamed"), ("why is march invoice not showing", '"march_invoice.txt" is indexed'),
+                              ("why isn't locked.pdf indexed?", "password-protected"), ("why does holiday.mp4 not show up", "larger than 50 MB"),
+                              ("where is Annual Report.pdf", "It is in C:/docs"), ("Why is setup.exe not in the results?", "does not read .exe files")):
+            got = missing_answer(wording, known)
+            assert got and part in got, (wording, got)
+        for wording in ("where is the lisbon hotel", "where is the dentist appointment", "why is the sky blue", "why can't i find anything about zebras", "what is missing from the lease",
+                        "where is the annual report", "why is the march invoice due in april", *(q for q in content_questions if "resume.docx" not in q)):
+            assert missing_answer(wording, known) is None, (wording, missing_answer(wording, known))
+        agent = Agent(ScriptedLLM(plans=[], answer="x"), toolbox, known=lambda: known)
+        events, answer, done = collect(agent, "why is locked.pdf missing")
+        assert answer["from_index"] and answer["citations"] == [] and "password-protected" in answer["text"] and agent.llm.calls == 0 and done["tool_calls"] == 0, answer
+        events, answer, done = collect(Agent(ScriptedLLM(plans=[], answer="x"), toolbox), "where is sourdough.md")
+        assert answer.get("from_index") and "is indexed, so it is not missing" in answer["text"], answer
+        print("A8d. Why is a file missing: indexed / failed / skipped / deleted / unsupported type / still indexing / unknown (with the indexed folders), matched without the extension, "
+              "any case, one letter off when only one file fits; a full path is checked on disk only inside an indexed folder; Ask answers these wordings from the index with no model call, "
+              "and 'where is <not a file>' still goes to the agent: OK")
+
+        # --- A8e. QA round 1 (2026-10-13), on an index of 20 files: 14
+        # documents (8 .txt), 4 photos (3 .png, no .jpg), 1 video, 1 audio
+        # (.wav). Every input below gave a wrong or misleading answer. ---
+        from app.agent.missing import index_answer
+        docs = [f"D:/qa/documents/{n}" for n in ("test report.txt", "quiz 1.txt", "march invoice.txt", "april invoice.txt", "notes a.txt", "notes b.txt", "sourdough.txt", "roadmap.txt",
+                                                 "turbine manual.pdf", "cake recipe.docx", "watchlist.md", "budget.csv", "roadmap.pptx")]
+        qa = docs + ["D:/qa/other/readme.md", "D:/qa/photos/red circle.png", "D:/qa/photos/blue square.png", "D:/qa/photos/Screenshot 2026.png", "D:/qa/photos/old.bmp",
+                     "D:/qa/media/clip.mp4", "D:/qa/media/meeting note.wav"]
+        qa_known = Known(active=qa, folders=["D:/qa", "E:/more"], deleted=[{"path": "D:/qa/documents/quiz 2.txt", "moved_to": "D:/qa/documents/quiz two.txt"}],
+                         failures=[{"path": "D:/qa/documents/locked.pdf", "reason": "The file is password-protected."}, {"path": "D:/qa/documents/torn.docx", "reason": "The file is damaged or not a valid Word file."}],
+                         skips=[{"path": "D:/qa/media/film.mkv", "reason": "larger than 50 MB, the limit for .pdf files"}])
+        def said(question, k=qa_known):
+            return index_answer(question, k)
+        # 1. What IntelliFile did with the files is still a question about the collection.
+        everything = "IntelliFile has indexed 20 files: 14 documents, 4 photos, 1 video and 1 audio file. The most common types are 8 TXT, 3 PNG, 2 MD, 1 PDF."
+        for wording in ("how many files did i index", "how many files did intellifile find", "how many files have you indexed so far", "how many files does intellifile know",
+                        "how many files did you scan", "how many files are in the index right now", "how many file", "list files", "how many files has it read"):
+            assert said(wording) == everything, (wording, said(wording))
+        assert said("how many photos has it found") == "4 photos (red circle.png, blue square.png, Screenshot 2026.png and 1 other), out of 20 indexed files."
+        assert said("how many documents are indexed in total").startswith("14 documents (test report.txt, quiz 1.txt, march invoice.txt and others), out of 20")
+        # 3. A file-type word counts that type; a folder counts what is inside it.
+        assert said("how many png files are there") == "3 PNG files (red circle.png, blue square.png, Screenshot 2026.png), out of 20 indexed files."
+        assert said("how many jpg files do i have") == "None of the 20 indexed files is a JPG file." and said("how many mp3 are there") == "None of the 20 indexed files is an MP3 file."
+        assert said("how many mp4 files are there") == "1 MP4 file (clip.mp4), out of 20 indexed files." and said("how many csv files are there") == "1 CSV file (budget.csv), out of 20 indexed files."
+        for wording in ("how many text files are there", "how many txt files are there", "how many .txt files do i have", "number of txt"):
+            assert said(wording) == "8 TXT files (test report.txt, quiz 1.txt, march invoice.txt and others), out of 20 indexed files.", (wording, said(wording))
+        assert said("how many word documents are there") == "1 Word document (cake recipe.docx), out of 20 indexed files." and said("how many docx files are there").startswith("1 DOCX file (cake recipe.docx)")
+        assert said("how many md files are there").startswith("2 MD files (watchlist.md, readme.md)") and said("how many wavs do i have").startswith("1 WAV file (meeting note.wav)")
+        assert said("how many screenshots do i have") == ('1 file has "screenshot" in its name or folder name (Screenshot 2026.png), out of 20 indexed files. '
+                                                          "This counts names, not what is written inside the files. Search looks inside."), said("how many screenshots do i have")
+        assert said("how many files are there in the documents folder") == '13 files are in the "documents" folder (test report.txt, quiz 1.txt, march invoice.txt and others), out of 20 indexed files.'
+        assert said("how many pdfs are in the documents folder") == '1 PDF in the "documents" folder (turbine manual.pdf), out of 20 indexed files.'
+        assert said("how many pngs are inside photos") == '3 PNG files in the "photos" folder (red circle.png, blue square.png, Screenshot 2026.png), out of 20 indexed files.'
+        assert said("how many videos are in the photos folder") == 'None of the 4 files in the "photos" folder is a video.'
+        assert said("how many invoices are in the documents folder").startswith('2 files in the "documents" folder have "invoice" in their name or folder name (march invoice.txt, april invoice.txt)')
+        assert said("how many files in the holiday folder") == 'No indexed folder is named "holiday" (20 files checked).'
+        assert said("how many songs in the media folder") == '1 audio file in the "media" folder (meeting note.wav), out of 20 indexed files.'
+        # 6. Two kinds at once, the folders, and what failed or was left out.
+        assert said("how many videos and photos do i have") == "1 video (clip.mp4) and 4 photos (red circle.png, blue square.png, Screenshot 2026.png and 1 other), out of 20 indexed files."
+        assert said("how many folders are there") == "IntelliFile searches 2 folders: D:/qa, E:/more." and said("which folders are indexed") == said("how many folders are there")
+        assert said("how many folders are there", Known(active=[])) == "No folder has been added yet. Add one on the Index page."
+        failed = "2 files could not be read in this run of the app: locked.pdf (The file is password-protected), torn.docx (The file is damaged or not a valid Word file). The Index page lists them with the reasons."
+        assert said("how many files failed") == failed and said("how many files could not be read") == failed, said("how many files failed")
+        assert said("how many files were skipped") == "1 file was left out on purpose in this run of the app: film.mkv (larger than 50 MB, the limit for .pdf files). The Index page lists them with the reasons."
+        assert said("how many files failed", Known(active=qa)) == "No file has failed to be read in this run of the app. The Index page lists any that are."
+        assert said("how many pdf, docx and png files are there").startswith("1 PDF (turbine manual.pdf), 1 DOCX file (cake recipe.docx) and 3 PNG files (")
+        assert said("why are my files not showing up").startswith("20 files are indexed (test report.txt, ") and said("how many euros are inside the march invoice") is None
+        # 7. One file is "its", one more is "1 other".
+        assert said("how many screenshots do i have").startswith('1 file has "screenshot" in its name') and "and 1 other)" in said("how many photos are there")
+        # 2. Another number is another file, never a typo; and 4. deleted is remembered for this run.
+        for name in ("quiz 3.txt", "quiz 9", "IMG_0002.png"):
+            got = why_missing(name, Known(active=qa + ["D:/qa/photos/IMG_0001.png"], folders=["D:/qa"]))
+            assert got["status"] in ("unknown", "similar") and "path" not in got and "is indexed, so" not in got["reason"], (name, got)
+        got = why_missing("quiz 2.txt", qa_known)
+        assert got["status"] == "deleted" and got["reason"] == ('"quiz 2.txt" was in the index earlier in this run of the app, but it has since been deleted, moved or renamed, so it was taken out. '
+                                                              "It was in D:/qa/documents. It is now indexed as D:/qa/documents/quiz two.txt."), got
+        assert why_missing("turbin manual", qa_known)["path"] == "D:/qa/documents/turbine manual.pdf" and why_missing("roadmaps.pptx", qa_known)["path"] == "D:/qa/documents/roadmap.pptx"
+        assert why_missing("quiz", qa_known)["status"] == "similar", "four letters: too short for a typo, but a name contains it"
+        # 5. Part of a name, and a kind of file instead of a name.
+        assert said("why is the invoice missing") == 'No indexed file is named exactly "invoice". These indexed names are close: march invoice.txt, april invoice.txt.', said("why is the invoice missing")
+        assert why_missing("invoice", qa_known)["status"] == "similar" and "path" not in why_missing("invoice", qa_known)
+        assert said("why are my photos not showing up") == ("4 photos are indexed (red circle.png, blue square.png, Screenshot 2026.png and 1 other), out of 20 indexed files. "
+                                                            "If one is missing, ask about it by its name."), said("why are my photos not showing up")
+        no_photos = Known(active=docs, folders=["D:/qa"], extensions=frozenset({".txt", ".pdf", ".mp3"}))
+        assert said("why are my photos not showing up", no_photos) == ("No photos are indexed. The likely reason: photo and video search is off on this computer (its model folder is missing). "
+                                                                       "IntelliFile searches: D:/qa."), said("why are my photos not showing up", no_photos)
+        assert said("why are my mp3 files not showing", Known(active=docs, folders=["D:/qa"])) == "No MP3 files are indexed. The likely reason: the folder they are in is not one IntelliFile searches. IntelliFile searches: D:/qa."
+        # 7. Not a name at all.
+        for name in ("...", ".", "*.txt", "report?.pdf", "***", '"', "<>"):
+            assert why_missing(name, qa_known)["status"] == "invalid", (name, why_missing(name, qa_known))
+        # None of it takes a question about content away from the agent.
+        qa_content = ["how many hours of consulting are on the march invoice", "list the ingredients for sourdough bread", "how many documentaries are on the watchlist",
+                      "how many euros is the march invoice", "are there any notes about horizontal scaling", "where is the quarterly planning meeting", "what is the zephyr turbine maintenance schedule",
+                      "when is the march invoice due", "are there any files about lemon drizzle cake", "list the milestones in the roadmap", "where is the load balancer mentioned",
+                      "how many checks passed in the test report", "is there a recipe with poppy seeds", "which document mentions payment terms", "how many files are in the index according to the test report",
+                      "show me the invoice from march", "do i have a file about hydroponic basil", "any notes on sourdough", "how many photos are there of the red circle", "where is my recipe for sourdough",
+                      "why can't i find anything about turbines", "where is the capital of Portugal mentioned", "list everything about glaciers", "how many degrees does water boil at",
+                      "what is the total of the march invoice",
+                      "what is a pdf", "what is a spreadsheet", "how many files are mentioned in the report", "how many photos did we take in lisbon", "where is the dentist",
+                      "what does the pdf contain", "which files mention the deposit", "how many files did i send to the accountant", "what is an mp3", "how many checks failed in the test report",
+                      "what type of document is the lease", "is the roadmap in the documents folder up to date", "how many photos were taken inside the cathedral"]
+        for content_question in qa_content + [q for q in content_questions if "resume.docx" not in q]:
+            assert library_answer(content_question, qa) is None and missing_answer(content_question, qa_known) is None, (content_question, said(content_question))
+        print(f"A8e. QA round 1: what IntelliFile indexed/found/scanned is counted from the index ({everything[:34]}...); a type word counts that type and a folder what is inside it; two kinds, the folders, "
+              f"failed and skipped files are answered; another number is never a typo; deleted is known for this run; part of a name lists the names that contain it; "
+              f"{len(qa_content)} more content questions still go to the agent: OK")
+
+        # --- A8f. QA round 2 (2026-10-14): eight more wordings of "how many
+        # files are indexed" still reached the model, which answered "60
+        # files" from a report. The general rule: a count of files (or of a
+        # kind of file) that points at the index, the app or the computer is
+        # about the collection, whatever verb it uses. ---
+        from app.agent.library import counts_files_from_text
+        for q in ["how many files got indexed in the end", "so how many files did it index", "how many files are in my index at the moment", "how many files went into the index",
+                  "can you tell me the number of files in the index", "how many files are listed in the index", "how many files can you search", "tell me how many files are indexed",
+                  "how many files has intellifile picked up", "ok so how many files are on this laptop", "do you know how many files are in the index", "how many files are still in the index"]:
+            assert library_answer(q, qa) == everything, (q, library_answer(q, qa))
+        assert library_answer("how many photos went into the index", qa).startswith("4 photos"), library_answer("how many photos went into the index", qa)
+        assert library_answer("so how many videos did it index", qa).startswith("1 video"), library_answer("so how many videos did it index", qa)
+        from_a_file = ["how many files are mentioned in the report", "how many files does the report say are in the index", "how many files did the backup script copy",
+                       "how many photos did we take in lisbon", "how many songs are on the playlist for the party", "how many notes did i take about scaling"]
+        for q in from_a_file:
+            assert library_answer(q, qa) is None, (q, library_answer(q, qa))
+            assert counts_files_from_text(q), f"an answer to {q!r} must say its number comes from a file"
+        assert not counts_files_from_text("how many euros was the march invoice") and not counts_files_from_text("when is the rent due")
+        # QA round 3: a pointer word inside another phrase is not a pointer.
+        # These seven were answered from the index; four real ones were missed.
+        for q in ["how many photos does the computer science syllabus ask for", "how many documents of warranty paperwork were scanned for the pc build",
+                  "how many photos does the appendix of the book index name", "how many photos in the computer science portfolio", "how many files does a laptop hold",
+                  "how many photos of roses does the gardening book index name", "how many videos does the computer science course want"]:
+            assert library_answer(q, qa) is None, (q, library_answer(q, qa))
+        for q in ["how many files ended up in the index after the scan", "how many files has intellifile gone through", "how many files is the index holding",
+                  "how many files did the indexing cover", "i wonder how many files are indexed", "just curious, how many files are in the index", "roughly how many files did intellifile index"]:
+            assert library_answer(q, qa) == everything, (q, library_answer(q, qa))
+        print(f"A8f. QA round 2: 14 more wordings that point at the index, the app or the laptop are counted from the index; {len(from_a_file)} counts that a file states "
+              "still go to the agent and are marked as a file's number: OK")
+
         # --- A9-A12. Ask on a slow or busy laptop (2026-10-04). The user's
         # second laptop: "Ask mode is not working at all". Planning ate the
         # time, the answer's uninterruptible prompt reading ended past the
@@ -368,16 +618,47 @@ def main() -> None:
         junk = workdir / "llm" / "broken.gguf"
         junk.parent.mkdir()
         junk.write_bytes(b"not a model")
-        state = SimpleNamespace(llm=None, llm_lock=threading.Lock(), llm_file=junk)
-        response = ask_endpoint("what do I train on wednesday", SimpleNamespace(app=SimpleNamespace(state=state)))
+        from app.files.discovery import SUPPORTED_EXTENSIONS
+        from app.watch_setup import IndexJob
+        live = SimpleNamespace(job=IndexJob(), job_queue=SimpleNamespace(pending=0), roots=lambda: [str(workdir / "files")], watcher=SimpleNamespace(watched_files=[]), extensions=SUPPORTED_EXTENSIONS)
+
+        def app_state():
+            """The parts of the running app's state that Ask reads."""
+            return SimpleNamespace(llm=None, llm_lock=threading.Lock(), llm_file=junk, llm_error=None, search_service=search, live_indexing=live,
+                                   indexer=SimpleNamespace(file_record_store=search.file_record_store, vector_store=vector_store), access=SimpleNamespace(allows_indexing=True),
+                                   usage_store=None, profile_builder=None, settings=SimpleNamespace(get=lambda key: False))
         import asyncio
 
-        async def read_body():
-            return "".join([c if isinstance(c, str) else c.decode() async for c in response.body_iterator])
-        body = asyncio.run(read_body())
-        event = json.loads(body.split("data: ", 1)[1])
-        assert event["type"] == "error" and "could not be loaded" in event["message"], event
+        async def still_open():
+            return False
+
+        def asked(question, state):
+            response = ask_endpoint(question, SimpleNamespace(app=SimpleNamespace(state=state), is_disconnected=still_open))
+
+            async def read_body():
+                return "".join([c if isinstance(c, str) else c.decode() async for c in response.body_iterator])
+            return [json.loads(line[len("data: "):]) for line in asyncio.run(read_body()).split("\n\n") if line.startswith("data: ")]
+        state = app_state()
+        event = asked("what do I train on wednesday", state)[0]
+        assert event["type"] == "error" and "could not be loaded" in event["message"] and "Failed to load model" in event["message"], event
         print("A14. A model file that fails to load is reported in Ask as an error message, not a server error: OK")
+
+        # A question the index answers never loads the model: it is answered
+        # at once, also when the model is damaged or missing.
+        for model_file in (junk, None):
+            state = app_state()
+            state.llm_file = model_file
+            import app.services.llm_helpers as llm_helpers
+            found_model, llm_helpers.find_model_file = llm_helpers.find_model_file, lambda: None  # "missing" must stay missing on a dev machine
+            try:
+                events = asked("how many files are theere in the laptop", state)
+                missing = asked("why is sourdough.md missing", state)
+            finally:
+                llm_helpers.find_model_file = found_model
+            answer = next(e for e in events if e["type"] == "answer")
+            assert answer["from_index"] and answer["text"].startswith("IntelliFile has indexed 8 files: ") and not any(e["type"] == "error" for e in events) and state.llm is None, events
+            assert '"sourdough.md" is indexed, so it is not missing.' in next(e for e in missing if e["type"] == "answer")["text"], missing
+        print("A14b. A question the index answers ('how many files', 'why is x missing') is answered without loading the model, also with a damaged or missing model: OK")
 
         # --- A17. /ask/status loads the 1.1 GB model only when asked to
         # (?preload=1, the Ask page); the Index and Settings pages poll it

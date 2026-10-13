@@ -1,5 +1,9 @@
-from fastapi import APIRouter, Request, UploadFile
 
+from fastapi import APIRouter, Request, UploadFile
+from fastapi.responses import JSONResponse
+
+from ..files.browsing import BrowseError, check_browse_path
+from ..search.query_parsing import parse_query
 from ..services.lazy_transcriber import SpeechModelUnavailable
 from ..services.transcript_snap import filename_hints, snap_transcript
 from .common import MAX_AUDIO_BYTES, MIN_AUDIO_BYTES, clamp_top_k
@@ -7,18 +11,39 @@ from .common import remember as _remember
 
 router = APIRouter()
 
+# Shown by the Audio tab when nothing matched (2026-10-12): the speech model hears English only, so a
+# song in another language has no transcript to find, but its file name is searchable.
+AUDIO_EMPTY_HINT = "Speech search understands English only; try the file name."
+
+
+def _empty_hint(query: str) -> str | None:
+    return AUDIO_EMPTY_HINT if parse_query(query).filters.file_type == "audio" else None
+
 
 @router.get("/search")
-def search_endpoint(q: str, request: Request, top_k: int = 10, mode: str = "auto", remember: bool = True):
+def search_endpoint(q: str, request: Request, top_k: int = 10, mode: str = "auto", remember: bool = True, folder: str | None = None):
     """`mode=auto` (default since Phase 18) lets the router choose the
     tier; smart / exact / keyword are the manual overrides. The `route`
-    block reports what ran and what it cost — Objective 3's evidence."""
+    block reports what ran and what it cost — Objective 3's evidence.
+
+    `folder` (optional, absolute): only files inside it are searched, at every tier. It is
+    checked like a /browse path (400/403/404, {"error": ...}) and echoed back normalised."""
     state = request.app.state
+    scope = None
+    if folder:
+        try:
+            scope = check_browse_path(folder)
+            if not scope.exists():
+                raise BrowseError(404, "That folder does not exist.")
+            if not scope.is_dir():
+                raise BrowseError(400, "That is not a folder.")
+        except BrowseError as error:
+            return JSONResponse({"error": error.message}, status_code=error.status)
     if not q.strip():
-        return {"results": [], "route": None}
+        return {"results": [], "route": None, "hint": None}
     if mode not in ("auto", "smart", "exact", "keyword"):
         mode = "auto"
-    results, route = state.search_service.search_routed(q, top_k=clamp_top_k(top_k), mode=mode)
+    results, route = state.search_service.search_routed(q, top_k=clamp_top_k(top_k), mode=mode, folder=str(scope) if scope else None)
     # Queries are remembered here rather than by the UI so every entry
     # point (main window, overlay, tests) counts, with what they returned
     # and which route answered them (Phase 20 evaluates the router from this).
@@ -30,7 +55,7 @@ def search_endpoint(q: str, request: Request, top_k: int = 10, mode: str = "auto
             "route": route["tier"], "requested_tier": route["requested_tier"], "escalated": route["escalated"],
             "complexity": route["complexity"], "total_ms": route["total_ms"],
         })
-    return {"results": results, "route": route}
+    return {"results": results, "route": route, "hint": None if results else _empty_hint(q), **({"folder": str(scope)} if scope else {})}
 
 
 @router.get("/suggest")

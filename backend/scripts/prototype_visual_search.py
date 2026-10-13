@@ -386,6 +386,36 @@ def main():
         visual_indexer.delete_file("photo-flood")
         print(f"10. Real-world video: rotated phone clip upright, frames shrunk while decoding, black-first long-GOP clip found, corrupt file reported, Videos tab not crowded out by photos ({scanned} scanned): OK")
 
+        # --- 11. Filler words and the adaptive strong / possible decision (2026-10-12) ---
+        # "couple photo" and "animated photos" were run with the word "photo(s)" in the
+        # query and called ~24 look-alikes "Strong match" (see visual_search/service.py).
+        from app.visual_search.service import clean_query, photo_strong_bound, tier_limits
+
+        assert clean_query("couple photo") == "couple", clean_query("couple photo")
+        assert clean_query("animated photos") == "animated"
+        assert clean_query("a photo of a dog") == "a dog", clean_query("a photo of a dog")
+        assert clean_query("show me pictures of my friends") == "friends", clean_query("show me pictures of my friends")
+        assert clean_query("photos") == "photos" and clean_query("a photo") == "a photo"  # nothing else would be left
+        assert clean_query("a red circle") == "a red circle" and clean_query("screenshot of code") == "screenshot of code"
+        filler = visual_search.search("red circle photo", top_k=5)
+        plain = visual_search.search("red circle", top_k=5)
+        assert [r["filename"] for r in filler] == [r["filename"] for r in plain], "the filler word changed the results"
+        # A big library, a query whose best photos are no closer than a look-alike: nothing is strong.
+        flat = [1.470 + 0.0004 * i for i in range(300)]  # 300 photos, the best 1.470 and no cliff behind it
+        strong_line, possible_line = tier_limits(flat, 5000, is_video=False)
+        assert strong_line < flat[0] and possible_line >= strong_line, (strong_line, possible_line, flat[0])
+        # A clear winner: three photos far ahead of the pack are strong, the pack is not.
+        clear = [1.380, 1.384, 1.390] + [1.560 + 0.0003 * i for i in range(297)]
+        strong_line, _ = tier_limits(clear, 5000, is_video=False)
+        assert sum(score <= strong_line for score in clear) == 3, strong_line
+        assert photo_strong_bound(5000) < photo_strong_bound(500) < photo_strong_bound(100) == 1.51
+        # Videos: a frame as close as a good photo is not strong, a very close one is.
+        assert tier_limits([1.445, 1.50, 1.52], 3, is_video=True)[0] < 1.445
+        assert tier_limits([1.40, 1.50, 1.52], 3, is_video=True)[0] >= 1.40
+        # Small libraries keep the fixed bounds measured on 127 photos.
+        assert tier_limits([1.40, 1.50, 1.52], 3, is_video=False)[0] >= 1.50
+        print("11. Filler words stripped before CLIP; strong/possible decided per query (flat top = no strong, clear winner = strong, videos stricter): OK")
+
         print(
             "\nPhase 8 visual search OK: photos are discovered and routed to CLIP, typed "
             "descriptions find the right image, unrelated queries stay further away, metadata "

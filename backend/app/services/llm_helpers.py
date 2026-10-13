@@ -1,4 +1,6 @@
 from ..agent import Agent, LocalLLM, Toolbox, find_model_file
+from ..agent.missing import index_answer
+from .missing_files import gather_known
 
 
 def find_llm_file(state):
@@ -29,11 +31,18 @@ def get_llm(state):
         return state.llm
 
 
-def make_agent(state) -> Agent | None:
-    llm = get_llm(state)
-    if llm is None:
+def make_agent(state, question: str = "") -> Agent | None:
+    # A question the index's own records answer ("how many videos are there",
+    # "why is report.pdf missing") is answered at once, without loading the
+    # model (up to a minute on the first question) and when the model is
+    # missing. The agent answers from the same snapshot that decided this.
+    known = gather_known(state) if question else None
+    from_index = known is not None and index_answer(question, known) is not None
+    llm = None if from_index else get_llm(state)
+    if llm is None and not from_index:
         return None
     return Agent(
         llm,
         lambda: Toolbox(state.search_service, state.indexer.vector_store, state.usage_store, state.profile_builder),
+        known=(lambda: known) if known is not None else (lambda: gather_known(state)),
     )

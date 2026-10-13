@@ -148,7 +148,7 @@ def label_query(search_service, query: str) -> str:
     text = parsed.text
     active = search_service._active_records()
     if parsed.filters.any():
-        active = [r for r in active if parsed.filters.matches(r.path, r.size, r.modified_time)]
+        active = [r for r in active if parsed.filters.matches(r.path, r.size, r.modified_time, bool(r.audio_only))]
     for tier in ("filename", "keyword", "hybrid"):
         results = search_service._run_plan(PLANS[tier], text, text, parsed, active, 5, [])
         if any(r["confidence"] == "strong" for r in results):

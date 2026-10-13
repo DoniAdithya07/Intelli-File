@@ -26,7 +26,7 @@ Offline, one laptop (12th-gen Core i5, 16 GB, Windows 11), INTELLIFILE_OFFLINE_G
 - Routing: evaluate_routing.py runs each query through the router and through always-hybrid on the same index.
 - Personalization: evaluate_personalization.py adds "old copy" twins of 8 documents (18 ambiguous queries) and a synthetic four-week log that opens only the originals; 42 other queries measure harm.
 - Ask: evaluate_agent.py, 30 questions (25 answerable, 8 need two files; 5 unanswerable where "not found" is correct).
-- Photos and video: evaluate_visual_real.py (26 Windows photos, 6 clips). End to end: check_features.py (28 checks) plus a clicked-through smoke test. Suite: run_all_phases.py (28 scripts, including check_ask_cancel.py and prototype_more_formats.py added on 5 October).
+- Photos and video: evaluate_visual_real.py (26 Windows photos, 6 clips). End to end: check_features.py (28 checks) plus a clicked-through smoke test. Suite: run_all_phases.py (29 scripts on 13 October, including check_ask_cancel.py and prototype_more_formats.py added on 5 October and prototype_browse.py added on 12 October).
 
 ## 4. Results
 ### 4.1 Router against a non-agentic baseline
@@ -86,9 +86,10 @@ The reranker on every query costs about 7 times the median latency and changes n
 | Offline OCR | 4/4 pixel-only phrases found | dev log, improvement 4 |
 | Real photos (26) | first 50%, top 3 78% | TEST_REPORT |
 | Video (6) | video 6/6, video and moment 5/6 | TEST_REPORT |
-| Feature check, packaged app | 28/28, 0 network attempts | dev log, 6 Oct |
-| Smoke test, packaged app | 17/17, 0 console errors | dev log, 28 Sep |
-| Full suite | 28 of 28 pass (6 Oct); 27 of 27 on 5 Oct, 26 of 26 on 30 Sep | TEST_REPORT |
+| Feature check, packaged app | 28/28, 0 network attempts | dev log, 13 Oct |
+| Smoke test, packaged app | 23/23, 0 console errors | dev log, 13 Oct |
+| Full suite | 29 scripts (13 Oct): 28 passed in the full run, the 29th after a fix to one message; 28 of 28 on 6 Oct, 27 of 27 on 5 Oct, 26 of 26 on 30 Sep | TEST_REPORT |
+| Explorer-style window | 81/81 checks, 22/22 state screens, contrast and names clean, Day and Night | TEST_REPORT, 13 Oct |
 
 ### 4.5 Scale test
 

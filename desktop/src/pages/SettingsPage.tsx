@@ -193,6 +193,9 @@ export function SettingsPage({ status, appDataDir, onError, refresh, onOpen }: P
           <Row title="Pause in power-saving mode" note="Follows Windows' battery saver, plugged in or not.">
             <Toggle on={settings?.pause_on_low_power ?? true} onChange={(v) => change({ pause_on_low_power: v })} disabled={busy || !settings} label="Pause in power-saving mode" />
           </Row>
+          <Row title="Search what is said in videos" note="Reads the speech in video files so you can find a moment by what was said. English only. It makes indexing slower, and it applies to videos indexed from now on.">
+            <Toggle on={settings?.index_video_speech ?? false} onChange={(v) => change({ index_video_speech: v })} disabled={busy || !settings} label="Search what is said in videos" />
+          </Row>
           <div className="pt-2.5">
             <div className="mb-1.5 text-[13.5px]">Resource mode</div>
             <Choice label="Resource mode" options={MODES} value={settings?.resource_mode ?? null} onChange={(m) => change({ resource_mode: m })} disabled={busy || !settings} />

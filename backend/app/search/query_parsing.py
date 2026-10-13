@@ -50,9 +50,10 @@ class QueryFilters:
     size_min: int | None = None       # bytes
     size_max: int | None = None
     path_contains: str | None = None  # lowercase
+    folder: str | None = None         # lowercase absolute folder path ending in a separator (the folder-scoped search)
 
     def any(self) -> bool:
-        return any(v is not None for v in (self.file_type, self.after, self.before, self.size_min, self.size_max, self.path_contains))
+        return any(v is not None for v in (self.file_type, self.after, self.before, self.size_min, self.size_max, self.path_contains, self.folder))
 
     def describe(self) -> list[str]:
         parts = []
@@ -68,12 +69,20 @@ class QueryFilters:
             parts.append(f"smaller than {_human(self.size_max)}")
         if self.path_contains:
             parts.append(f"in “{self.path_contains}”")
+        if self.folder:
+            parts.append(f"in the folder {self.folder}")
         return parts
 
-    def matches(self, path: str, size: int, modified_time: float) -> bool:
+    def matches(self, path: str, size: int, modified_time: float, audio_only: bool = False) -> bool:
+        """`audio_only`: a video extension with no picture inside (a WhatsApp
+        ".mpeg" voice note, see files/media.py): it is audio, not video."""
         if self.file_type:
             ext = path.lower().rsplit(".", 1)[-1] if "." in path else ""
-            if ext not in TYPE_GROUPS.get(self.file_type, (self.file_type,)):
+            if audio_only and self.file_type in ("audio", "video"):
+                in_group = self.file_type == "audio"
+            else:
+                in_group = ext in TYPE_GROUPS.get(self.file_type, (self.file_type,))
+            if not in_group:
                 return False
         if self.after is not None and modified_time < self.after:
             return False
@@ -84,6 +93,9 @@ class QueryFilters:
         if self.size_max is not None and size >= self.size_max:
             return False
         if self.path_contains and self.path_contains not in path.lower():
+            return False
+        # The trailing separator in `folder` is what keeps D:\A from matching D:\AB.
+        if self.folder and not path.lower().startswith(self.folder):
             return False
         return True
 

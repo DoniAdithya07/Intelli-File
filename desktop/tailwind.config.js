@@ -27,6 +27,11 @@ export default {
         marker: c("marker"),       // "found" and "you are here"
         amber: c("amber"),         // personalization reasons
         "amber-soft": c("amber-soft"),
+        nav: c("nav"),             // the left tree
+        status: c("status"),       // the status bar
+        field: c("field"),         // search box and address field
+        sub: c("sub"),             // secondary text (solid, so contrast is checkable)
+        dim: c("dim"),             // column headers and placeholders
         error: c("error"),
         "error-soft": c("error-soft"),
       },

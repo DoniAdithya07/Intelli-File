@@ -19,10 +19,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from ..files.discovery import (
-    AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, LONG_PATH_REASON, MAX_PATH, SUPPORTED_EXTENSIONS, VIDEO_EXTENSIONS, VISUAL_EXTENSIONS,
-    discover_files, long_paths_enabled, permission_hint,
+    AUDIO_EXTENSIONS, DATA_CODE_CHUNK_CAP, IMAGE_EXTENSIONS, LONG_PATH_REASON, MAX_PATH, SUPPORTED_EXTENSIONS, VIDEO_EXTENSIONS, VISUAL_EXTENSIONS,
+    chunk_cap, discover_files, long_paths_enabled, permission_hint,
 )
 from ..files.identity import ONLINE_ONLY_REASON, OnlineOnlyFile, build_file_record, compute_file_hash
+from ..files.media import has_audio_stream, is_audio_only_media
 from .cleanup import cleanup_tombstones
 from .indexer import Indexer
 
@@ -30,6 +31,19 @@ if TYPE_CHECKING:
     from .visual_indexer import VisualIndexer
 
 logger = logging.getLogger(__name__)
+
+def _scan_order(path: Path) -> int:
+    """Documents (the files people look for) before code and data, then
+    photos, audio and video, which take the longest per file."""
+    suffix = path.suffix.lower()
+    if suffix in VIDEO_EXTENSIONS:
+        return 4
+    if suffix in AUDIO_EXTENSIONS:
+        return 3
+    if suffix in IMAGE_EXTENSIONS:
+        return 2
+    return 1 if chunk_cap(suffix) == DATA_CODE_CHUNK_CAP else 0
+
 
 def _unchanged_by_stat(path: Path, record) -> bool:
     try:
@@ -52,6 +66,7 @@ def index_folder(
     lock: "threading.RLock | None" = None,
     gate: threading.Event | None = None,
     throttle: Callable[[], float] | None = None,
+    video_speech: Callable[[], bool] | None = None,
 ) -> int:
     """Index every supported file under `folder` and reconcile the index
     with what's actually on disk: renamed files keep their vectors under
@@ -73,6 +88,11 @@ def index_folder(
     for battery/low-power happens between files and resuming continues
     from the next one — no rescan. `throttle()` returns seconds to sleep
     after each indexed file (Battery Saver mode).
+
+    `video_speech()` says whether the user switched on "Search what is said
+    in videos": a video's soundtrack (first minutes) is then transcribed,
+    after its pictures, in the video's turn, which already comes after every
+    document, photo and audio file (see _scan_order).
 
     `force` re-embeds every file even when its hash is unchanged (the
     Re-index button). It replaces an earlier approach that purged the
@@ -117,6 +137,7 @@ def index_folder(
         _note_skip(path, reason)
 
     paths = list(discover_files([folder], extensions=extensions, on_error=walk_error, on_skip=walk_skip))
+    paths.sort(key=_scan_order)  # stable: documents first, so search is useful long before a big scan ends
     if not paths and not os.access(folder, os.R_OK | os.X_OK):
         _note_failure(Path(folder), PermissionError(13, "Permission denied", folder))
         unlistable.append(folder_prefix)
@@ -133,7 +154,7 @@ def index_folder(
         seen.add(str(path))
         before = count
         with guard:
-            count, failed = _scan_one(indexer, visual_indexer, path, record_store, count, failed, force, skipped)
+            count, failed = _scan_one(indexer, visual_indexer, path, record_store, count, failed, force, skipped, video_speech)
         if throttle is not None and count > before:
             pause = throttle()
             if pause > 0:
@@ -148,6 +169,7 @@ def index_folder(
         for record in record_store.list_active():
             if record.path.startswith(folder_prefix) and record.path not in seen and not record.path.startswith(tuple(unlistable)):
                 record_store.mark_deleted(record.path)
+                note_removal(record.path)
         cleanup_tombstones(indexer, visual_indexer=visual_indexer)
     if skipped:
         logger.info("scan of %s skipped %s", folder, dict(skipped))
@@ -186,10 +208,10 @@ _KIND_NAMES = {
     ".odp": "OpenDocument", ".epub": "EPUB", ".msg": "Outlook message", ".eml": "e-mail", ".rtf": "RTF",
 }
 # Error classes that mean "these bytes are not a valid file", by name so no
-# parser library is imported here (pypdf, python-docx, openpyxl, xlrd, PIL, PyAV).
+# parser library is imported here (pypdf, python-docx, openpyxl, xlrd, olefile, PIL, PyAV).
 _DAMAGE_ERRORS = {
     "BadZipFile", "ParseError", "PyPdfError", "XLRDError", "PackageNotFoundError", "InvalidFileException",
-    "UnidentifiedImageError", "InvalidDataError", "EOFError", "UnicodeDecodeError", "IndexError", "KeyError",
+    "UnidentifiedImageError", "InvalidDataError", "EOFError", "UnicodeDecodeError", "IndexError", "KeyError", "OleFileError",
 }
 FILE_ACCESS_REFUSED = "Windows refused access (the file may be open in another program)."
 
@@ -318,6 +340,23 @@ def _note_skip(path: Path, reason: str) -> None:
     del RECENT_SKIPS[:-MAX_RECENT_FAILURES]
 
 
+# Files taken out of the index in this run because they were deleted, moved
+# or renamed (2026-10-13). Their records are purged at once, so without this
+# list "why is report.pdf missing" could say "deleted" for a fraction of a
+# second only. In memory: it is what this run of the app saw happen.
+RECENT_REMOVALS: list[dict] = []
+MAX_RECENT_REMOVALS = 500  # a deleted folder is hundreds of files
+
+
+def note_removal(path: str, moved_to: str | None = None) -> None:
+    """A file left the index because it is gone from disk (scan and watcher
+    alike). One entry per path; `moved_to` when it was renamed inside an
+    indexed folder."""
+    RECENT_REMOVALS[:] = [r for r in RECENT_REMOVALS if r["path"] != path]
+    RECENT_REMOVALS.append({"path": path, "moved_to": moved_to, "at": time.time()})
+    del RECENT_REMOVALS[:-MAX_RECENT_REMOVALS]
+
+
 def _index_image_text(indexer, path: Path, file_id: str) -> None:
     """OCR text for an image (improvement 4). Photo search already has
     the image; an OCR failure must never fail the file."""
@@ -329,7 +368,60 @@ def _index_image_text(indexer, path: Path, file_id: str) -> None:
         logger.warning("OCR failed for %s", path, exc_info=True)
 
 
-def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, failed: int, force: bool, skipped: Counter | None = None) -> tuple[int, int]:
+def uses_visual_pipeline(visual_indexer, path: Path, record, record_store) -> bool:
+    """Photo/video pipeline (keyframes) or the text pipeline (transcript)?
+    Decided by what is inside, not by the extension (2026-10-12): a video
+    extension whose container has no picture (WhatsApp's ".mpeg" voice
+    notes) goes to the transcript. The probe is stored on the record, so each
+    file is opened once. Shared by the scan and the live watcher."""
+    suffix = path.suffix.lower()
+    if visual_indexer is None or suffix not in VISUAL_EXTENSIONS:
+        return False
+    if suffix not in VIDEO_EXTENSIONS:
+        return True
+    audio_only = record.audio_only
+    if audio_only is None:
+        audio_only = is_audio_only_media(path)
+        record_store.set_audio_only(record.file_id, audio_only)
+    return not audio_only
+
+
+def speech_wanted(indexer, path: Path, video_speech: Callable[[], bool] | None) -> bool:
+    """A video, a speech model, and the user's "Search what is said in videos" switched on."""
+    return video_speech is not None and indexer.transcriber is not None and path.suffix.lower() in VIDEO_EXTENSIONS and video_speech()
+
+
+def speech_pending(indexer, record, path: Path, video_speech: Callable[[], bool] | None) -> bool:
+    """A probed video still waiting for its soundtrack to be read."""
+    return record.audio_only is False and not record.speech_indexed and speech_wanted(indexer, path, video_speech)
+
+
+def index_video_speech(indexer, path: Path, record_store, file_id: str) -> None:
+    """The optional soundtrack pass. Like OCR on photos it must never fail
+    the video: the pictures are already searchable. Not marked done when it
+    fails (speech model missing), so a later scan tries again."""
+    try:
+        if has_audio_stream(path):
+            indexer.index_video_speech(path, file_id)
+        record_store.set_speech_indexed(file_id)
+    except Exception:
+        logger.warning("Could not read the soundtrack of %s", path, exc_info=True)
+
+
+def _reclassify_legacy_video(visual_indexer, path: Path, existing, record_store):
+    """Records written before 2026-10-12 were never probed. A video whose
+    container has no picture (the ".mpeg" voice notes that failed with
+    StopIteration, or were listed as videos with no thumbnail) is sent
+    through the transcript pipeline once; any other video is just marked.
+    Returns the record to continue with and whether it must be re-indexed."""
+    audio_only = is_audio_only_media(path)
+    record_store.set_audio_only(existing.file_id, audio_only)
+    if audio_only:
+        visual_indexer.delete_file(existing.file_id)  # no keyframes can exist, but never leave stale vectors
+    return record_store.get_by_path(str(path)), audio_only
+
+
+def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, failed: int, force: bool, skipped: Counter | None = None, video_speech: Callable[[], bool] | None = None) -> tuple[int, int]:
     """One file of the scan: skip if unchanged, detect a rename, otherwise
     (re-)index. Returns the updated (count, failed); files left alone on
     purpose are counted in `skipped`."""
@@ -339,12 +431,19 @@ def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, fai
         # Its record, if any, is tombstoned by the purge at the end of the
         # scan; one such file must never abort the folder (Phase 11).
         return count, failed
+    if (visual_indexer is not None and existing is not None and not existing.deleted and existing.indexed
+            and existing.audio_only is None and path.suffix.lower() in VIDEO_EXTENSIONS):
+        existing, force_audio = _reclassify_legacy_video(visual_indexer, path, existing, record_store)
+        force = force or force_audio
     # Fast path (2026-09-21): a file whose size and mtime both match its
     # record has not changed — skip reading it. Before this every launch
     # re-hashed every byte of every watched file (a folder of videos =
     # gigabytes read just to confirm nothing happened). The hash is
     # still computed for anything new, touched or forced.
     if existing is not None and not existing.deleted and existing.indexed and not force and _unchanged_by_stat(path, existing):
+        if speech_pending(indexer, existing, path, video_speech):
+            with reading(path, existing.hash):
+                index_video_speech(indexer, path, record_store, existing.file_id)
         return count + 1, failed
     try:
         current_hash = compute_file_hash(path)
@@ -360,6 +459,9 @@ def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, fai
         _note_failure(path, e)
         return count, failed + 1
     if existing is not None and not existing.deleted and existing.indexed and existing.hash == current_hash and not force:
+        if speech_pending(indexer, existing, path, video_speech):
+            with reading(path, existing.hash):
+                index_video_speech(indexer, path, record_store, existing.file_id)
         return count + 1, failed
     if current_hash in POISONED and not force:
         # The app died reading these bytes: normal scans skip them. Re-index
@@ -382,6 +484,7 @@ def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, fai
         twin = record_store.find_active_by_hash(current_hash)
         if twin is not None and not Path(twin.path).exists():
             record_store.rename(twin.path, str(path))
+            note_removal(twin.path, moved_to=str(path))
             return count + 1, failed
 
     try:
@@ -392,9 +495,11 @@ def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, fai
     record_store.upsert(record)
     try:
         with reading(path, record.hash):
-            if visual_indexer is not None and path.suffix.lower() in VISUAL_EXTENSIONS:
+            if uses_visual_pipeline(visual_indexer, path, record, record_store):
                 visual_indexer.index_visual_file(path, record.file_id, record.hash)
                 _index_image_text(indexer, path, record.file_id)
+                if speech_wanted(indexer, path, video_speech):
+                    index_video_speech(indexer, path, record_store, record.file_id)
             else:
                 indexer.index_file(path, record.file_id, record.hash, replace=existing is not None)
         record_store.mark_indexed(record.file_id)

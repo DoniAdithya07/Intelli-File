@@ -51,12 +51,22 @@ export function describeError(e: unknown, path = ""): string {
   return path ? `${path}: ${msg}` : msg;
 }
 
+/** A refused request: the status, and the sentence the engine gave (its {"error": ...} or {"detail": ...}). */
+export class ApiError extends Error {
+  constructor(path: string, public status: number, public detail: string) { super(`${path} failed: ${status}`); }
+}
+async function refusal(path: string, res: Response): Promise<ApiError> {
+  let detail = "";
+  try { const j = await res.json(); detail = typeof j?.error === "string" ? j.error : typeof j?.detail === "string" ? j.detail : ""; } catch { /* no body */ }
+  return new ApiError(path, res.status, detail);
+}
+
 async function getJson<T>(path: string, params?: Record<string, string | number>, signal?: AbortSignal): Promise<T> {
   const url = new URL(`${BACKEND_URL}${path}`);
   if (params) for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   const res = await fetch(url.toString(), { headers: await authHeaders(), signal });
   engineSeenUp = true; // any reply at all: the engine was running
-  if (!res.ok) throw new Error(`${path} failed: ${res.status}`);
+  if (!res.ok) throw await refusal(path, res);
   return res.json();
 }
 
@@ -66,7 +76,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`${path} failed: ${res.status}`);
+  if (!res.ok) throw await refusal(path, res);
   return res.json();
 }
 
@@ -114,8 +124,10 @@ export interface SearchResult {
   // Phase 17: null when personalization is off or the profile is still cold.
   personal: { boost: number; signals: Record<string, number>; reasons: string[] } | null;
 }
-export const search = (q: string, mode: SearchMode = "auto", top_k = 20, signal?: AbortSignal, remember = true) =>
-  getJson<{ results: SearchResult[]; route: RouteReport | null }>("/search", remember ? { q, mode, top_k } : { q, mode, top_k, remember: "false" }, signal);
+export interface SearchResponse { results: SearchResult[]; route: RouteReport | null; hint?: string | null }
+/** `folder` (an absolute path) limits the search to that folder and below; an engine that refuses it throws an ApiError. */
+export const search = (q: string, mode: SearchMode = "auto", top_k = 20, signal?: AbortSignal, remember = true, folder?: string | null) =>
+  getJson<SearchResponse>("/search", { q, mode, top_k, ...(remember ? {} : { remember: "false" }), ...(folder ? { folder } : {}) }, signal);
 
 // The preview pane: the matched passage and its neighbours, straight from the index.
 export interface Passage { chunk_id: string; chunk_index: number | null; page: number | null; heading: string | null; text: string }
@@ -167,10 +179,24 @@ export function formatTimestamp(seconds: number): string {
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+// ---- browsing (read-only: names, sizes and dates; the engine decides which folders may be listed) ----
+export type BrowseKind = "folder" | "image" | "audio" | "video" | "document" | "code" | "archive" | "other";
+export interface BrowseEntry { name: string; path: string; is_dir: boolean; size: number | null; modified: number; kind: BrowseKind; indexed: boolean; file_id: string | null }
+export interface BrowseDrive { letter: string; path: string; label: string; type: string; ready: boolean; total_bytes: number | null; free_bytes: number | null }
+export interface QuickItem { name: string; path: string; kind: "known" | "pinned"; icon: string }
+export interface RecentItem extends BrowseEntry { accessed: number; activity: string }
+export interface FolderListing { path: string; name: string; parent: string | null; counts: { total: number; folders: number; files: number }; offset: number; limit: number; has_more: boolean; entries: BrowseEntry[] }
+export const browseDrives = () => getJson<{ drives: BrowseDrive[] }>("/browse/drives");
+export const browseQuickAccess = () => getJson<{ items: QuickItem[] }>("/browse/quick-access");
+export const browseList = (path: string, offset = 0, limit = 1000, signal?: AbortSignal) => getJson<FolderListing>("/browse/list", { path, offset, limit }, signal);
+export const browseRecent = (limit = 50) => getJson<{ windows_recent: boolean; items: RecentItem[] }>("/browse/recent", { limit });
+
 // ---- folders / indexing ----
 export const indexFolder = (folder: string) => postJson<{ queued?: string; error?: string }>("/index-folder", { folder });
 export const forgetFolder = (folder: string) => postJson<{ removed?: number; error?: string }>("/forget-folder", { folder });
 export const getSampleFolder = () => getJson<{ path: string | null }>("/sample-folder");
+/** Why a file the user named is not in the results (indexed, could not be read, skipped, deleted, type not read, ...). */
+export const whyMissing = (name: string) => getJson<{ name: string; status: string; reason: string; path?: string }>(`/files/why-missing?name=${encodeURIComponent(name)}`);
 export const scanAll = () => postJson<{ folders?: number; files?: number; error?: string }>("/scan-all", {});
 export const reindexFolder = (folder: string) => postJson<{ queued?: string; error?: string }>("/reindex-folder", { folder });
 
@@ -299,7 +325,7 @@ export async function clearEvents(): Promise<{ cleared: number }> {
   if (!res.ok) throw new Error(`/events failed: ${res.status}`);
   return res.json();
 }
-export interface AppSettings { remember_activity: boolean; personalize: boolean; import_windows_recent: boolean; pause_on_battery: boolean; pause_on_low_power: boolean; resource_mode: ResourceMode }
+export interface AppSettings { index_video_speech: boolean; remember_activity: boolean; personalize: boolean; import_windows_recent: boolean; pause_on_battery: boolean; pause_on_low_power: boolean; resource_mode: ResourceMode }
 export interface WindowsRecentStatus { available: boolean; enabled: boolean; state: "off" | "running" | "done" | "failed"; last: { shortcuts: number; indexed_files: number; events_added: number; at: number } | null }
 export const getWindowsRecent = () => getJson<WindowsRecentStatus>("/windows-recent");
 

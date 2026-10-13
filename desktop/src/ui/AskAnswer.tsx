@@ -103,7 +103,7 @@ export function AskAnswer({ question, onError }: Props) {
           <span className="font-semibold">IntelliFile</span>
           <span className={`flex items-center gap-1 ${unverified ? "text-[rgb(var(--c-amber-text))]" : "text-ink/70"}`}>
             {unverified && <span className="material-symbols-outlined icon-sm" aria-hidden>warning</span>}
-            {error ? "Could not answer" : working ? (answer ? "Writing the answer..." : slow ? "Loading the language model and reading your files. The first question can take up to a minute..." : "Searching your files...") : final?.from_index ? "Counted from the index" : unverified ? "Answer not fully verified" : final?.grounded ? "Answered from your files" : "Not found in your files"}
+            {error ? "Could not answer" : working ? (answer ? "Writing the answer..." : slow ? "Loading the language model and reading your files. The first question can take up to a minute..." : "Searching your files...") : final?.from_index ? "Answered from the index" : unverified ? "Answer not fully verified" : final?.grounded ? "Answered from your files" : "Not found in your files"}
           </span>
           {done && !final?.from_index && <span className="ml-auto text-[12px] text-ink/65">{done.tool_calls} tool call{done.tool_calls === 1 ? "" : "s"}, <span className="mono">{done.seconds} s</span>, on this computer</span>}
         </div>
@@ -122,7 +122,7 @@ export function AskAnswer({ question, onError }: Props) {
             <Cited text={answer} sources={citations} />
           </p>
         )}
-        {final?.from_index && <p className="mt-2 text-[12px] text-ink/65">Counted exactly from the index, not from the contents of a file.</p>}
+        {final?.from_index && <p className="mt-2 text-[12px] text-ink/65">From IntelliFile's own records of your files, not from what is written inside a file.</p>}
         {final?.warnings?.map((w, i) => (
           <div key={i} className="mt-3 flex items-start gap-2 rounded-md border border-rule-strong bg-amber-soft px-3 py-2 text-[13px] text-[rgb(var(--c-amber-text))]">
             <span className="material-symbols-outlined icon-sm" aria-hidden>warning</span>{w}

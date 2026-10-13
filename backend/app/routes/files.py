@@ -5,7 +5,8 @@ from fastapi import APIRouter, Request, Response
 
 from ..indexing import CHUNKS_TABLE
 from ..paths import sample_folder
-from ..thumbnails import generate_thumbnail
+from ..services.missing_files import explain_missing
+from ..thumbnails import NoThumbnail, generate_thumbnail
 from .common import MAX_THUMBNAIL, MIN_THUMBNAIL, safe_path
 
 router = APIRouter()
@@ -88,6 +89,18 @@ def is_indexed_endpoint(path: str, request: Request):
     return {"indexed": safe is not None and _is_indexed_file(request.app.state, safe)}
 
 
+@router.get("/files/why-missing")
+def why_missing_endpoint(name: str, request: Request):
+    """Why a file the user names is not in the results: {"name", "status",
+    "reason"} and "path" when a known file matched. `name` is a file name
+    (with or without its extension) or a full path. Status: indexed, failed,
+    skipped, deleted (known for this run of the app), unsupported, indexing,
+    similar (no file has exactly that name, some contain it), unknown,
+    invalid; for a full path also outside_folders, not_on_disk,
+    not_indexed_yet."""
+    return explain_missing(request.app.state, name)
+
+
 @router.get("/thumbnail")
 def thumbnail_endpoint(path: str, request: Request, t: float | None = None, size: int = 256):
     file_path = Path(path)
@@ -104,6 +117,8 @@ def thumbnail_endpoint(path: str, request: Request, t: float | None = None, size
         return Response(status_code=404)
     try:
         jpeg_bytes = generate_thumbnail(file_path, timestamp_offset_seconds=t, max_size=max(MIN_THUMBNAIL, min(size, MAX_THUMBNAIL)))
+    except NoThumbnail:
+        return Response(status_code=404)  # audio has no picture: expected, so no 422 and no log line
     except Exception:
         # Unreadable/corrupt image: a broken thumbnail shouldn't read as
         # a server fault, and the result itself is still usable. Logged

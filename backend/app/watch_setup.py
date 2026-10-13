@@ -113,6 +113,7 @@ class LiveIndexing:
         self.job_queue = JobQueue(self._handle_job, num_workers=1, gate=self.gate)
         self.watcher = FileWatchService(indexer.file_record_store, self.job_queue, extensions=extensions)
         self.watcher.on_skip = note_skip  # listed with the scan's skips on the Status screen
+        self.watcher.on_removed = folder_scan.note_removal  # "why is this file missing": deleted, moved or renamed
         self.extensions = extensions
         self.job = IndexJob()
         self._job_lock = threading.Lock()
@@ -255,6 +256,10 @@ class LiveIndexing:
         if changed:
             logger.info("indexing %s", f"paused: {reason}" if reason else "resumed")
 
+    def video_speech_wanted(self) -> bool:
+        """The "Search what is said in videos" setting (off by default)."""
+        return bool((self.settings_reader() or {}).get("index_video_speech"))
+
     def _throttle(self) -> float:
         settings = self.settings_reader() or {}
         return resource_mode(settings.get("resource_mode", "balanced")).inter_file_sleep
@@ -377,7 +382,7 @@ class LiveIndexing:
                 self.job.done, self.job.total, self.job.current_file, self.job.failed = done, total, current, failed
 
             try:
-                index_folder(self.indexer, folder, visual_indexer=self.visual_indexer, progress=progress, force=force, lock=self.write_lock, gate=self.gate, throttle=self._throttle)
+                index_folder(self.indexer, folder, visual_indexer=self.visual_indexer, progress=progress, force=force, lock=self.write_lock, gate=self.gate, throttle=self._throttle, video_speech=self.video_speech_wanted)
                 if folder in self.unreachable_roots and Path(folder).is_dir():
                     self.watch(folder)  # the drive is back: watch it from now on
                 self.job.state = "done"
@@ -465,7 +470,7 @@ class LiveIndexing:
             for root in by_depth:
                 if record.path.startswith(str(Path(root)) + os.sep):
                     ext = Path(record.path).suffix.lower()
-                    kind = "photos" if ext in IMAGE_EXTENSIONS else "videos" if ext in VIDEO_EXTENSIONS else "audio" if ext in AUDIO_EXTENSIONS else "documents"
+                    kind = "photos" if ext in IMAGE_EXTENSIONS else "videos" if ext in VIDEO_EXTENSIONS and not record.audio_only else "audio" if ext in AUDIO_EXTENSIONS or record.audio_only else "documents"
                     counts[root][kind] += 1
                     break
         entries = [
@@ -482,7 +487,8 @@ class LiveIndexing:
         for file in self.watcher.watched_files:
             record = self.indexer.file_record_store.get_by_path(file)
             ext = Path(file).suffix.lower()
-            kind = "photos" if ext in IMAGE_EXTENSIONS else "videos" if ext in VIDEO_EXTENSIONS else "audio" if ext in AUDIO_EXTENSIONS else "documents"
+            audio_only = record is not None and record.audio_only
+            kind = "photos" if ext in IMAGE_EXTENSIONS else "videos" if ext in VIDEO_EXTENSIONS and not audio_only else "audio" if ext in AUDIO_EXTENSIONS or audio_only else "documents"
             entries.append({
                 "path": file, "kind": "file", "exists": self._exists(file, False, default=True), "indexing": False, "queued": False,
                 "documents": 0, "photos": 0, "videos": 0, "audio": 0, **{kind: 1 if record is not None and record.indexed else 0},
@@ -523,9 +529,12 @@ class LiveIndexing:
             self.on_index_changed()
 
     def _index_one(self, path: Path, job: Job, record) -> None:
-        if self.visual_indexer is not None and path.suffix.lower() in VISUAL_EXTENSIONS:
+        store = self.indexer.file_record_store
+        if folder_scan.uses_visual_pipeline(self.visual_indexer, path, record, store):
             self.visual_indexer.index_visual_file(path, job.file_id, record.hash)
             _index_image_text(self.indexer, path, job.file_id)  # OCR text (improvement 4); never fails the file
+            if folder_scan.speech_wanted(self.indexer, path, self.video_speech_wanted):
+                folder_scan.index_video_speech(self.indexer, path, store, job.file_id)
         else:
             # A brand-new file has nothing to replace, so skip the two
             # deletes, one of them a full scan of the keyword table

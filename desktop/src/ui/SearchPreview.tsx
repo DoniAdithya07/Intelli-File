@@ -141,7 +141,7 @@ export function SearchPreview({ result, query, onError }: Props) {
             })}
             <li className="flex gap-2">
               <span className="material-symbols-outlined mt-px icon-sm text-ink/65" aria-hidden>{weak ? "remove" : "check"}</span>
-              <span className="text-ink/85">{weak ? "Weaker match: only loosely related to the search" : "Strong match"}</span>
+              <span className="text-ink/85">{weak ? "Possible match: only loosely related to the search" : "Best match"}</span>
             </li>
           </ul>
         </section>

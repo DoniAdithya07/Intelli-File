@@ -28,8 +28,11 @@ import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-from .library import library_answer
 from .llm import CONTEXT_TOKENS
+from .library import counts_files_from_text
+from .missing import Known, index_answer
+
+FILE_COUNT_WARNING = "This number is what one of your files says, not a count of your files. To count them, ask: how many files are there"
 from .tools import Toolbox
 
 logger = logging.getLogger(__name__)
@@ -119,12 +122,18 @@ ANSWER_SYSTEM = """You are IntelliFile's answer step. The numbered sources are e
 
 
 class Agent:
-    def __init__(self, llm, toolbox_factory: Callable[[], Toolbox], max_tool_calls: int = MAX_TOOL_CALLS, budget_seconds: float = BUDGET_SECONDS, first_look: bool = True):
+    def __init__(self, llm, toolbox_factory: Callable[[], Toolbox], max_tool_calls: int = MAX_TOOL_CALLS, budget_seconds: float = BUDGET_SECONDS, first_look: bool = True,
+                 known: Callable[[], Known] | None = None):
         self.llm = llm
         self.toolbox_factory = toolbox_factory
         self.max_tool_calls = max_tool_calls
         self.budget_seconds = budget_seconds
         self.first_look = first_look  # search the whole question before the first planning turn
+        # What the engine knows about its files, for questions its own records
+        # answer ("how many videos", "why is report.pdf missing"). The app
+        # passes services/missing_files.gather_known; without it only the
+        # index's records are consulted.
+        self.known = known
 
     def _mentions(self, word: str, text: str) -> bool:
         """One-word yes/no from the model: does this source mention or give a <word>?"""
@@ -195,10 +204,11 @@ class Agent:
 
         # "How many files are there?", "Are there any video files?": the
         # answer is a count the index already has, not text inside a file.
-        records = tools.search_service.file_record_store.list_active()
-        facts = library_answer(question, [r.path for r in records])
+        # "Why is report.pdf missing?": the engine's own records say why.
+        known = self.known() if self.known is not None else Known(active=[r.path for r in tools.search_service.file_record_store.list_active()])
+        facts = index_answer(question, known)
         if facts is not None:
-            yield {"type": "thought", "text": "counted the files in the index: this question is about the collection, not the contents of a file", "system": True}
+            yield {"type": "thought", "text": "answered from the index's own records: this question is about the files themselves, not what is written in one", "system": True}
             yield {"type": "answer_start"}
             yield {"type": "token", "text": facts}
             yield {"type": "answer", "text": facts, "citations": [], "grounded": True, "from_index": True}
@@ -463,6 +473,11 @@ class Agent:
             elif missing:
                 warnings.append(f"Not in the cited sources, check before relying on it: {', '.join(missing)}")
                 yield {"type": "thought", "text": f"figure(s) {', '.join(missing)} in the answer are not in the cited sources, flagged", "system": True}
+        # A count of files that reached the model is what a file says, not a
+        # count of the user's files: "60 files" from a report read as the size
+        # of the index (QA, 2026-10-14). The answer says which it is.
+        if grounded and counts_files_from_text(question):
+            warnings.append(FILE_COUNT_WARNING)
         yield {"type": "answer", "text": text, "citations": citations, "grounded": grounded, "citations_inferred": inferred, "warnings": warnings}
         yield {"type": "done", "seconds": round(time.perf_counter() - t_start, 1), "tool_calls": calls, "strategies": strategies, "sources": [s.as_dict() for s in tools.sources]}
 
@@ -584,6 +599,23 @@ def _mentioned(word: str, hay: str, tokens: set[str]) -> bool:
     return any(t == stem or t == stem + "s" for t in tokens)
 
 
+_COUNT_WORDS = {("how", "many"), ("number", "of"), ("count", "of")}
+_COUNT_DETERMINERS = {"of", "the", "my", "our", "more", "other", "different", "total", "extra"}
+
+
+def _counted_subject(q_words: list[str]) -> str | None:
+    """The <thing> of "how many <thing>" / "number of <thing>": the word
+    right after the count words, when it is a distinctive one."""
+    for i in range(len(q_words) - 2):
+        if (q_words[i], q_words[i + 1]) in _COUNT_WORDS:
+            rest = [w for w in q_words[i + 2:] if w not in _COUNT_DETERMINERS]
+            word = rest[0] if rest else ""
+            if len(word) >= 3 and not word.isdigit() and word not in _PREMISE_FILLER and word not in _MONTHS and word not in _WEEKDAYS:
+                return word
+            return None
+    return None
+
+
 def _unsupported_premise(question: str, answer: str, sources: list, judge: Callable[[str, str], bool] | None = None, retrieved: list | None = None) -> str | None:
     """Return why the cited sources cannot support the question's premise, or None.
 
@@ -593,7 +625,9 @@ def _unsupported_premise(question: str, answer: str, sources: list, judge: Calla
     — "does this text mention or give a <word>?" — and only when every cited source
     says no is the answer treated as restating the question's premise as fact.
     Without a judge the word rule is not applied at all (a source that says "94 °C"
-    answers "temperature" without containing the word). The word rule looks at every
+    answers "temperature" without containing the word). Count rule, no judge needed:
+    the thing a "how many <thing>" question counts must be mentioned by a source. The
+    word and count rules look at every
     source the agent retrieved (``retrieved``), cited ones first: a correct answer whose
     citation step kept only one of two files must not be thrown away because the other
     file is the one that names the subject.
@@ -609,11 +643,22 @@ def _unsupported_premise(question: str, answer: str, sources: list, judge: Calla
                 return f"the sources never mention {w}"
         elif (w in _WEEKDAYS and w[:3] not in hay) or (re.fullmatch(r"(19|20)\d\d", w) and w not in hay):
             return f"the sources never mention {w}"
-    if judge is None or not srcs:
+    if not srcs:
         return None
     seen = srcs + [s for s in (retrieved or []) if s is not None and s.confidence == "strong"]
     hay = _premise_haystack(seen)
     tokens = set(re.findall(r"[a-z0-9']+", hay))
+    # The thing a question counts (2026-10-13). "How many movies are there
+    # in the laptop" was answered "28 files ..." from a screenshot of a
+    # report: the word rule below only checks question words the answer
+    # repeats, and the answer had swapped "movies" for "files", so the
+    # subject was never looked for. A count of <thing> needs a source that
+    # mentions <thing>, in some form, whatever the answer calls it.
+    counted = _counted_subject(q_words)
+    if counted and not any(_mentioned(form, hay, tokens) for form in {counted, counted.removesuffix("s")}):
+        return f"the question counts “{counted}” but no source mentions it"
+    if judge is None:
+        return None
     a_words = {w.removesuffix("'s") for w in re.findall(r"[a-z][a-z']+", answer.lower())}
     dated = set(_MONTHS) | _WEEKDAYS
     candidates: list[str] = []

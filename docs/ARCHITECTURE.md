@@ -439,7 +439,9 @@ The code is already arranged the way the architecture is drawn: each section has
 | | Deleted files removed from the index | `indexing/cleanup.py` |
 | | Text / Office extraction | `extraction/` (one extractor per file type) |
 | | Windows OCR for scans, screenshots and photos with text | `extraction/ocr.py`, `extraction/pdf_extractor.py`, `indexing/indexer.py` (`index_image_text`) |
-| | Whisper for audio | `transcription/` |
+| | Whisper for audio, with a guard against looping text and filler on music | `transcription/` (`guard.py`, `whisper_onnx.py`) |
+| | Audio-only files with a video extension (WhatsApp ".mpeg" voice notes) go to Whisper, not CLIP | `files/media.py`, `indexing/folder_scan.py` (`uses_visual_pipeline`) |
+| | Optional "search what is said in videos" (first 10 minutes, off by default) | `indexing/folder_scan.py`, `indexing/indexer.py` (`index_video_speech`) |
 | | CLIP for photos and video frames | `embeddings/clip_model.py`, `indexing/visual_indexer.py` |
 | | Text passages (224 tokens) | `chunking/chunker.py`, `indexing/indexer.py` |
 | | File records, SQLite FTS5, LanceDB text and image vectors | `storage/sqlite_store.py`, `storage/keyword_store.py`, `storage/lancedb_store.py`, `embeddings/model.py` |
@@ -453,6 +455,7 @@ The code is already arranged the way the architecture is drawn: each section has
 | | Personalization, near-ties only | `search/service.py` (`_personalize`) |
 | | Final results + explanation, weak results capped | `search/explain.py`, `search/service.py` (`_prune_weak`) |
 | **3. Photos and videos** | CLIP text query to image vectors | `visual_search/service.py`, `thumbnails.py` |
+| | Explorer-style browsing: drives, quick access, folder listing, recent files (read-only; one path check) | `routes/browse.py`, `files/browsing.py` |
 | **4. Personalization and memory** | Activity history | `context/usage_store.py` |
 | | Windows Recent items import | `context/windows_recent.py` |
 | | Profile (frequency, recency, type, topic, time, files used together) | `context/profile.py` |

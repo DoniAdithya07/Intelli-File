@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { fileKind, recordEvent } from "../backend";
+import { recordUiCall, UITEST } from "../lib/uitest";
 
 // FTS5's snippet() wraps matches in **double asterisks** — render them as highlights.
 export function Highlighted({ text }: { text: string }) {
@@ -31,6 +32,7 @@ export function canOpen(path: string | null): boolean {
 // means to the user (Phase 16) — reported whichever page they come from.
 export async function openResult(path: string | null, onError: (m: string) => void, fileId?: string | null) {
   if (!path) return;
+  if (UITEST) { recordUiCall({ kind: "open", path }); return; } // tests only record the call (spec T2)
   try {
     await invoke("open_indexed_path", { path });
     recordEvent("file_opened", { file_id: fileId ?? null, path });
@@ -43,6 +45,7 @@ export async function openResult(path: string | null, onError: (m: string) => vo
 }
 export async function revealResult(path: string | null, onError: (m: string) => void, fileId?: string | null) {
   if (!path) return;
+  if (UITEST) { recordUiCall({ kind: "reveal", path }); return; }
   try {
     await revealItemInDir(path);
     recordEvent("file_revealed", { file_id: fileId ?? null, path });

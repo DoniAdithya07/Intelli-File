@@ -21,6 +21,15 @@ from tokenizers import Tokenizer
 WHISPER_SAMPLE_RATE = 16000
 MAX_TARGET_POSITIONS = 448
 
+# Whisper on music or noise can fall into a loop ("I am going to say that"
+# hundreds of times, found 2026-10-12 on a real MP3) and keep going until the
+# 448-token budget. A phrase repeated this many times in a row ends the
+# window early. One word needs more repeats than a phrase: "no, no, no, no"
+# is speech, "that that that that that that that that" is not.
+LOOP_RUNS_SINGLE_TOKEN = 8
+LOOP_RUNS_PHRASE = 4
+LOOP_MAX_PHRASE_TOKENS = 8
+
 
 class WhisperOnnx:
     def __init__(self, model_dir: Path):
@@ -52,6 +61,9 @@ class WhisperOnnx:
         self.heads = cfg["decoder_attention_heads"]
         self.head_dim = cfg["d_model"] // self.heads
         self.first_special = self.decoder_start  # every id from <|startoftranscript|> up is a control token
+        # The token Whisper puts first when the window holds no speech (called
+        # <|nocaptions|> in the English-only models, <|nospeech|> in the others).
+        self.no_speech = next((i for i in (self.tokenizer.token_to_id(t) for t in ("<|nocaptions|>", "<|nospeech|>")) if i is not None), None)
         self._past_names = [i.name for i in self.decoder.get_inputs() if i.name.startswith("past_key_values")]
         self._present_names = [o.name for o in self.decoder.get_outputs() if o.name.startswith("present")]
         self._has_cache_flag = any(i.name == "use_cache_branch" for i in self.decoder.get_inputs())
@@ -66,13 +78,17 @@ class WhisperOnnx:
 
     # ----- one ≤ 30 s window -----
 
-    def transcribe_window(self, audio: np.ndarray, prompt_ids: list[int] | None = None) -> str:
+    def transcribe_window_scored(self, audio: np.ndarray, prompt_ids: list[int] | None = None) -> tuple[str, float, float]:
+        """(text, probability the window holds no speech, mean log-probability
+        of the chosen tokens) — the two numbers Whisper's own reference code
+        uses to throw a window away (see Transcriber._transcribe_window)."""
         feats = self.features(audio, sampling_rate=WHISPER_SAMPLE_RATE, return_tensors="np")["input_features"].astype(np.float32)
         encoder_out = self.encoder.run(None, {"input_features": feats})[0]
 
         prefix = list(prompt_ids or []) + [self.decoder_start] + self.forced
         budget = MAX_TARGET_POSITIONS - len(prefix)
         generated: list[int] = []
+        no_speech_prob, total_logprob = 0.0, 0.0
 
         empty = np.zeros((1, self.heads, 0, self.head_dim), dtype=np.float32)
         past = {name: empty for name in self._past_names}
@@ -84,6 +100,9 @@ class WhisperOnnx:
                 feed["use_cache_branch"] = np.array([use_cache])
             outputs = self.decoder.run(None, feed)
             logits = outputs[0][0, -1].astype(np.float32)
+            if step == 0 and self.no_speech is not None:
+                # Read where the reference reads it: at the <|startoftranscript|> position, before any suppression.
+                no_speech_prob = _softmax_at(outputs[0][0, len(prompt_ids or [])].astype(np.float32), self.no_speech)
             logits[self.suppress] = -np.inf
             if step == 0:
                 logits[self.begin_suppress] = -np.inf
@@ -91,6 +110,11 @@ class WhisperOnnx:
             if token == self.eos:
                 break
             generated.append(token)
+            total_logprob += float(logits[token] - _logsumexp(logits))
+            looped = _loop_tokens(generated)
+            if looped:
+                del generated[-looped:]  # keep one copy of the repeated phrase
+                break
             # Cache: the decoder's own keys/values grow every step; the
             # encoder's are computed once on the no-cache step and come
             # back as an EMPTY-BATCH placeholder (shape (0, heads, 1, dim))
@@ -103,4 +127,25 @@ class WhisperOnnx:
             input_ids = np.array([[token]], dtype=np.int64)
             use_cache = True
         text_ids = [t for t in generated if t < self.first_special and t != self.eos]
-        return self.tokenizer.decode(text_ids, skip_special_tokens=True).strip()
+        text = self.tokenizer.decode(text_ids, skip_special_tokens=True).strip()
+        return text, no_speech_prob, total_logprob / max(len(generated), 1)
+
+
+def _logsumexp(logits: np.ndarray) -> float:
+    finite = logits[np.isfinite(logits)]
+    top = float(finite.max())
+    return top + float(np.log(np.exp(finite - top).sum()))
+
+
+def _softmax_at(logits: np.ndarray, index: int) -> float:
+    return float(np.exp(logits[index] - _logsumexp(logits)))
+
+
+def _loop_tokens(generated: list[int]) -> int:
+    """How many trailing tokens are the repeats (all but the first copy) of a
+    phrase that has just repeated too often; 0 when the output is not looping."""
+    for size in range(1, LOOP_MAX_PHRASE_TOKENS + 1):
+        runs = LOOP_RUNS_SINGLE_TOKEN if size == 1 else LOOP_RUNS_PHRASE
+        if len(generated) >= size * runs and generated[-size * runs:] == generated[-size:] * runs:
+            return size * (runs - 1)
+    return 0

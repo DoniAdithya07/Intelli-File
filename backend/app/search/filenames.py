@@ -14,6 +14,7 @@ from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..files.discovery import AUDIO_EXTENSIONS
 from ..files.identity import FileRecord
 from .spelling import _levenshtein
 
@@ -33,6 +34,9 @@ _QUERY_NOISE = {
 # notes.txt` nor `notes.odt` by name.
 _GENERIC_NAME_WORDS = {
     "file", "files", "document", "documents", "note", "notes", "folder", "photo", "photos", "picture", "pictures", "image",
+    # Added 2026-10-12 with the photo-search fix: "animated photos" put `day-photos.png` and `night-photos.png`
+    # above every picture, because a file name carrying the filler word counted as a hit for it.
+    "images", "photograph", "photographs", "pic", "pics", "snap", "snaps", "shot", "shots",
 }
 
 
@@ -46,6 +50,14 @@ def _name_tokens(path: str) -> tuple[list[str], str]:
     O(files) pathlib work per search."""
     name = Path(path)
     return _tokens(name.stem), name.suffix.lower().lstrip(".")
+
+
+_AUDIO_EXTENSION_NAMES = {e.lstrip(".") for e in AUDIO_EXTENSIONS}
+
+
+@lru_cache(maxsize=262144)
+def _folder_tokens(path: str) -> list[str]:
+    return _tokens(Path(path).parent.name)
 
 
 def _word_in_name(word: str, name_tokens: list[str]) -> bool:
@@ -96,6 +108,11 @@ def match_filenames(query_text: str, records: list[FileRecord]) -> list[Filename
     matches = []
     for record in records:
         name_tokens, extension = _name_tokens(record.path)
+        if record.audio_only or extension in _AUDIO_EXTENSION_NAMES:
+            # A song or a voice note is found by its title or the album/folder it
+            # sits in (2026-10-12): its text is a transcript that, for music, is
+            # nothing. Documents keep matching on their own name only.
+            name_tokens = name_tokens + _folder_tokens(record.path)
         matched = [w for w in words if _word_in_name(w, name_tokens)]
         # The extension counts only next to a matched name word: "notes.odt"
         # puts notes.odt above `meeting notes.txt`, while "pdf" alone still

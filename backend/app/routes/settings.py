@@ -73,6 +73,7 @@ class SettingsRequest(BaseModel):
     pause_on_battery: bool | None = None
     pause_on_low_power: bool | None = None
     resource_mode: str | None = None
+    index_video_speech: bool | None = None
 
 
 @router.post("/settings")
@@ -82,8 +83,12 @@ def update_settings_endpoint(body: SettingsRequest, request: Request):
     if "resource_mode" in changes and changes["resource_mode"] not in MODES:
         return {"error": f"resource_mode must be one of {', '.join(MODES)}"}
     before = state.settings.get("import_windows_recent")
+    speech_before = state.settings.get("index_video_speech")
     updated = state.settings.update(changes)
     state.live_indexing.apply_power()  # a toggle takes effect immediately
+    if changes.get("index_video_speech") is True and not speech_before and state.access.allows_indexing:
+        for folder in state.live_indexing.roots():
+            state.live_indexing.enqueue(folder)  # unchanged files are skipped; videos still waiting for their soundtrack are read
     if changes.get("import_windows_recent") is True and not before:
         import_windows_recent_async(state)
     elif changes.get("import_windows_recent") is False and before:

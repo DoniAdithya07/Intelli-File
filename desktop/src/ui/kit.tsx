@@ -76,25 +76,6 @@ export function Toggle({ on, onChange, disabled, label }: { on: boolean; onChang
   );
 }
 
-/** Underlined tabs, as on the Search and Photos pages. */
-export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs: { id: T; label: string }[]; value: T; onChange: (t: T) => void; label: string }) {
-  return (
-    <div role="tablist" aria-label={label} className="flex gap-4">
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          role="tab"
-          aria-selected={value === t.id}
-          className={`-mb-px border-b-2 pb-2 text-[14px] ${value === t.id ? "border-accent font-medium text-ink" : "border-transparent text-ink/65 hover:text-ink"}`}
-          onClick={() => onChange(t.id)}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /** "Documents\Research": the last two folders of a path, which is how people recognise a place. */
 export function shortPlace(path: string | null): string {
   if (!path) return "";

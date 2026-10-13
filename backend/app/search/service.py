@@ -6,6 +6,8 @@ PRD and not implemented yet — `reranker_score` is always None for now,
 left as a clear extension point rather than silently omitted.
 """
 
+import dataclasses
+import os
 import re
 import time
 from pathlib import Path
@@ -28,6 +30,11 @@ if TYPE_CHECKING:
     from ..context.profile import ProfileBuilder
 
 RETRIEVAL_TOP_K = 20
+# Folder-scoped search asks the stores for more and more candidates until enough of them are inside
+# the folder (a small folder in a huge index has few of the global top 20). ponytail: cost grows with
+# how rare the folder is, bounded by this cap; a store-side file_id prefilter is the upgrade path.
+SCOPE_START_FACTOR = 4
+SCOPE_CANDIDATE_CAP = 20_000
 # A cross-encoder logit above this means "this passage answers the query";
 # below it the reranker has no opinion worth a vote (see _run_plan).
 RERANK_CONFIDENT_LOGIT = 0.0
@@ -162,6 +169,20 @@ WEAK_MAX_GAP_FROM_STRONG = 0.15
 WEAK_MAX_SHOWN = 3
 
 
+def _fetch_in_scope(fetch, allowed: set[str] | None, top_k: int = RETRIEVAL_TOP_K) -> list[dict]:
+    """`fetch(n)` returns the n best hits. Without `allowed` that is the answer; with it, n grows
+    until `top_k` hits are inside the scope or the store has nothing more (or the cap is reached)."""
+    if allowed is None:
+        return fetch(top_k)
+    n = top_k
+    while True:
+        hits = fetch(n)
+        kept = [h for h in hits if h["file_id"] in allowed]
+        if len(kept) >= top_k or len(hits) < n or n >= SCOPE_CANDIDATE_CAP:
+            return kept[:top_k]
+        n = min(n * SCOPE_START_FACTOR, SCOPE_CANDIDATE_CAP)
+
+
 class SearchService:
     def __init__(
         self,
@@ -261,11 +282,11 @@ class SearchService:
         filters = " ".join(m.group(0) for m in _FILTER_TOKEN_RE.finditer(raw_query))
         return f"{filters} {corrected}".strip()
 
-    def search(self, raw_query: str, top_k: int = 10, mode: str = "auto") -> list[dict]:
+    def search(self, raw_query: str, top_k: int = 10, mode: str = "auto", folder: str | None = None) -> list[dict]:
         """Results only — see search_routed() for the route report."""
-        return self.search_routed(raw_query, top_k=top_k, mode=mode)[0]
+        return self.search_routed(raw_query, top_k=top_k, mode=mode, folder=folder)[0]
 
-    def search_routed(self, raw_query: str, top_k: int = 10, mode: str = "auto") -> tuple[list[dict], dict]:
+    def search_routed(self, raw_query: str, top_k: int = 10, mode: str = "auto", folder: str | None = None) -> tuple[list[dict], dict]:
         """`mode`: auto (the router picks the cheapest sufficient tier —
         Phase 18, Objective 3), smart (BM25 + meaning + fusion), exact (the
         whole query as a literal phrase — same as quoting it), keyword
@@ -275,6 +296,9 @@ class SearchService:
         each stage cost."""
         t_start = time.perf_counter()
         parsed = parse_query(raw_query)
+        if folder:  # an absolute folder the caller has already validated: only files inside it take part
+            prefix = os.path.normpath(folder).lower().rstrip("\\/") + os.sep
+            parsed = dataclasses.replace(parsed, filters=dataclasses.replace(parsed.filters, folder=prefix))
         exact = parsed.exact_phrase is not None or mode == "exact"
         query_text = parsed.exact_phrase if parsed.exact_phrase is not None else parsed.text
         stages: list[dict] = []
@@ -284,7 +308,7 @@ class SearchService:
         # Only files that pass the metadata filters take part in any stage.
         active_records = self._active_records()
         if parsed.filters.any():
-            active_records = [r for r in active_records if parsed.filters.matches(r.path, r.size, r.modified_time)]
+            active_records = [r for r in active_records if parsed.filters.matches(r.path, r.size, r.modified_time, bool(r.audio_only))]
 
         # Typo correction is built against the vocabulary of words the
         # user's own files actually contain. Exact-phrase search must
@@ -403,11 +427,12 @@ class SearchService:
 
     def _run_plan(self, plan: Plan, query_text: str, keyword_query_text: str, parsed, active_records, top_k: int, stages: list[dict]) -> list[dict]:
         allowed_file_ids = {r.file_id for r in active_records} if parsed.filters.any() else None
+        scope = allowed_file_ids if parsed.filters.folder else None  # only a folder scope looks deeper than the top 20
 
         keyword_hits: list[dict] = []
         if plan.keyword and keyword_query_text:
             t0 = time.perf_counter()
-            keyword_hits = self.keyword_store.search(keyword_query_text, top_k=RETRIEVAL_TOP_K, exact_phrase=plan.exact)
+            keyword_hits = _fetch_in_scope(lambda n: self.keyword_store.search(keyword_query_text, top_k=n, exact_phrase=plan.exact), scope)
             relaxed = False
             if not keyword_hits and not plan.exact:
                 # FTS5 ANDs every word, so the filler in "find my notes about
@@ -415,7 +440,7 @@ class SearchService:
                 # alone, requiring at least half of them (2026-09-21).
                 content_words = [w for w in _KW_TOKEN_RE.findall(keyword_query_text.lower()) if w not in _KW_FILLER and len(w) > 1]
                 if content_words and len(content_words) < len(_KW_TOKEN_RE.findall(keyword_query_text)):
-                    keyword_hits = self.keyword_store.search_terms(content_words, top_k=RETRIEVAL_TOP_K)
+                    keyword_hits = _fetch_in_scope(lambda n: self.keyword_store.search_terms(content_words, top_k=n), scope)
                     relaxed = bool(keyword_hits)
             if allowed_file_ids is not None:
                 keyword_hits = [h for h in keyword_hits if h["file_id"] in allowed_file_ids]
@@ -427,7 +452,7 @@ class SearchService:
         if plan.semantic and keyword_query_text:
             t0 = time.perf_counter()
             query_vector = self.model.embed_queries([keyword_query_text])[0].tolist()
-            raw_semantic = self.vector_store.query(CHUNKS_TABLE, query_vector, top_k=RETRIEVAL_TOP_K)
+            raw_semantic = _fetch_in_scope(lambda n: self.vector_store.query(CHUNKS_TABLE, query_vector, top_k=n), scope)
             semantic_hits = [r for r in raw_semantic if r["score"] <= self.model.thresholds["relevance_cutoff"]]
             if allowed_file_ids is not None:
                 semantic_hits = [h for h in semantic_hits if h["file_id"] in allowed_file_ids]

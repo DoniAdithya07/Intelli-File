@@ -60,7 +60,7 @@ def ask_endpoint(q: str, request: Request):
     # busy (and the load slower) for the whole load.
     cancel = _stop_previous_question(state)
     try:
-        agent = make_agent(state)  # loads the model on the first question
+        agent = make_agent(state, question)  # loads the model on the first question that needs it
     except Exception as e:  # noqa: BLE001 — a damaged file or an unsupported CPU must reach the UI as a sentence, not an HTTP 500
         logger.exception("local LLM failed to load from %s", state.llm_file)
         return StreamingResponse(

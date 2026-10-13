@@ -59,6 +59,7 @@ PHASES = [
     ("Next round 4 — Offline OCR: scanned PDFs and screenshots (Windows OCR)", "prototype_ocr.py"),
     ("More file types — OpenDocument, EPUB, e-mail, Office 97-2003, HEIC/TIFF, more video and audio", "prototype_more_formats.py"),
     ("Feature check — file, photo, video and audio identification end to end over HTTP", "check_features.py"),
+    ("Audio fixes (voice-note .mpeg, repetition guard, file-name search) and the read-only /browse API", "prototype_browse.py"),
     ("Photo and video search accuracy on real pictures (Windows' own photos)", "evaluate_visual_real.py"),
 ]
 

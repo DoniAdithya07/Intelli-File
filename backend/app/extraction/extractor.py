@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..files.discovery import AUDIO_EXTENSIONS, CODE_EXTENSIONS, HTML_EXTENSIONS
+from ..files.media import is_audio_only_media
 from .audio_extractor import extract_audio
 from .blocks import ExtractedBlock
 from .docx_extractor import extract_docx
@@ -91,7 +92,8 @@ def extract_document(path: Path, transcriber: "Transcriber | None" = None) -> li
     if suffix in OFFICE_ZIP_EXTENSIONS:
         check_office_zip(path)
 
-    if suffix in AUDIO_EXTENSIONS:
+    # A video extension with no picture inside (WhatsApp's ".mpeg" voice notes) is audio too.
+    if suffix in AUDIO_EXTENSIONS or is_audio_only_media(path):
         if transcriber is None:
             raise UnsupportedFileType(
                 f"Cannot extract {suffix}: the speech model is not installed (run scripts/download_whisper_model.py)"

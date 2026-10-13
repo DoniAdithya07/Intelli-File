@@ -21,7 +21,7 @@ class FakeAgent:
         yield {"type": "done", "seconds": 4, "sources": []}
 
 names = iter(["first", "second", "third"])
-route.make_agent = lambda state: FakeAgent(next(names))
+route.make_agent = lambda state, question="": FakeAgent(next(names))
 route.remember = lambda *a, **k: None
 state = types.SimpleNamespace()
 disconnected = {"value": False}
@@ -56,7 +56,7 @@ print(f"Ask cancel: new question stopped run 1 at step {a}; closed stream stoppe
 # stream waits for an event with a timeout and asks whether the client is
 # still there, so the run is told to stop within ~1 s, not when the first
 # token finally arrives (until 2026-10-05 the wait had no timeout).
-route.make_agent = lambda state: FakeAgent("silent", silent=4.0)
+route.make_agent = lambda state, question="": FakeAgent("silent", silent=4.0)
 r4 = route.ask_endpoint("q4", req)
 cancel4 = state.ask_cancel
 async def disconnect_during_prefill():
@@ -89,7 +89,7 @@ class SlowState(types.SimpleNamespace):
 race_state = SlowState()
 race_req = types.SimpleNamespace(app=types.SimpleNamespace(state=race_state), is_disconnected=is_disconnected)
 counter = itertools.count()
-route.make_agent = lambda state: FakeAgent(f"race{next(counter)}")
+route.make_agent = lambda state, question="": FakeAgent(f"race{next(counter)}")
 barrier = threading.Barrier(5)
 def ask_together():
     barrier.wait()
@@ -106,11 +106,11 @@ print("(b) Five questions at once: exactly one run is left alive: OK")
 # (c) The previous question is stopped before the new one loads the model
 # (seconds on the first question): until 2026-10-05 it kept the CPU busy,
 # and the load slower, for the whole load.
-route.make_agent = lambda state: FakeAgent("long")
+route.make_agent = lambda state, question="": FakeAgent("long")
 route.ask_endpoint("q5", req)
 previous = state.ask_cancel
 seen = {}
-def slow_load(state):
+def slow_load(state, question=""):
     seen["previous_stopped"] = previous.is_set()
     return FakeAgent("after load")
 route.make_agent = slow_load

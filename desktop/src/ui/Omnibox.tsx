@@ -1,4 +1,4 @@
-import { KeyboardEvent, useEffect, useRef } from "react";
+import { KeyboardEvent, MutableRefObject, useEffect, useRef } from "react";
 import type { VoiceState } from "../hooks/useVoice";
 
 interface Props {
@@ -17,14 +17,19 @@ interface Props {
   autoFocus?: boolean;
   trailing?: React.ReactNode;
   large?: boolean;
+  /** One line high, for the address row. */
+  compact?: boolean;
+  /** Lets the page focus the box (Ctrl+F). */
+  inputRef?: MutableRefObject<HTMLInputElement | null>;
 }
 
 /** The search bar, shared by Search, Photos and the Ctrl+Space overlay. */
-export function Omnibox({ value, onChange, onSubmit, onEscape, onArrow, listId, activeId, placeholder, icon = "search", searching, voice, autoFocus, trailing, large }: Props) {
+export function Omnibox({ value, onChange, onSubmit, onEscape, onArrow, listId, activeId, placeholder, icon = "search", searching, voice, autoFocus, trailing, large, compact, inputRef: outerRef }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus();
   }, [autoFocus]);
+  useEffect(() => { if (outerRef) outerRef.current = inputRef.current; });
 
   const v = voice?.state ?? "idle";
   const busy = v === "warming" || v === "recording" || v === "transcribing";
@@ -49,18 +54,18 @@ export function Omnibox({ value, onChange, onSubmit, onEscape, onArrow, listId, 
   return (
     <div
       aria-busy={searching || undefined}
-      className={`omnibox no-drag flex items-center gap-3 rounded-lg border bg-content px-4 ${large ? "h-14" : "h-12"} ${
+      className={`omnibox no-drag flex items-center border bg-field ${compact ? "h-8 gap-2 px-2" : `gap-3 rounded-lg px-4 ${large ? "h-14" : "h-12"}`} ${
         v === "recording" ? "border-error" : "border-rule-strong focus-within:border-accent"
       }`}
     >
       {v === "recording" ? levelBars : (
-        <span className="material-symbols-outlined text-ink/65">{v === "warming" || v === "transcribing" ? "graphic_eq" : icon}</span>
+        <span className={`material-symbols-outlined text-ink/65 ${compact ? "icon-sm" : ""}`}>{v === "warming" || v === "transcribing" ? "graphic_eq" : icon}</span>
       )}
       <input
         ref={inputRef}
         aria-label={placeholder}
         {...(listId ? { role: "combobox", "aria-expanded": true, "aria-controls": listId, "aria-activedescendant": activeId, "aria-autocomplete": "none" as const } : {})}
-        className={`flex-1 bg-transparent outline-none placeholder:text-ink/65 ${large ? "text-[17px]" : "text-[15px]"}`}
+        className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-dim ${compact ? "text-[14px]" : large ? "text-[17px]" : "text-[15px]"}`}
         value={busy ? "" : value}
         placeholder={v === "warming" ? "Getting the microphone ready…" : v === "recording" ? "Listening. Click the microphone again to stop." : v === "transcribing" ? "Turning your words into text…" : placeholder}
         onChange={(e) => onChange(e.currentTarget.value)}
@@ -76,13 +81,13 @@ export function Omnibox({ value, onChange, onSubmit, onEscape, onArrow, listId, 
       {trailing}
       {voice && (
         <button
-          className={`grid h-9 w-9 place-items-center rounded-md transition-colors ${v === "recording" ? "mic-rec" : "btn-secondary text-accent"} disabled:opacity-50`}
+          className={`grid ${compact ? "h-6 w-6" : "h-9 w-9"} shrink-0 place-items-center rounded-md transition-colors ${v === "recording" ? "mic-rec" : compact ? "btn-ghost text-accent" : "btn-secondary text-accent"} disabled:opacity-50`}
           onClick={voice.toggle}
           disabled={v === "warming" || v === "transcribing"}
           title={v === "recording" ? "Stop recording" : "Search by voice"}
           aria-label={v === "recording" ? "Stop recording" : "Search by voice"}
         >
-          <span className="material-symbols-outlined">{v === "recording" ? "stop" : "mic"}</span>
+          <span className={`material-symbols-outlined ${compact ? "icon-sm" : ""}`}>{v === "recording" ? "stop" : "mic"}</span>
         </button>
       )}
     </div>

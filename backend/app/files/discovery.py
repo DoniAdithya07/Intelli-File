@@ -51,6 +51,28 @@ def size_cap(suffix: str) -> int | None:
         return MAX_DOCUMENT_FILE_BYTES
     return None
 
+# Most of the time of a first scan is the embedding model (about 50 ms per
+# 224-token chunk, measured 2026-10-12; more threads do not help). Machine-made
+# data and source code (a 40 KB .json is about 60 chunks) were most of the
+# chunks on a real laptop but are rarely what a person searches for by meaning,
+# so only their beginning (header, schema, opening code, about 1,800 tokens) is
+# embedded. Documents keep far more (about 60 pages); beyond that, the rest of
+# the file is not searchable.
+DATA_CODE_CHUNK_CAP = 8
+DOCUMENT_CHUNK_CAP = 150
+PLAIN_TEXT_CHUNK_CAP = 40  # .txt/.md/.html: logs and exports far outnumber real long-form text
+DATA_CODE_EXTENSIONS = (CODE_EXTENSIONS - {".rtf"}) | {".csv", ".tsv"}
+
+
+def chunk_cap(suffix: str) -> int | None:
+    """Most chunks embedded for one file of this type; None = no cap."""
+    if suffix in DATA_CODE_EXTENSIONS:
+        return DATA_CODE_CHUNK_CAP
+    if suffix in {".txt", ".md"} | HTML_EXTENSIONS:
+        return PLAIN_TEXT_CHUNK_CAP
+    return None if suffix in AUDIO_EXTENSIONS else DOCUMENT_CHUNK_CAP
+
+
 # Audio files, transcribed via the same local Whisper model built for
 # voice search (Phase 7) — spoken content becomes searchable text, same
 # as a PDF's written content. .m4a matters most in practice (the default

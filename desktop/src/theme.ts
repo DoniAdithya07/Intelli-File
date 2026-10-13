@@ -23,7 +23,15 @@ export function resolvedTheme(choice: ThemeChoice = getThemeChoice()): "day" | "
 }
 
 export function applyTheme(choice: ThemeChoice = getThemeChoice()): void {
-  document.documentElement.dataset.theme = resolvedTheme(choice) === "night" ? "dark" : "light";
+  const night = resolvedTheme(choice) === "night";
+  document.documentElement.dataset.theme = night ? "dark" : "light";
+  syncWindowTheme(night);
+}
+
+/** The native title bar follows the app's theme, not only Windows' (desktop app, main window only). */
+function syncWindowTheme(night: boolean): void {
+  if (!("__TAURI_INTERNALS__" in window) || new URLSearchParams(window.location.search).get("window") === "overlay") return;
+  import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().setTheme(night ? "dark" : "light")).catch(() => { /* a plain browser, or no permission: the title bar keeps Windows' setting */ });
 }
 
 const listeners = new Set<(c: ThemeChoice) => void>();

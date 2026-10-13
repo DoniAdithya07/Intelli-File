@@ -29,6 +29,10 @@ DEFAULTS: dict = {
     "pause_on_battery": False,
     "pause_on_low_power": True,
     "resource_mode": "balanced",  # balanced | performance | battery_saver
+    # "Search what is said in videos" (2026-10-12): transcribe the first 10 minutes of a
+    # video's soundtrack, after everything else. Off until the user asks: it costs
+    # Whisper time per video.
+    "index_video_speech": False,
 }
 
 

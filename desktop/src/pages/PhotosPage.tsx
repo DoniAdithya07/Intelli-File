@@ -1,17 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { describeError, formatTimestamp, search, searchVisual, suggestVisual, VisualKind, VisualSearchResult } from "../backend";
-import { useVoice } from "../hooks/useVoice";
-import { FILE_MANAGER } from "../platform";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { describeError, formatTimestamp, searchVisual, suggestVisual, VisualKind, VisualSearchResult } from "../backend";
+import { Notify, useActions } from "../lib/actions";
+import { useStatusBar } from "../shell/ctx";
+import { Banner, CommandBar, CommandButton, EmptyState, Fi, G, Menu, MenuItem, Pills } from "../ui/controls";
+import { FileGrid } from "../ui/FileGrid";
+import { canOpen, openResult, revealResult } from "../ui/ResultCard";
 import { Thumb } from "../ui/Thumb";
-import { PageHeader, Tabs } from "../ui/kit";
-import { Omnibox } from "../ui/Omnibox";
-import { openResult, revealResult } from "../ui/ResultCard";
 
 interface Props {
+  query: string;
+  /** Changes on every Enter, so the same words search again. */
+  run: number;
+  engineReady: boolean;
   photoCount: number;
   videoCount: number;
   available: boolean; // false when the photo and video model did not load
+  notify: Notify;
   onError: (m: string | null) => void;
+  onRunQuery: (q: string) => void;
+  preview: boolean;
+  onPreview: (b: boolean) => void;
 }
 
 const KINDS: { id: VisualKind; label: string }[] = [
@@ -19,59 +27,13 @@ const KINDS: { id: VisualKind; label: string }[] = [
   { id: "photo", label: "Photos" },
   { id: "video", label: "Videos" },
 ];
+const SIZES = { small: 120, medium: 160, large: 220 } as const;
+const EXAMPLES = ["a person in a red shirt", "a dog on a beach", "a whiteboard with notes"];
+const dateOf = (r: VisualSearchResult) => (r.captured_at ? new Date(r.captured_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "No date");
 
-function PhotoCard({ r, strong, onError, browsing }: { r: VisualSearchResult; strong: boolean; onError: (m: string) => void; browsing?: boolean }) {
-  const [broken, setBroken] = useState(false);
-  return (
-    <div
-      tabIndex={0}
-      aria-label={`${r.filename}${browsing ? "" : strong ? ", strong match" : ", weaker match"}. Enter opens it.`}
-      className={`panel group cursor-default overflow-hidden ${strong || browsing ? "" : "opacity-70"}`}
-      onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) openResult(r.path, onError, r.file_id); }}
-      onDoubleClick={() => openResult(r.path, onError, r.file_id)}
-      title={`Double-click to open. Right-click to show in ${FILE_MANAGER}.`}
-      onContextMenu={(e) => { e.preventDefault(); revealResult(r.path, onError, r.file_id); }}
-    >
-      <div className="relative aspect-[4/3] bg-ink/[0.03]">
-        {r.path && !broken && <Thumb path={r.path} size={320} at={r.timestamp_offset_seconds} alt={r.filename} className="h-full w-full object-cover" onError={() => setBroken(true)} />}
-        {broken && <div className="grid h-full place-items-center px-3 text-center text-[12px] text-ink/65">No preview for {r.filename}</div>}
-        {!browsing && (
-          <span className="absolute left-2 top-2 rounded bg-black/70 px-2 py-0.5 text-[12px] text-white">{strong ? "Strong match" : "Weaker match"}</span>
-        )}
-        {r.kind === "video" && r.timestamp_offset_seconds != null && (
-          <span className="mono absolute right-2 top-2 flex items-center gap-1 rounded-md bg-black/60 px-2 py-0.5 text-[12px] text-white" title="The moment that matched. Open the video and go to this time.">
-            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>play_arrow</span>
-            {formatTimestamp(r.timestamp_offset_seconds)}
-          </span>
-        )}
-        <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 p-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          <button className="rounded bg-black px-1.5 py-0.5 text-[12px] text-white hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" onClick={() => openResult(r.path, onError, r.file_id)}>Open</button>
-          <button className="rounded bg-black px-1.5 py-0.5 text-[12px] text-white hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" onClick={() => revealResult(r.path, onError, r.file_id)}>Show in {FILE_MANAGER}</button>
-        </div>
-      </div>
-      {r.kind === "video" && r.path && r.moments && r.moments.length > 1 && (
-        <div className="flex gap-1 px-2 pt-2" title="The moments that matched">
-          {r.moments.map((m) => (
-            <div key={m.t} className="relative min-w-0 flex-1 overflow-hidden rounded-md bg-black/40">
-              <Thumb path={r.path!} size={160} at={m.t} alt="" className="aspect-video w-full object-cover" />
-              <span className="mono absolute bottom-0.5 right-1 rounded bg-black/70 px-1 text-[11px] text-white">{formatTimestamp(m.t)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="px-3 py-2">
-        <div className="truncate text-[13px] font-medium">{r.filename}</div>
-        <div className="mono mt-0.5 flex justify-between text-[12px] text-ink/65">
-          <span>{r.captured_at ? new Date(r.captured_at).toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" }) : "No date"}</span>
-          <span>{r.kind ?? "photo"}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function PhotosPage({ photoCount, videoCount, available, onError }: Props) {
-  const [query, setQuery] = useState("");
+/** Photos and videos found by what is in them. Group headers and one small label say how sure the match is: no label on every tile. */
+export function PhotosPage({ query, run, engineReady, photoCount, videoCount, available, notify, onError, onRunQuery, preview, onPreview }: Props) {
+  const text = query.trim();
   const [kind, setKind] = useState<VisualKind>("all");
   const [results, setResults] = useState<VisualSearchResult[] | null>(null);
   const [lastQuery, setLastQuery] = useState("");
@@ -79,188 +41,175 @@ export function PhotosPage({ photoCount, videoCount, available, onError }: Props
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [unrecognized, setUnrecognized] = useState<string[]>([]);
   const [suggestion, setSuggestion] = useState<string | null>(null);
+  const [size, setSize] = useState<keyof typeof SIZES>("medium");
+  const [by, setBy] = useState<"match" | "date">("match");
+  const [selected, setSelected] = useState<VisualSearchResult[]>([]);
+  const [ctx, setCtx] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [weakOpen, setWeakOpen] = useState(true);
+  const actions = useActions(() => undefined, notify, [], () => undefined);
 
-  // "Did you mean" — same debounce as the Search page, against the photo-query checker.
+  // "Did you mean", against the photo-query checker.
   useEffect(() => {
-    const draft = query.trim();
-    if (!draft) { setSuggestion(null); return; }
+    if (!text) { setSuggestion(null); return; }
     let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      try {
-        const res = await suggestVisual(draft);
-        if (!cancelled) setSuggestion(res.suggestion && res.suggestion !== draft ? res.suggestion : null);
-      } catch {
-        if (!cancelled) setSuggestion(null);
-      }
-    }, 250);
-    return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [query]);
+    suggestVisual(text).then((res) => { if (!cancelled) setSuggestion(res.suggestion && res.suggestion !== text ? res.suggestion : null); }).catch(() => { if (!cancelled) setSuggestion(null); });
+    return () => { cancelled = true; };
+  }, [text, run]);
 
-  // A newer search (another query, or another tab) cancels the one in flight; its reply is ignored.
-  const inflight = useRef<AbortController | null>(null);
-  const run = useCallback(async (q?: string, k?: VisualKind) => {
-    const text = (q ?? query).trim();
-    if (!text) return;
-    inflight.current?.abort();
-    const mine = new AbortController();
-    inflight.current = mine;
+  // Another query, Enter, or another kind cancels the search in flight; its reply is ignored.
+  useEffect(() => {
+    if (!text) { setResults(null); setSearching(false); return; }
+    if (!available || !engineReady) return;
+    const ctl = new AbortController();
     setSearching(true);
     onError(null);
     const t0 = performance.now();
-    try {
-      const res = await searchVisual(text, k ?? kind, 24, mine.signal);
-      if (mine.signal.aborted) return;
-      if (res.error) { onError(res.error); setResults(null); }
-      else {
+    searchVisual(text, kind, 48, ctl.signal)
+      .then((res) => {
+        if (ctl.signal.aborted) return;
+        if (res.error) { onError(res.error); setResults(null); return; }
         setResults(res.results ?? []);
         setUnrecognized(res.unrecognized ?? []);
         setLastQuery(res.corrected_query ?? text);
         setElapsed(performance.now() - t0);
-      }
-    } catch (e) {
-      if (!mine.signal.aborted) onError(describeError(e) || null);
-    } finally {
-      if (inflight.current === mine) { inflight.current = null; setSearching(false); }
-    }
-  }, [query, kind, onError]);
-
-  // Another tab: the results on screen belong to the old kind, so they go at once, and the
-  // words in the box (not the last query) are searched again for the new kind, also when
-  // the first search has not answered yet.
-  const switchKind = (k: VisualKind) => {
-    setKind(k);
-    if (results === null && !searching) return;
-    setResults(null);
-    if (query.trim()) run(query, k);
-    else { inflight.current?.abort(); inflight.current = null; setSearching(false); }
-  };
-
-  const voice = useVoice(useCallback((t: string) => setQuery(t), []), useCallback((m: string) => onError(m), [onError]));
-
-  // Before a search: the newest photos and videos in the index, as they are.
-  const [latest, setLatest] = useState<VisualSearchResult[] | null>(null);
-  const [latestFailed, setLatestFailed] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    const words = kind === "photo" ? ["type:image"] : kind === "video" ? ["type:video"] : ["type:image", "type:video"];
-    Promise.all(words.map((w) => search(w, "auto", 40, undefined, false)))
-      .then((all) => {
-        if (cancelled) return;
-        const files = all.flatMap((r) => r.results).sort((a, b) => b.modified_time - a.modified_time).slice(0, 40);
-        setLatestFailed(null);
-        setLatest(files.map((f) => ({
-          file_id: f.file_id, path: f.path, filename: f.filename, score: 0, confidence: "strong",
-          kind: /\.(mp4|mov|m4v|mkv|webm|avi)$/i.test(f.filename) ? "video" : "photo",
-          captured_at: new Date(f.modified_time * 1000).toISOString(), timestamp_offset_seconds: null, moments: null,
-        })));
+        setWeakOpen(!(res.results ?? []).some((r) => r.confidence !== "weak"));
       })
-      .catch((e) => { if (!cancelled) setLatestFailed(describeError(e) || "The search engine did not answer."); });
-    return () => { cancelled = true; };
-  }, [kind, reloadKey]);
-  // Belt and braces: a tab never shows the other kind, whatever the reply held.
-  const shown = kind === "all" ? results ?? [] : (results ?? []).filter((r) => (r.kind ?? "photo") === kind);
-  const strong = shown.filter((r) => r.confidence !== "weak");
-  const weak = shown.filter((r) => r.confidence === "weak");
+      .catch((e) => { if (!ctl.signal.aborted) onError(describeError(e) || null); })
+      .finally(() => { if (!ctl.signal.aborted) setSearching(false); });
+    return () => ctl.abort();
+  }, [text, run, kind, available, engineReady, onError]);
+
+  const { strong, weak } = useMemo(() => {
+    const shown = (results ?? []).filter((r) => kind === "all" || (r.kind ?? "photo") === kind); // a tab never shows the other kind
+    const order = (l: VisualSearchResult[]) => (by === "date" ? [...l].sort((a, b) => (b.captured_at ?? "").localeCompare(a.captured_at ?? "")) : l);
+    return { strong: order(shown.filter((r) => r.confidence !== "weak")), weak: order(shown.filter((r) => r.confidence === "weak")) };
+  }, [results, kind, by]);
+  const total = strong.length + weak.length;
+  const px = SIZES[size];
+
+  useStatusBar({ left: searching ? "Searching..." : results ? `${total} result${total === 1 ? "" : "s"}${elapsed !== null ? ` in ${Math.round(elapsed)} ms` : ""}${selected.length ? `   ${selected.length} selected` : ""}` : `${photoCount.toLocaleString()} photos and ${videoCount.toLocaleString()} videos indexed`, busy: searching });
+
+  const entry = (r: VisualSearchResult) => ({ path: r.path ?? "", name: r.filename, is_dir: false, indexed: true, file_id: r.file_id });
+  const onContext = useCallback((rows: VisualSearchResult[], x: number, y: number) => setCtx({ x, y, items: actions.menu(rows.map(entry)) }), [actions]);
+
+  const tile = (r: VisualSearchResult, isWeak: boolean) => (
+    <div style={{ width: px }}>
+      <div className="relative overflow-hidden rounded" style={{ width: px, height: px }}>
+        {r.path ? <Thumb path={r.path} size={Math.max(240, px * 2)} at={r.timestamp_offset_seconds} alt="" className="h-full w-full object-cover" boxClassName="h-full w-full" /> : <div className="grid h-full place-items-center text-[12px] text-sub">No preview</div>}
+        {isWeak && <span className="absolute left-1 top-1 rounded bg-black/70 px-2 py-0.5 text-[12px] text-white">Possible match</span>}
+        {r.kind === "video" && r.timestamp_offset_seconds != null && (
+          <span className="absolute bottom-1 right-1 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[12px] text-white" title="The moment that matched"><Fi g={G.play} size={10} />{formatTimestamp(r.timestamp_offset_seconds)}</span>
+        )}
+      </div>
+      <div className="mt-1 truncate text-[14px]" title={r.filename}>{r.filename}</div>
+      <div className="text-[12px] text-sub">{dateOf(r)}</div>
+    </div>
+  );
+  const grid = (list: VisualSearchResult[], isWeak: boolean, label: string) => (
+    <FileGrid label={label} items={list.map((r) => ({ key: `${r.file_id}:${r.timestamp_offset_seconds ?? ""}`, data: r }))} columns={`repeat(auto-fill, ${px + 8}px)`} gap={8}
+      tileLabel={(r) => `${r.filename}, ${dateOf(r)}${isWeak ? ", possible match" : ""}`} getName={(r) => r.filename}
+      onOpen={(r) => openResult(r.path, (m) => onError(m), r.file_id)} onReveal={(r) => revealResult(r.path, (m) => onError(m), r.file_id)}
+      onCopyPaths={(rows) => actions.copyPaths(rows.map(entry))} onContext={onContext} onSelection={setSelected} renderTile={(r) => tile(r, isWeak)} />
+  );
+
+  const one = selected.length === 1 ? selected[0] : null;
+  const unavailable = !available;
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      <PageHeader title="Photos and videos" subtitle="Find pictures and video moments by describing what is in them." />
-      {!available && (
-        <div role="alert" className="rounded-md border border-rule-strong bg-content px-4 py-3 text-[13px]">
-          <b>Searching by what is in a picture is not available.</b> The photo and video model did not load. Extract IntelliFile-windows.zip again, completely, then reopen IntelliFile. Photos can still be found by file name on the Search page.
-        </div>
-      )}
-      <div>
-        <Omnibox value={query} onChange={(v) => { setQuery(v); if (!v.trim()) setResults(null); }} onSubmit={() => run()} placeholder="Describe a photo" icon="image_search" searching={searching} voice={voice} autoFocus />
-        {suggestion && voice.state === "idle" && (
-          <div className="mt-2 flex items-center gap-2 text-[13px] text-ink/70">
-            Did you mean
-            <button className="btn-secondary px-2 py-0.5 text-[13px] font-medium text-accent" onClick={() => { setQuery(suggestion); setSuggestion(null); run(suggestion); }}>{suggestion}</button>
-          </div>
-        )}
-        <div className="mt-3 flex items-end justify-between gap-3 border-b border-rule">
-          <Tabs label="Photo or video" tabs={KINDS} value={kind} onChange={switchKind} />
-          <span className="pb-2 text-[12px] text-ink/65">A short phrase works best: <i>a person in a red shirt</i></span>
-        </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <CommandBar>
+        <CommandButton icon={G.sort} label="Sort" menu={{ items: [
+          { id: "match", label: "Best match", checked: by === "match", onClick: () => setBy("match") },
+          { id: "date", label: "Date taken or modified", checked: by === "date", onClick: () => setBy("date") },
+        ] }} />
+        <CommandButton icon={G.view} label="Size" menu={{ items: (Object.keys(SIZES) as (keyof typeof SIZES)[]).map((s) => ({ id: s, label: s[0].toUpperCase() + s.slice(1), checked: size === s, onClick: () => setSize(s) })) }} />
+        <span className="flex-1" />
+        <CommandButton icon={G.pane} label="Preview" pressed={preview} onClick={() => onPreview(!preview)} title="Preview pane (Alt+P)" />
+      </CommandBar>
+      {unavailable && <Banner tone="warn" title="Searching by what is in a picture is not available.">The photo and video model did not load. Extract IntelliFile-windows.zip again, completely, then reopen IntelliFile. Photos can still be found by file name on the Search page.</Banner>}
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-rule px-4 py-2">
+        <Pills label="Photo or video" value={kind} onChange={setKind} items={KINDS} />
+        <span className="text-[12px] text-sub">A short phrase works best: a person in a red shirt</span>
       </div>
+      {suggestion && <Banner tone="info" action={{ label: `Search for "${suggestion}" instead`, onClick: () => onRunQuery(suggestion) }}>Did you mean <b className="font-semibold">{suggestion}</b>?</Banner>}
 
-      <div className="min-h-0 flex-1 overflow-y-auto pr-1" aria-busy={searching || (!results && !latest && !latestFailed) || undefined}>
-        {searching && !results && <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton aspect-[4/3]" />)}</div>}
-
-        {results && shown.length === 0 && unrecognized.length > 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <span className="material-symbols-outlined mb-3 text-ink/65" style={{ fontSize: 40 }}>spellcheck</span>
-            <p className="text-[15px] font-semibold">
-              No photo matches “{lastQuery}”. Check the spelling of {unrecognized.map((w, i) => <span key={w}>{i > 0 && ", "}<i className="text-accent">“{w}”</i></span>)}.
-            </p>
-            <p className="mt-1 text-[13px] text-ink/65">That isn't an English word or one of your file names, so the picture search wasn't run on it.</p>
-          </div>
-        )}
-
-        {results && shown.length === 0 && unrecognized.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <span className="material-symbols-outlined mb-3 text-ink/65" style={{ fontSize: 40 }}>hide_image</span>
-            <p className="text-[15px] font-semibold">No {kind === "all" ? "photo or video" : kind} on this computer matches “{lastQuery}”.</p>
-            <p className="mt-1 text-[13px] text-ink/65">{(kind === "video" ? videoCount : kind === "photo" ? photoCount : photoCount + videoCount).toLocaleString()} {kind === "all" ? "photos and videos" : kind + "s"} checked by what's in the picture.</p>
-          </div>
-        )}
-
-        {results && shown.length > 0 && (
-          <>
-            <div className="mb-2 flex items-center gap-2">
+      <div className="flex min-h-0 flex-1">
+        <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${searching && results ? "opacity-60" : ""}`} aria-busy={searching || undefined}>
+          {!text && (
+            <div className="mx-auto w-full max-w-[640px] px-6 py-10">
+              <h2 className="text-[16px] font-semibold">Describe what is in the picture</h2>
+              <p className="mt-1 text-[14px] text-sub">Type in the search box above, for example: a person in a red shirt.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {EXAMPLES.map((ex) => <button key={ex} className="pill text-[14px]" disabled={unavailable} onClick={() => onRunQuery(ex)}>{ex}</button>)}
+              </div>
+              <p className="mt-6 text-[14px] text-sub">{photoCount.toLocaleString()} photos and {videoCount.toLocaleString()} videos indexed.</p>
+            </div>
+          )}
+          {text && !results && !searching && !unavailable && !engineReady && <EmptyState title="Waiting for the search engine..." text="Your search runs by itself as soon as it is ready." />}
+          {text && searching && !results && (
+            <div className="flex flex-wrap gap-2 p-3" aria-hidden>{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="skeleton" style={{ width: px, height: px }} />)}</div>
+          )}
+          {results && total === 0 && unrecognized.length > 0 && (
+            <EmptyState title={`No pictures matched "${lastQuery}".`} text={<>Check the spelling of {unrecognized.map((w, i) => <span key={w}>{i > 0 && ", "}<i className="text-accent">"{w}"</i></span>)}. That isn't an English word or one of your file names, so the picture search wasn't run on it.</>} />
+          )}
+          {results && total === 0 && unrecognized.length === 0 && (
+            <EmptyState title={`No pictures matched "${lastQuery}".`} text="Try describing what is in the picture, for example: a dog on a beach." />
+          )}
+          {total > 0 && (
+            <div className="min-h-0 flex-1 overflow-y-auto">
               {strong.length > 0 ? (
                 <>
-                  <span className="text-[15px] font-semibold">Best matches</span>
-                  <span className="chip chip-accent">{strong.length} {kind === "all" ? "result" : kind}{strong.length === 1 ? "" : "s"}</span>
+                  <h2 className="px-4 pt-3 text-[14px] font-semibold">Best matches ({strong.length})</h2>
+                  <div className="flex flex-col">{grid(strong, false, "Best matches")}</div>
                 </>
-              ) : (
-                <span className="text-[13px] text-ink/70"><b className="text-ink/90">No confident match for “{lastQuery}”.</b> The photos below are only loosely related.</span>
+              ) : <p className="px-4 pt-3 text-[14px] text-sub"><b className="font-semibold text-ink">No best match for "{lastQuery}".</b> The pictures below are only possible matches.</p>}
+              {weak.length > 0 && (
+                <>
+                  <button className="mx-3 mt-2 flex h-8 items-center gap-2 rounded px-1 text-[14px] font-semibold hover:bg-[var(--hover)]" aria-expanded={weakOpen} onClick={() => setWeakOpen((o) => !o)}>
+                    <Fi g={weakOpen ? G.down : G.right} size={12} />Possible matches ({weak.length})
+                  </button>
+                  {weakOpen && <div className="flex flex-col">{grid(weak, true, "Possible matches")}</div>}
+                </>
               )}
-              <span className="ml-auto text-[12px] text-ink/65">Matched on this computer in <span className="mono">{elapsed?.toFixed(0)} ms</span></span>
+              <p className="px-4 pb-4 pt-2 text-[12px] text-sub">Pictures are matched by a model on this computer, so some results may be wrong.</p>
             </div>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
-              {strong.map((r) => <PhotoCard key={r.file_id} r={r} strong onError={onError} />)}
-            </div>
-            {weak.length > 0 && (
-              <>
-                <div className="my-3 flex items-center gap-3 text-[12px] text-ink/65">
-                  Possibly related (weaker matches)<span className="h-px flex-1 bg-ink/[0.07]" />
+          )}
+        </div>
+        {preview && (
+          <aside aria-label="Preview" className="w-[360px] shrink-0 overflow-y-auto border-l border-rule bg-content">
+            {!one ? <div className="grid h-full place-items-center px-6 text-center text-[14px] text-sub">{selected.length > 1 ? `${selected.length} items selected` : "Select a picture or video to see it larger."}</div> : (
+              <div className="flex h-full flex-col">
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                  {one.path && <Thumb path={one.path} size={480} at={one.timestamp_offset_seconds} alt={`Preview of ${one.filename}`} className="max-h-[260px] w-full rounded object-contain" boxClassName="h-[220px] w-full" />}
+                  <h2 className="mt-3 break-words text-[14px] font-semibold select-text">{one.filename}</h2>
+                  <p className="text-[12px] text-sub">{one.confidence === "weak" ? "Possible match" : "Best match"}</p>
+                  <p className="mt-1 text-[14px] text-sub">{dateOf(one)}</p>
+                  {one.path && <p className="mono mt-1 break-all text-[12px] select-text">{one.path.replace(/[\\/][^\\/]*$/, "")}</p>}
+                  {one.kind === "video" && one.path && one.moments && one.moments.length > 0 && (
+                    <>
+                      <h3 className="mt-4 text-[12px] text-dim">Moments that matched</h3>
+                      <div className="mt-1 flex gap-2">
+                        {one.moments.map((m) => (
+                          <div key={m.t} className="relative min-w-0 flex-1 overflow-hidden rounded bg-black/40">
+                            <Thumb path={one.path!} size={160} at={m.t} alt="" className="aspect-video w-full object-cover" />
+                            <span className="absolute bottom-0.5 right-1 rounded bg-black/70 px-1 text-[12px] text-white">{formatTimestamp(m.t)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
-                  {weak.map((r) => <PhotoCard key={r.file_id} r={r} strong={false} onError={onError} />)}
+                <div className="flex shrink-0 gap-2 border-t border-rule px-5 py-3">
+                  {canOpen(one.path) && <button className="btn-primary h-8 px-4 text-[14px]" onClick={() => openResult(one.path, (m) => onError(m), one.file_id)}>Open</button>}
+                  <button className="btn-secondary h-8 px-3 text-[14px]" onClick={() => revealResult(one.path, (m) => onError(m), one.file_id)}>Show in Explorer</button>
                 </div>
-              </>
+              </div>
             )}
-          </>
-        )}
-
-        {!results && !searching && latest && latest.length > 0 && (
-          <>
-            <div className="mb-2 text-[13px] text-ink/65">Newest first. {photoCount.toLocaleString()} photos and {videoCount.toLocaleString()} videos can be found by what is in them.</div>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
-              {latest.map((r) => <PhotoCard key={r.file_id} r={r} strong browsing onError={onError} />)}
-            </div>
-          </>
-        )}
-        {!results && !searching && latestFailed && !latest && (
-          <div role="alert" className="py-16 text-center text-[14px] text-ink/70">Photos could not be listed. {latestFailed}
-            <button className="btn-secondary ml-2 px-2 py-0.5 text-[12px]" onClick={() => { setLatestFailed(null); setReloadKey((k) => k + 1); }}>Retry</button>
-          </div>
-        )}
-        {!results && !searching && latest && latest.length === 0 && (
-          <div className="py-16 text-center text-[14px] text-ink/65">No photos indexed yet. Add a folder with photos in Index.</div>
-        )}
-        {!results && !searching && !latest && !latestFailed && (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">{Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton aspect-[4/3]" />)}</div>
+          </aside>
         )}
       </div>
-
-      <div className="flex items-center gap-4 text-[12px] text-ink/65">
-        <span>double-click <span className="kbd">open</span></span>
-        <span>right-click <span className="kbd">reveal in {FILE_MANAGER}</span></span>
-        <span className="ml-auto">Pictures are matched by a model on this computer</span>
-      </div>
+      {ctx && <Menu x={ctx.x} y={ctx.y} items={ctx.items} label="Picture actions" onClose={() => setCtx(null)} />}
     </div>
   );
 }
+
