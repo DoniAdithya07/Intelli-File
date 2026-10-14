@@ -245,6 +245,24 @@ def counts_files_from_text(question: str) -> bool:
     return first is not None and (rest[first] in _EVERYTHING or selection_at(rest, first) is not None)
 
 
+# "what ARE the movies i have" lists, same as "what movies do i have"; "what IS
+# a pdf" still defines, so only the plural copula is skipped, never "is"/"was"
+# or the indefinite article "a"/"an". Includes the single most common typo of
+# "are" (a doubled first letter, "aare"): found live 2026-10-14 — a typo'd
+# "what aare the movies i have" fell through to the model, which answered
+# from an unrelated coding-exercise screenshot ("goal.png" in a "movie
+# ranking" HTML practice project) instead of the user's real video files.
+_PLURAL_COPULA = ("are", "were")
+
+
+def _skip_plural_copula(rest: list[str]) -> int:
+    return next(
+        (n for n, w in enumerate(rest)
+         if w not in _DETERMINERS and w not in _PLURAL_COPULA and not (len(w) == 4 and not _is_real_word(w) and _one_edit_apart(w, "are"))),
+        0,
+    )
+
+
 def _read(question: str) -> _Asked | None:
     """What a question about the collection asks; None for a question about content."""
     text = " ".join(_words(question))
@@ -260,10 +278,13 @@ def _read(question: str) -> _Asked | None:
     rest = text[opening.end():].split()
     if not rest:
         return None
-    # "what is a pdf" defines; "what pdfs do i have" lists. After "what" or
-    # "which" the thing listed comes first.
-    if opening.group(0) in ("what", "which") and not (selection_at(rest, 0) or rest[0] in _EVERYTHING or rest[0] in _FOLDER_WORDS):
-        return None
+    # "what is a pdf" defines; "what pdfs do i have" / "what are the movies i
+    # have" lists. After "what" or "which" the thing listed comes first, past
+    # any leading "are"/"were" and determiners (see _skip_plural_copula).
+    if opening.group(0) in ("what", "which"):
+        rest = rest[_skip_plural_copula(rest):]
+        if not (selection_at(rest, 0) or rest[0] in _EVERYTHING or rest[0] in _FOLDER_WORDS):
+            return None
     state = "failed" if _FAILED.search(" ".join(rest)) else "skipped" if _SKIPPED.search(" ".join(rest)) else None
     if state:
         rest = (_FAILED if state == "failed" else _SKIPPED).sub(" ", " ".join(rest)).split()

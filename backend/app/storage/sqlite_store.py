@@ -10,6 +10,7 @@ touching the vector storage code.
 import dataclasses
 import sqlite3
 import threading
+import time
 from pathlib import Path
 
 from ..files.identity import FileRecord
@@ -25,7 +26,18 @@ CREATE TABLE IF NOT EXISTS files (
 );
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
 CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);
+CREATE TABLE IF NOT EXISTS deletions (
+    path TEXT NOT NULL,
+    deleted_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_deletions_deleted_at ON deletions(deleted_at);
 """
+
+# "What files were deleted in the last 24 hours": kept separately from
+# `files` because a tombstoned row there is purged almost immediately
+# (indexing/cleanup.py runs after every scan) and never carries a timestamp.
+# This log outlives that purge; DELETION_RETENTION_DAYS bounds its growth.
+DELETION_RETENTION_DAYS = 30
 
 # Phase 11: a record is written BEFORE its chunks (so the watcher and the
 # scan can find it), which means a crash between the two leaves a record
@@ -189,13 +201,37 @@ class FileRecordStore:
         self.upsert(updated)
         return updated
 
-    def mark_deleted(self, path: str) -> FileRecord | None:
+    def mark_deleted(self, path: str, *, log_as_deleted: bool = True) -> FileRecord | None:
+        """Tombstone the record at `path`. `log_as_deleted` is False for the
+        "forget this folder/file" and "access turned off" paths and for a
+        brand-new file that failed to index: the file itself is untouched
+        on disk, so it must not appear in "what files were deleted" (found
+        2026-10-14 review: every unwatched file was being reported as
+        deleted)."""
         existing = self.get_by_path(path)
         if existing is None:
             return None
         tombstoned = dataclasses.replace(existing, deleted=True)
         self.upsert(tombstoned)
+        if log_as_deleted:
+            self._log_deletion(path)
         return tombstoned
+
+    def _log_deletion(self, path: str) -> None:
+        cutoff = time.time() - DELETION_RETENTION_DAYS * 86400
+        with self._lock:
+            self._conn.execute("INSERT INTO deletions (path, deleted_at) VALUES (?, ?)", (path, time.time()))
+            self._conn.execute("DELETE FROM deletions WHERE deleted_at < ?", (cutoff,))
+            self._conn.commit()
+
+    def list_deletions(self, since: float = 0.0) -> list[dict]:
+        """[{"path", "deleted_at"}, ...], newest first, for files deleted at
+        or after `since` (kept up to DELETION_RETENTION_DAYS)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT path, deleted_at FROM deletions WHERE deleted_at >= ? ORDER BY deleted_at DESC", (since,)
+            ).fetchall()
+        return [{"path": r["path"], "deleted_at": r["deleted_at"]} for r in rows]
 
     def list_active(self) -> list[FileRecord]:
         with self._lock:

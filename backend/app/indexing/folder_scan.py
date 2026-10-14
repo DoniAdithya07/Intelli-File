@@ -526,6 +526,8 @@ def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, fai
         if existing is not None:
             record_store.upsert(existing)
         else:
-            record_store.mark_deleted(record.path)
+            # Never successfully indexed, so this is bookkeeping (drop the
+            # half-written record), not a real deletion of an existing file.
+            record_store.mark_deleted(record.path, log_as_deleted=False)
     return count + 1, failed
 

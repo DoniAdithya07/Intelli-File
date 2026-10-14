@@ -310,6 +310,14 @@ def main() -> None:
         assert listed == "12 videos, out of 2,019 indexed files: a.mp4, b.mkv, c.mov, d1.mp4, d2.mp4, d3.mp4, d4.mp4, d5.mp4, d6.mp4, d7.mp4 and 2 others.", listed
         which = library_answer("which pdfs do i have", big)
         assert which.startswith("2,001 PDFs, out of 2,019 indexed files: report 0.pdf, ") and which.endswith(" and 1,991 others."), which
+        # "What ARE the movies I have" lists, same as "which movies do i have" (2026-10-14,
+        # from real use): the "aare"/"latop" typos and the plural copula before the subject
+        # ("what ARE the X", not "what X do i have") made it fall through to the model, which
+        # answered from an unrelated file instead of the real video files. "what IS a pdf"
+        # (singular, a definition) must still go to the model, unaffected.
+        for wording in ("what are the movies i have", "what aare the movies i have", "what aare the movies i have in my latop", "which movies do i have"):
+            assert library_answer(wording, big) == listed, wording
+        assert library_answer("what is a pdf", big) is None, "a definition, not a list"
         assert library_answer("show all spreadsheets", big) == "1 spreadsheet, out of 2,019 indexed files: Quizlet export.csv."
         # A subject that is not a kind of file is counted in file and folder
         # names, and the answer says that is all it counted.
@@ -419,10 +427,59 @@ def main() -> None:
               "any case, one letter off when only one file fits; a full path is checked on disk only inside an indexed folder; Ask answers these wordings from the index with no model call, "
               "and 'where is <not a file>' still goes to the agent: OK")
 
+        # --- A8d2. "What files were deleted in the last 24 hours": a list
+        # question, not one named file; answered from the deletion log,
+        # which outlives the tombstone purge that clears Known.deleted. ---
+        from app.agent.missing import deleted_recently_answer, index_answer
+        now = time.time()
+        log_known = Known(active=[], deleted_log=[
+            {"path": "C:/docs/old_report.pdf", "deleted_at": now - 3600},
+            {"path": "C:/docs/draft.docx", "deleted_at": now - 23 * 3600},
+            {"path": "C:/docs/ancient.txt", "deleted_at": now - 10 * 86400},
+        ])
+        for wording in ("what are previous files that are deleted in the last 24 hours", "what files were deleted in the last 24 hours",
+                        "which files have been deleted in the last 24 hours", "what files did i delete in the last 24 hours", "show deleted files from the last 24 hours",
+                        "list removed files from the last 24 hours", "what did i delete in the last 24 hours",
+                        "how many files are deleted in the last 24 hours", "how many files were deleted in last 24 hours", "count of files deleted in the last 24 hours",
+                        "are there any files deleted in the last 24 hours", "so how many files got deleted in the last 24 hours"):
+            got = deleted_recently_answer(wording, log_known, now)
+            assert got and "old_report.pdf" in got and "draft.docx" in got and "ancient.txt" not in got and "2 files deleted" in got, (wording, got)
+        assert deleted_recently_answer("what files were deleted today", Known(active=[], deleted_log=[]), now) == "No files were deleted today."
+        assert deleted_recently_answer("how many pdfs do i have", log_known, now) is None, "a collection question, not a deletion list"
+        assert deleted_recently_answer("why is report.pdf missing", log_known, now) is None, "a single named file, not a list"
+        # Cleanup advice ("what should/can I delete") asks what to do, not what already
+        # happened: found by review 2026-10-14, it was wrongly answered "no files were deleted".
+        for advice in ("what should i delete", "what can i delete to free up space", "which files should i remove",
+                       "how many files should be deleted", "what could i delete"):
+            assert deleted_recently_answer(advice, log_known, now) is None, advice
+        assert index_answer("what files were deleted in the last 24 hours", log_known, now) == deleted_recently_answer("what files were deleted in the last 24 hours", log_known, now)
+        # "Yesterday" has an upper bound too (today's start): found by review 2026-10-14, a file
+        # deleted today was wrongly counted as "deleted yesterday" when only the lower bound was applied.
+        from datetime import datetime
+        fixed_now = datetime(2026, 10, 14, 15, 0, 0).timestamp()
+        today_start = datetime(2026, 10, 14, 0, 0, 0).timestamp()
+        yesterday_start = datetime(2026, 10, 13, 0, 0, 0).timestamp()
+        dated_known = Known(active=[], deleted_log=[
+            {"path": "C:/docs/today_file.png", "deleted_at": today_start + 3600},
+            {"path": "C:/docs/yesterday_file.png", "deleted_at": yesterday_start + 3600},
+            {"path": "C:/docs/two_days_ago.png", "deleted_at": yesterday_start - 3600},
+        ])
+        got = deleted_recently_answer("how many files were deleted yesterday", dated_known, fixed_now)
+        assert got and "1 file deleted yesterday" in got and "yesterday_file.png" in got and "today_file.png" not in got and "two_days_ago.png" not in got, got
+        # "Oldest" must sort ascending and respect the parsed count, not always newest-first/capped-at-10.
+        order_known = Known(active=[], deleted_log=[
+            {"path": "C:/docs/newest.png", "deleted_at": now - 3600},
+            {"path": "C:/docs/middle.png", "deleted_at": now - 7200},
+            {"path": "C:/docs/oldest.png", "deleted_at": now - 10800},
+        ])
+        got = deleted_recently_answer("what are the 2 oldest files deleted", order_known, now)
+        assert got and "newest.png" not in got and got.index("oldest.png") < got.index("middle.png"), got
+        print("A8d2. What files were deleted recently: answered from the persisted deletion log, with the usual time windows (last N hours/days, today, yesterday — with its upper bound "
+              "applied too) and oldest/newest ordering, as a list rather than a single-file lookup, and left to the normal Ask flow when it's a collection or single-file question instead: OK")
+
         # --- A8e. QA round 1 (2026-10-13), on an index of 20 files: 14
         # documents (8 .txt), 4 photos (3 .png, no .jpg), 1 video, 1 audio
         # (.wav). Every input below gave a wrong or misleading answer. ---
-        from app.agent.missing import index_answer
         docs = [f"D:/qa/documents/{n}" for n in ("test report.txt", "quiz 1.txt", "march invoice.txt", "april invoice.txt", "notes a.txt", "notes b.txt", "sourdough.txt", "roadmap.txt",
                                                  "turbine manual.pdf", "cake recipe.docx", "watchlist.md", "budget.csv", "roadmap.pptx")]
         qa = docs + ["D:/qa/other/readme.md", "D:/qa/photos/red circle.png", "D:/qa/photos/blue square.png", "D:/qa/photos/Screenshot 2026.png", "D:/qa/photos/old.bmp",

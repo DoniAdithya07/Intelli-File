@@ -23,6 +23,7 @@ def gather_known(state) -> Known:
         failures=list(RECENT_FAILURES),
         skips=list(RECENT_SKIPS),
         deleted=tombstones + list(RECENT_REMOVALS),
+        deleted_log=store.list_deletions(),
         folders=live.roots() + list(live.watcher.watched_files),
         extensions=frozenset(live.extensions),
         indexing=indexing,

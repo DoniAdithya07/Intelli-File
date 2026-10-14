@@ -28,6 +28,8 @@ type Step =
 
 interface Props {
   question: string;
+  prev?: { q: string; a: string };
+  onAnswered?: (answerText: string) => void;
   onError: (m: string | null) => void;
 }
 
@@ -36,13 +38,14 @@ interface Props {
  * answer with its sources, the evidence, what was searched, and the checks
  * the code made. The model's own reasoning text is never shown.
  */
-export function AskAnswer({ question, onError }: Props) {
+export function AskAnswer({ question, prev, onAnswered, onError }: Props) {
   const [steps, setSteps] = useState<Step[]>([]);
   const [answer, setAnswer] = useState("");
   const [final, setFinal] = useState<Extract<AskEvent, { type: "answer" }> | null>(null);
   const [done, setDone] = useState<Extract<AskEvent, { type: "done" }> | null>(null);
   const [quick, setQuick] = useState<Extract<AskEvent, { type: "quick_answer" }> | null>(null);
   const [checkNotes, setCheckNotes] = useState<string[]>([]);
+  const [understoodAs, setUnderstoodAs] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showEvidence, setShowEvidence] = useState(false);
   // Nothing back after 3 s: the language model is most likely still loading.
@@ -51,12 +54,13 @@ export function AskAnswer({ question, onError }: Props) {
 
   useEffect(() => {
     const controller = new AbortController();
-    setSteps([]); setAnswer(""); setFinal(null); setDone(null); setQuick(null); setCheckNotes([]); setError(null); setSlow(false); answerRef.current = "";
+    setSteps([]); setAnswer(""); setFinal(null); setDone(null); setQuick(null); setCheckNotes([]); setUnderstoodAs(null); setError(null); setSlow(false); answerRef.current = "";
     const slowTimer = window.setTimeout(() => setSlow(true), 3000);
     askStream(question, (e) => {
       window.clearTimeout(slowTimer);
       setSlow(false);
       switch (e.type) {
+        case "rewritten": setUnderstoodAs(e.text); break;
         case "tool_call":
           if (e.tool === "search") {
             const a = e.args as { query?: string; mode?: string; filters?: string };
@@ -75,12 +79,12 @@ export function AskAnswer({ question, onError }: Props) {
           break;
         case "quick_answer": setQuick(e); break;
         case "token": answerRef.current += e.text; setAnswer(answerRef.current); break;
-        case "answer": setFinal(e); setAnswer(e.text); break;
+        case "answer": setFinal(e); setAnswer(e.text); onAnswered?.(e.text); break;
         case "done": setDone(e); break;
         case "error": setError(e.message); break;
         default: break;
       }
-    }, controller.signal).catch((err) => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : String(err)); });
+    }, controller.signal, prev).catch((err) => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : String(err)); });
     return () => { window.clearTimeout(slowTimer); controller.abort(); };
   }, [question]);
 
@@ -97,6 +101,9 @@ export function AskAnswer({ question, onError }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <div className="ml-auto max-w-[80%] rounded-lg border border-rule bg-content px-4 py-2.5 text-[14px]">{question}</div>
+      {understoodAs && (
+        <p className="ml-auto max-w-[80%] text-right text-[12px] text-ink/65">Understood as: <span className="italic">{understoodAs}</span></p>
+      )}
 
       <div className="panel p-5">
         <div className="flex items-center gap-2 text-[13px]">

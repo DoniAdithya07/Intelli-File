@@ -38,6 +38,10 @@ export function AskPage({ request, active, onError }: Props) {
   // `run` numbers each ask, so asking the same words again (a retry) runs again.
   const [asked, setAsked] = useState<{ q: string; run: number } | null>(null);
   const [session, setSession] = useState<string[]>([]);
+  // The previous question and its answer, so a direct follow-up ("show me
+  // those", "what about the other one") can be understood. Not full
+  // conversation memory: only the one turn right before this question.
+  const [lastTurn, setLastTurn] = useState<{ q: string; a: string } | null>(null);
   const [suggested, setSuggested] = useState<string[]>([]);
   const [llm, setLlm] = useState<AskStatus | null>(null);
 
@@ -142,14 +146,14 @@ export function AskPage({ request, active, onError }: Props) {
               </div>
               <div>
                 <h2 className="font-semibold">What it cannot do</h2>
-                <p className="mt-1 text-ink/70">Answer from anything outside your indexed folders, remember earlier questions, or change a file.</p>
+                <p className="mt-1 text-ink/70">Answer from anything outside your indexed folders, remember more than the question right before it, or change a file.</p>
               </div>
             </section>
           </div>
         ) : (
           <div className="mx-auto max-w-[860px] space-y-4">
             {modelNotice}
-            <AskAnswer key={asked.run} question={asked.q} onError={onError} />
+            <AskAnswer key={asked.run} question={asked.q} prev={lastTurn ?? undefined} onAnswered={(a) => setLastTurn({ q: asked.q, a })} onError={onError} />
             {box}
           </div>
         )}
@@ -170,7 +174,7 @@ export function AskPage({ request, active, onError }: Props) {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-[12px] text-ink/65">Each question is answered on its own.</p>
+          <p className="mt-3 text-[12px] text-ink/65">A direct follow-up to your last question ("show me those") can be understood; an older one cannot.</p>
         </aside>
       )}
     </div>

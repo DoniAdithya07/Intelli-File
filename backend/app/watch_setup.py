@@ -324,7 +324,7 @@ class LiveIndexing:
         if record is None:
             return False
         with self.write_lock:
-            store.mark_deleted(path)
+            store.mark_deleted(path, log_as_deleted=False)  # unwatched, not deleted from disk
             cleanup_tombstones(self.indexer, visual_indexer=self.visual_indexer)
         return True
 
@@ -339,7 +339,7 @@ class LiveIndexing:
         with self.write_lock:
             store = self.indexer.file_record_store
             for record in store.list_active():
-                store.mark_deleted(record.path)
+                store.mark_deleted(record.path, log_as_deleted=False)  # access turned off, not deleted from disk
                 removed += 1
             cleanup_tombstones(self.indexer, visual_indexer=self.visual_indexer)
         return removed
@@ -425,7 +425,7 @@ class LiveIndexing:
         with self.write_lock:
             for record in store.list_active():
                 if record.path.startswith(prefix) and not any(record.path.startswith(k) for k in keep):
-                    store.mark_deleted(record.path)
+                    store.mark_deleted(record.path, log_as_deleted=False)  # unwatched, not deleted from disk
                     removed += 1
             cleanup_tombstones(self.indexer, visual_indexer=self.visual_indexer)
         return removed

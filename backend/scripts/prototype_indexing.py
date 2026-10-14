@@ -113,6 +113,7 @@ def main():
 
         # --- 6. Tombstone cleanup: purges chunks AND the metadata row ---
         file_record_store.mark_deleted(str(scaling_path))
+        assert [d["path"] for d in file_record_store.list_deletions()] == [str(scaling_path)], "mark_deleted must log to the deletion history"
         cleaned = cleanup_tombstones(indexer)
         assert cleaned == 1, f"Expected exactly 1 tombstoned file cleaned up, got {cleaned}"
         assert vector_store.get_by_file_id("chunks", scaling_record.file_id) == []
@@ -121,7 +122,23 @@ def main():
         assert vector_store.get_by_file_id("chunks", duplicate_record.file_id), (
             "The duplicate's own chunks must survive cleanup of the original it copied from"
         )
-        print("6. Tombstone cleanup purges chunks + metadata, without touching unrelated duplicates: OK")
+        assert [d["path"] for d in file_record_store.list_deletions()] == [str(scaling_path)], (
+            "The deletion log must outlive the tombstone purge, so 'deleted in the last 24 hours' still works after cleanup"
+        )
+        print("6. Tombstone cleanup purges chunks + metadata, without touching unrelated duplicates; the deletion log survives the purge: OK")
+
+        # --- 6b. Unwatching a file (or turning off access) is not a real deletion:
+        # the file is untouched on disk, so it must not appear in "what files were
+        # deleted". Found by review 2026-10-14: every forgotten/un-indexed file was
+        # being logged as deleted. ---
+        forgotten_path = workdir / "forgotten.txt"
+        forgotten_path.write_text("A file the user stops watching, not deletes.")
+        forgotten_record = build_file_record(forgotten_path)
+        file_record_store.upsert(forgotten_record)
+        file_record_store.mark_deleted(str(forgotten_path), log_as_deleted=False)
+        assert str(forgotten_path) not in {d["path"] for d in file_record_store.list_deletions()}, "forgetting a file must not log it as deleted"
+        assert file_record_store.get_by_path(str(forgotten_path)).deleted, "it must still be tombstoned (so it stops matching active searches)"
+        print("6b. mark_deleted(..., log_as_deleted=False): still tombstoned, but not logged as a real deletion: OK")
 
         # --- 7. Folder re-scan reconciles renames and deletions ---
         # Regression for the 2026-09-11 live test: the user renamed files on
@@ -146,6 +163,9 @@ def main():
         assert vector_store.get_by_file_id("chunks", before.file_id), "Rename must not drop the vectors"
         assert file_record_store.get_by_path(str(scan_dir / "doomed.txt")) is None, "Deleted file's record must be purged"
         assert len(file_record_store.list_tombstoned()) == 0, "Rescan should leave no tombstones behind"
+        logged = {d["path"] for d in file_record_store.list_deletions()}
+        assert str(scan_dir / "doomed.txt") in logged, "A rescan-detected deletion must reach the deletion log too"
+        assert str(scan_dir / "old_name.txt") not in logged, "A rename is not a deletion and must not be logged as one"
 
         search_service = SearchService(model, vector_store, keyword_store, file_record_store)
         hits = search_service.search("photosynthesis chloroplasts", top_k=5)

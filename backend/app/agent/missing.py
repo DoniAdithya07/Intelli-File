@@ -1,4 +1,5 @@
-"""Why a file the user names is not in the results (2026-10-13).
+"""Why a file the user names is not in the results (2026-10-13), and which
+files were deleted recently (2026-10-14).
 
 Answered from what the engine already knows, never by the model: the index's
 records, the reasons the scan stored for files it could not read or left
@@ -9,20 +10,30 @@ still indexing, not known.
 
 Nothing here looks around the disk. Only when the user typed a full path
 inside an indexed folder is that one path checked (read-only).
+
+A separate question shape, "what files were deleted in the last 24 hours",
+is a list rather than a lookup for one name: deleted_recently_answer reads
+Known.deleted_log (storage/sqlite_store.FileRecordStore.list_deletions,
+which persists past the tombstone purge that clears Known.deleted) and
+reuses agent.timeframe's time-window parsing for "last 24 hours" / "today" /
+"yesterday" etc.
 """
 
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..files import discovery
 from ..files.identity import ONLINE_ONLY_REASON, is_online_only
-from .library import _and_others, _examples, _one_edit_apart, _words, library_answer, same_name, selection_at
+from .library import _ANY, _COUNT, _COUNT_START, _LEAD_IN, _LIST, _and_others, _examples, _one_edit_apart, _words, library_answer, same_name, selection_at
+from .timeframe import RECENT_DAYS, ago, narrow
 
 MAX_NAME_CHARS = 400
 MAX_FOLDERS_LISTED = 5
 MAX_SIMILAR_LISTED = 5
+MAX_DELETED_LISTED = 10
 # A shorter name is one edit from too many other names.
 MIN_TYPO_LETTERS = 5
 _EXTENSION_RE = re.compile(r"\.(?=[a-z0-9]*[a-z])[a-z0-9]{1,6}$", re.I)  # ".pdf", ".mp4"; not the ".2" of "report v1.2"
@@ -38,6 +49,7 @@ class Known:
     failures: list[dict] = field(default_factory=list)   # {"path", "reason"}: could not be read
     skips: list[dict] = field(default_factory=list)      # {"path", "reason"}: left alone on purpose
     deleted: list[dict] = field(default_factory=list)    # {"path", "moved_to"?}: taken out of the index in this run
+    deleted_log: list[dict] = field(default_factory=list)  # {"path", "deleted_at"}: every deletion kept (see storage/sqlite_store.DELETION_RETENTION_DAYS)
     folders: list[str] = field(default_factory=list)     # the folders IntelliFile searches
     extensions: frozenset[str] = frozenset(discovery.SUPPORTED_EXTENSIONS | discovery.VISUAL_EXTENSIONS)
     indexing: bool = False
@@ -270,7 +282,67 @@ def missing_answer(question: str, known: Known) -> str | None:
     return None
 
 
-def index_answer(question: str, known: Known) -> str | None:
-    """A question the engine's own records answer, about the collection or
-    about one missing file; None for everything else (the normal Ask flow)."""
-    return library_answer(question, known.active, known.failures, known.skips, known.folders, indexing=known.indexing, places=known.places) or missing_answer(question, known)
+# A list/count question ("what files were deleted", "how many files are
+# deleted", "are there any files deleted", "show deleted files"), not one
+# named file ("why is report.pdf deleted" stays a single-file question above)
+# and not a request for cleanup advice ("what should I delete" is asking
+# what to do, not what already happened — found 2026-10-14 review: it was
+# being answered "no files were deleted", instead of going to the agent).
+# Reuses library.py's own count/any/list question openings instead of a
+# second, narrower list of lead words, so "how many ... deleted" is
+# recognised exactly as broadly as "how many ... PDFs" already is.
+_DELETION_WORD = r"\b(?:delet(?:e|ed|es|ing|ion|ions)|remov(?:e|ed|es|ing)|eras(?:e|ed|es|ing))\b"
+_ADVICE_MODAL = r"\b(?:should|could|would|must|can|may|might|need to|needs to|ought to|to)\b"
+_OPENINGS = (_COUNT, _ANY, _LIST)
+
+
+def _deletion_question_text(question: str) -> str | None:
+    """The question with its opening phrase and lead-in filler stripped, or
+    None when it neither opens like a collection question, mentions no
+    deletion at all, or asks what to delete rather than what was deleted."""
+    text = " ".join(_words(question))
+    start = _COUNT_START.search(text)
+    if start and start.start() and all(w in _LEAD_IN for w in text[:start.start()].split()):
+        text = text[start.start():]
+    opening = next((m for p in _OPENINGS if (m := p.match(text))), None)
+    if opening is None:
+        return None
+    rest = text[opening.end():]
+    deletion = re.search(_DELETION_WORD, rest)
+    if deletion is None or re.search(_ADVICE_MODAL, rest[:deletion.start()]):
+        return None
+    return text
+
+
+def deleted_recently_answer(question: str, known: Known, now: float | None = None) -> str | None:
+    """"What files were deleted in the last 24 hours" / "how many files are
+    deleted today" / "which files were deleted earliest": a list question,
+    answered from the deletion log (Known.deleted_log), never guessed by
+    the model. None when the question isn't shaped like this one."""
+    text = _deletion_question_text(question)
+    if text is None:
+        return None
+    now = now if now is not None else time.time()
+    window = narrow(text, now)
+    since = window.since if window and window.since is not None else now - RECENT_DAYS * 86400
+    until = window.until if window else None
+    label = window.label if window and window.label else f"in the last {RECENT_DAYS} days"
+    hits = [d for d in known.deleted_log if d["deleted_at"] >= since and (until is None or d["deleted_at"] < until)]
+    hits.sort(key=lambda d: d["deleted_at"], reverse=not (window and window.order == "oldest"))
+    if not hits:
+        return f"No files were deleted {label}."
+    limit = window.limit if window and window.order else MAX_DELETED_LISTED
+    shown = hits[:limit]
+    listed = ", ".join(f"{os.path.basename(d['path'])} ({ago(now - d['deleted_at'], d['deleted_at'])})" for d in shown)
+    more = len(hits) - len(shown)
+    order_word = f"{window.order} " if window and window.order else ""
+    return f"{len(hits):,} {order_word}file{'s' if len(hits) != 1 else ''} deleted {label}: {listed}{f' and {more:,} more' if more > 0 else ''}."
+
+
+def index_answer(question: str, known: Known, now: float | None = None) -> str | None:
+    """A question the engine's own records answer, about the collection, about
+    one missing file, or about recent deletions; None for everything else
+    (the normal Ask flow)."""
+    return (library_answer(question, known.active, known.failures, known.skips, known.folders, indexing=known.indexing, places=known.places)
+            or missing_answer(question, known)
+            or deleted_recently_answer(question, known, now))

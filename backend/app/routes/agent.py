@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
+from ..agent.followup import looks_like_followup, rewrite_followup
 from ..services.llm_helpers import find_llm_file, get_llm, load_error_message, make_agent
 from .common import remember
 
@@ -37,14 +38,22 @@ def _stop_previous_question(state) -> threading.Event:
 
 
 @router.get("/ask")
-def ask_endpoint(q: str, request: Request):
+def ask_endpoint(q: str, request: Request, prev_q: str = "", prev_a: str = ""):
     """Ask mode: the agent plans, calls search as a tool, reads the
     results and answers with citations — streamed as server-sent events
     (one JSON event per line: context, thought, tool_call, tool_result,
     answer_start, token, answer, done, error) so the UI can show the
-    trace as it happens."""
+    trace as it happens.
+
+    `prev_q`/`prev_a` (2026-10-14): the previous turn in this session, sent
+    by the UI so a follow-up ("show me those", "what about the other one")
+    can be resolved — the backend itself keeps no memory between requests.
+    Used only when the question actually looks like it needs one
+    (`looks_like_followup`), so a plain question never pays for the extra
+    model call."""
     state = request.app.state
     question = q.strip()
+    original_question = question
 
     def sse(event: dict) -> str:
         return f"data: {json.dumps(event)}\n\n"
@@ -59,6 +68,19 @@ def ask_endpoint(q: str, request: Request):
     # question is stopped BEFORE the model loads: it used to keep the CPU
     # busy (and the load slower) for the whole load.
     cancel = _stop_previous_question(state)
+
+    rewritten_sse = None
+    if prev_q.strip() and prev_a.strip() and looks_like_followup(question):
+        try:
+            llm = get_llm(state)
+        except Exception:  # noqa: BLE001 — a load failure here is reported below, by the normal path
+            llm = None
+        if llm is not None:
+            rewritten = rewrite_followup(llm, prev_q.strip(), prev_a.strip(), question)
+            if rewritten != question:
+                question = rewritten
+                rewritten_sse = sse({"type": "rewritten", "text": rewritten})
+
     try:
         agent = make_agent(state, question)  # loads the model on the first question that needs it
     except Exception as e:  # noqa: BLE001 — a damaged file or an unsupported CPU must reach the UI as a sentence, not an HTTP 500
@@ -101,6 +123,8 @@ def ask_endpoint(q: str, request: Request):
         # an async generator it also sees the server cancel the stream.
         final = None
         try:
+            if rewritten_sse is not None:
+                yield rewritten_sse
             while True:
                 try:
                     event = await run_in_threadpool(events.get, True, DISCONNECT_POLL_SECONDS)
@@ -116,7 +140,7 @@ def ask_endpoint(q: str, request: Request):
         finally:
             cancel.set()  # the client went away (or the run ended): stop the worker
         if final is not None:
-            await run_in_threadpool(remember, state, "query", query=question, meta={
+            await run_in_threadpool(remember, state, "query", query=original_question, meta={
                 "mode": "ask", "results": [s["file_id"] for s in final.get("sources", [])[:5]], "count": len(final.get("sources", [])),
                 "route": "agent", "tool_calls": final.get("tool_calls"), "total_ms": round(final.get("seconds", 0) * 1000),
             })

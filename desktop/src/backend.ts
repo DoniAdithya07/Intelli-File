@@ -380,6 +380,7 @@ export const updateSettings = (changes: Partial<AppSettings>) => postJson<AppSet
 export interface AskSource { number: number; file_id: string; path: string; filename: string; page: number | null; snippet: string; confidence: string; why: string[] }
 export type AskEvent =
   | { type: "context"; context: { session: WorkingContext | null; topics: string[]; top_files: string[] } }
+  | { type: "rewritten"; text: string }
   | { type: "thought"; text: string; system?: boolean; ms?: number }
   | { type: "tool_call"; tool: string; args: Record<string, unknown>; call: number }
   | { type: "tool_result"; tool: string; sources: AskSource[]; route?: RouteReport; call: number }
@@ -397,10 +398,16 @@ export const ASK_STOPPED = "The search engine stopped while answering. Details a
  * Always ends with a "done" or "error" event unless the caller aborted:
  * a stream cut short (the engine crashed) reports ASK_STOPPED instead of
  * leaving the answer spinning forever.
+ *
+ * `prev`: the previous question and its answer text in this session, so a
+ * follow-up ("show me those", "what about the other one") can be resolved.
+ * Each question is otherwise answered on its own, with no memory of the one
+ * before it.
  */
-export async function askStream(q: string, onEvent: (e: AskEvent) => void, signal?: AbortSignal): Promise<void> {
+export async function askStream(q: string, onEvent: (e: AskEvent) => void, signal?: AbortSignal, prev?: { q: string; a: string }): Promise<void> {
   const url = new URL(`${BACKEND_URL}/ask`);
   url.searchParams.set("q", q);
+  if (prev?.q && prev.a) { url.searchParams.set("prev_q", prev.q); url.searchParams.set("prev_a", prev.a); }
   let finished = false;
   // Once the question is cancelled nothing more reaches the page, not even frames already read.
   const emit = (e: AskEvent) => {
