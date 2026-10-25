@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from ..files.discovery import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, TEXT_EXTENSIONS, VIDEO_EXTENSIONS
+from ..files.discovery import AUDIO_EXTENSIONS, CODE_EXTENSIONS, IMAGE_EXTENSIONS, PRESENTATION_EXTENSIONS, SPREADSHEET_EXTENSIONS, TEXT_EXTENSIONS, VIDEO_EXTENSIONS
 
 # The Search tabs (docs/UI_DESIGN.md section 2) filter by kind rather than
 # by one extension: `type:document`, `type:image`, `type:audio`.
@@ -32,6 +32,12 @@ TYPE_GROUPS: dict[str, frozenset[str]] = {
     "audio": frozenset(e.lstrip(".") for e in AUDIO_EXTENSIONS),
     "video": frozenset(e.lstrip(".") for e in VIDEO_EXTENSIONS),  # the Photos page's newest-first grid
     "email": frozenset({"eml", "msg"}),
+    # Words people type for a kind (2026-10-25): "type:spreadsheet" matched nothing, silently.
+    "spreadsheet": frozenset(e.lstrip(".") for e in SPREADSHEET_EXTENSIONS),
+    "presentation": frozenset(e.lstrip(".") for e in PRESENTATION_EXTENSIONS),
+    "code": frozenset(e.lstrip(".") for e in CODE_EXTENSIONS),
+    "word": frozenset({"doc", "docx"}),
+    "text": frozenset({"txt", "md"}),
     # Two spellings of one format (2026-10-05): type:tif also keeps .tiff files.
     **{ext: frozenset(pair) for pair in (("jpg", "jpeg"), ("tif", "tiff"), ("heic", "heif"), ("mpg", "mpeg"), ("mts", "m2ts")) for ext in pair},
 }
@@ -145,7 +151,7 @@ def parse_query(raw_query: str) -> ParsedQuery:
         key, value = m.group(1).lower(), m.group(2)
         if key in ("type", "ext"):
             file_type = value.lower().lstrip(".")
-            file_type = {"documents": "document", "images": "image", "videos": "video", "emails": "email"}.get(file_type, file_type)
+            file_type = {"documents": "document", "images": "image", "videos": "video", "emails": "email", "photo": "image", "photos": "image", "picture": "image", "pictures": "image", "spreadsheets": "spreadsheet", "excel": "spreadsheet", "presentations": "presentation", "slides": "presentation", "powerpoint": "presentation", "doc": "word", "music": "audio", "songs": "audio", "movie": "video", "movies": "video"}.get(file_type, file_type)
         elif key == "after":
             after = _parse_date(value)
         elif key == "before":

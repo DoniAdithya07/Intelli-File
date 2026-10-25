@@ -25,7 +25,7 @@ binaries = []
 # x264/x265 encoders (av.libs/). The bundle is therefore NOT free of GPL code; the GPL/LGPL texts
 # ship in licenses/ next to IntelliFile.exe (scripts/package_windows.py). pillow_heif (dev-only,
 # links its own x265) is excluded below.
-for pkg in ("onnxruntime", "lancedb", "pyarrow", "av", "tokenizers", "llama_cpp", "watchdog", "pypdf", "docx", "pptx", "openpyxl", "PIL", "pi_heif"):
+for pkg in ("onnxruntime", "lancedb", "pyarrow", "av", "tokenizers", "llama_cpp", "watchdog", "pypdf", "cryptography", "docx", "pptx", "openpyxl", "PIL", "pi_heif"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b

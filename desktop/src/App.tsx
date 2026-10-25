@@ -154,8 +154,11 @@ function App() {
   const [voiceNote, setVoiceNote] = useState<{ forQuery: string; heard: string | null; snap: string | null } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Where the user is decides what the box searches and what it shows.
-  const locKey = JSON.stringify(location.kind === "search" ? { k: "search", f: location.folder ?? null } : location.kind === "photos" ? { k: "photos" } : location);
+  // Where the user is decides what the box searches and what it shows. The key must
+  // include `query`, not just the kind and folder: Back/Forward between two "everywhere"
+  // searches keeps kind and folder the same, so without `query` here this effect never
+  // refires and the box keeps showing stale text while the results change under it.
+  const locKey = JSON.stringify(location.kind === "search" ? { k: "search", f: location.folder ?? null, q: location.query ?? "" } : location.kind === "photos" ? { k: "photos", q: location.query ?? "" } : location);
   useEffect(() => {
     if (location.kind === "folder") { setScopeFolder(location.path); setScope("folder"); setBoxText(""); }
     else if (location.kind === "search") { if (location.folder) { setScopeFolder(location.folder); setScope("folder"); } else setScope("everywhere"); setBoxText(location.query ?? ""); }

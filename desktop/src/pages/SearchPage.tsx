@@ -272,6 +272,16 @@ export function SearchPage({ query, folder, run, engineReady, folderCount, fileC
   const tokenKey = tokens.join(" ");
   const text = query.trim();
 
+  // A new typed-in search starts clean: a type/date/size filter picked for an earlier,
+  // unrelated search must not go on silently zeroing out a later one (found 2026-10-25:
+  // "type:pptx" left on from a prior search made ".csv" report "nothing matches", with
+  // the only clue a small filter chip). Adjusting filters on the search already on screen
+  // never changes `query`, so this does not undo that.
+  const prevText = useRef(text);
+  useEffect(() => {
+    if (prevText.current !== text) { prevText.current = text; setFilters(NO_FILTERS); setTab("all"); }
+  }, [text]);
+
   // "Did you mean": what the backend would correct the draft to.
   useEffect(() => {
     if (!text || text.startsWith("?")) { setSuggestion(null); return; }

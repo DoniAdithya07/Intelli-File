@@ -122,6 +122,22 @@ def _answer_sources(sources: list, remaining_seconds: float, limit: int | None =
 
 _CITATION_RE = re.compile(r"\[(\d{1,2})\]")
 
+
+def _named_file_hint(question: str, shown: list) -> str:
+    """Points the answering model at the source that IS the file the question names by its
+    full name ("what is in blind_test_answer_key"); the 1.5B model cited a README that only
+    mentions the CSV instead of the CSV's own rows (found 2026-10-25)."""
+    q_words = set(re.findall(r"[a-z0-9]+", question.lower()))
+    matches = []
+    for s in shown:
+        name_words = set(re.findall(r"[a-z0-9]+", Path(s.filename).stem.lower()))
+        if len(name_words) >= 2 and name_words <= q_words:
+            matches.append(s.number)
+    if not matches:
+        return ""
+    refs = ", ".join(f"[{n}]" for n in matches)
+    return f"\n\nNote: {refs} IS the file named in the question. Answer from its own content, not from another source that only mentions its name."
+
 PLANNER_SYSTEM = """You are the planning step of IntelliFile, a search assistant over the user's own files on this computer.
 You cannot read files directly. You have tools:
 - search: run a search. Arguments: "query" (a short search phrase — rewrite the question into the words a document would contain), "mode" ("auto" lets the router pick; "keyword" for exact words; "smart" for meaning), optional "filters" (e.g. "type:pdf", "after:2025-03", "in:invoices", "ext:csv").
@@ -194,7 +210,7 @@ class Agent:
             shown = _answer_sources(tools.sources, remaining, limit=count)
             messages = [
                 {"role": "system", "content": ANSWER_SYSTEM},
-                {"role": "user", "content": f"Question: {question}\n\nSources:\n{tools.render(shown, chars)}\n\nAnswer with citations:"},
+                {"role": "user", "content": f"Question: {question}\n\nSources:\n{tools.render(shown, chars)}{_named_file_hint(question, shown)}\n\nAnswer with citations:"},
             ]
             if (estimate is None or estimate(messages, ANSWER_EST_TOKENS) <= remaining) and _fits(self.llm, messages, MAX_ANSWER_TOKENS):
                 break
@@ -769,6 +785,14 @@ def _quick_answer(question: str, found: list) -> tuple[str, object] | None:
         named = {n for n in _WORD_RE.findall(Path(source.filename).stem.lower()) if len(n) >= 3}
         return {w for w in q if any(n.startswith(w) or w.startswith(n) for n in named)}
 
+    def echoed_in_text(sentence: str) -> set[str]:
+        # Question words present only because the sentence names a file inline ("docs/blind_test_answer_key.csv"):
+        # weaker than the file's own content (found 2026-10-25: a README line naming the CSV beat the CSV's rows).
+        echoed: set[str] = set()
+        for m in re.finditer(r"[\w.-]+\.[a-z0-9]{2,5}\b", sentence.lower()):
+            echoed |= {w for w in _WORD_RE.findall(m.group(0)) if w in q}
+        return echoed
+
     # The top strong sources each offer their best sentence; the winner is
     # the best sentence plus half a point per question word the file's name
     # covers. Measured 2026-09-26 on the 30-question key: taking only the
@@ -795,7 +819,8 @@ def _quick_answer(question: str, found: list) -> tuple[str, object] | None:
                 continue
             if any(d not in hits and d not in by_name for d in dated):
                 continue  # the question's month/weekday ("in September") is not what this sentence is about
-            score = (len(hits - by_name) + 0.5 * len(hits & by_name)
+            echo = echoed_in_text(sentence)
+            score = (len(hits - by_name - echo) + 0.5 * len((hits & by_name) | (hits & echo))
                      + 0.5 * bool(_NUMBER_RE.search(sentence))  # facts people ask for are mostly figures and dates
                      + 0.5 * len(by_name))
             if score > choice_score:

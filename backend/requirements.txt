@@ -4,6 +4,7 @@ lancedb==0.39.0
 pyarrow==25.0.1
 watchdog==6.0.0
 pypdf==6.19.0
+cryptography==50.0.2
 python-docx==1.2.0
 numpy==2.4.6
 tokenizers==0.23.2
