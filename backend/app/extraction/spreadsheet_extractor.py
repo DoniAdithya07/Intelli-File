@@ -14,6 +14,11 @@ import csv
 from pathlib import Path
 
 from .blocks import ExtractedBlock
+from .normalize import read_text_file
+
+# The csv module refuses a field over 128 KB by default, failing the whole
+# file; the file is already in memory, so allow what a C long can hold.
+csv.field_size_limit(2**31 - 1)
 
 # A data dump with 100k rows is not a document a person searches by
 # meaning; the first rows carry the schema and enough content to find
@@ -44,10 +49,7 @@ def _rows_to_text(rows) -> str:
 def extract_delimited(path: Path) -> list[ExtractedBlock]:
     """CSV / TSV via the stdlib. The delimiter is sniffed from the first
     few KB so European semicolon-CSVs work too; .tsv forces a tab."""
-    try:
-        raw = path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        raw = path.read_text(encoding="latin-1")
+    raw = read_text_file(path)
     if not raw.strip():
         return []
 
@@ -73,6 +75,7 @@ def extract_xlsx(path: Path) -> list[ExtractedBlock]:
     blocks = []
     try:
         for sheet in workbook.worksheets:
+            sheet.reset_dimensions()  # a wrong <dimension> in the file would cut the rows short
             text = _rows_to_text(sheet.iter_rows(values_only=True))
             if text:
                 blocks.append(ExtractedBlock(text=text, section=sheet.title))

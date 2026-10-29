@@ -6,6 +6,7 @@ writes the whole document through GET/POST /settings.
 """
 
 import json
+import os
 import threading
 from pathlib import Path
 
@@ -54,7 +55,9 @@ class Settings:
                     self._values[key] = stored[key]
 
     def _save(self) -> None:
-        self._path.write_text(json.dumps(self._values, indent=2))
+        tmp = self._path.with_name(self._path.name + ".tmp")
+        tmp.write_text(json.dumps(self._values, indent=2))
+        os.replace(tmp, self._path)  # a crash mid-write cannot leave half a settings file
 
     def get(self, key: str):
         with self._lock:

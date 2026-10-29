@@ -130,7 +130,10 @@ def _parse_date(value: str, end: bool = False) -> float | None:
             dt = datetime.strptime(value, fmt)
         except ValueError:
             continue
-        return dt.timestamp()
+        try:
+            return dt.timestamp()
+        except (OSError, OverflowError, ValueError):
+            return None  # Windows cannot convert years before 1970 (after:1960): the filter is ignored
     return None
 
 

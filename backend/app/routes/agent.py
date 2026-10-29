@@ -69,12 +69,16 @@ def ask_endpoint(q: str, request: Request, prev_q: str = "", prev_a: str = ""):
     # busy (and the load slower) for the whole load.
     cancel = _stop_previous_question(state)
 
+    def load_failed(e: Exception) -> StreamingResponse:
+        logger.exception("local LLM failed to load from %s", state.llm_file)
+        return StreamingResponse(iter([sse({"type": "error", "message": load_error_message(e)})]), media_type="text/event-stream")
+
     rewritten_sse = None
     if prev_q.strip() and prev_a.strip() and looks_like_followup(question):
         try:
             llm = get_llm(state)
-        except Exception:  # noqa: BLE001 — a load failure here is reported below, by the normal path
-            llm = None
+        except Exception as e:  # noqa: BLE001 — reported now: loading again in make_agent would repeat the slow failure
+            return load_failed(e)
         if llm is not None:
             rewritten = rewrite_followup(llm, prev_q.strip(), prev_a.strip(), question)
             if rewritten != question:
@@ -84,11 +88,7 @@ def ask_endpoint(q: str, request: Request, prev_q: str = "", prev_a: str = ""):
     try:
         agent = make_agent(state, question)  # loads the model on the first question that needs it
     except Exception as e:  # noqa: BLE001 — a damaged file or an unsupported CPU must reach the UI as a sentence, not an HTTP 500
-        logger.exception("local LLM failed to load from %s", state.llm_file)
-        return StreamingResponse(
-            iter([sse({"type": "error", "message": load_error_message(e)})]),
-            media_type="text/event-stream",
-        )
+        return load_failed(e)
     if agent is None:
         return StreamingResponse(
             iter([sse({"type": "error", "message": "Ask mode needs its local language model, the models\\llm folder inside the IntelliFile folder, and it is missing. Extract IntelliFile-windows.zip again, completely, then ask again. No restart needed."})]),

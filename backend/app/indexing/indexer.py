@@ -16,7 +16,7 @@ from ..embeddings.model import EMBEDDING_DIMENSION, EmbeddingModel
 from ..extraction.blocks import ExtractedBlock
 from ..extraction.extractor import extract_document
 from ..extraction.normalize import normalize_text
-from ..files.discovery import VISUAL_EXTENSIONS, chunk_cap
+from ..files.discovery import VIDEO_EXTENSIONS, chunk_cap
 from ..files.media import is_audio_only_media
 from ..storage.keyword_store import KeywordStore
 from ..storage.lancedb_store import LanceDBVectorStore
@@ -67,7 +67,7 @@ class Indexer:
         if marker.exists():
             try:
                 previous = json.loads(marker.read_text()).get("model_id")
-            except (OSError, ValueError):
+            except (OSError, ValueError, AttributeError):  # AttributeError: valid JSON that is not an object
                 previous = None
         current = getattr(self.embedding_model, "model_id", "unknown")
         if previous == current:
@@ -78,8 +78,11 @@ class Indexer:
             self.vector_store.create_table(CHUNKS_TABLE, dimension=EMBEDDING_DIMENSION)
             self.keyword_store.clear()
             for record in self.file_record_store.list_active():
-                if Path(record.path).suffix.lower() not in VISUAL_EXTENSIONS:
-                    self.file_record_store.mark_indexed(record.file_id, False)
+                is_video = Path(record.path).suffix.lower() in VIDEO_EXTENSIONS
+                if is_video and record.audio_only is False:
+                    self.file_record_store.set_speech_indexed(record.file_id, False)  # its soundtrack text is gone; the keyframes stay
+                elif not is_video or record.audio_only:
+                    self.file_record_store.mark_indexed(record.file_id, False)  # text, audio-only media, and photos (their OCR text)
         marker.write_text(json.dumps({"model_id": current, "dimension": EMBEDDING_DIMENSION}))
         return changed
 

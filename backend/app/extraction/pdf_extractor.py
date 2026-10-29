@@ -30,7 +30,11 @@ def extract_pdf(path: Path) -> list[ExtractedBlock]:
     for i, page in enumerate(reader.pages):
         if i >= MAX_PDF_PAGES:
             break
-        text = (page.extract_text() or "").strip()
+        try:
+            text = (page.extract_text() or "").strip()
+        except Exception:  # noqa: BLE001 — one damaged page must not lose the rest of the PDF
+            logger.warning("%s: page %d could not be read", path, i + 1, exc_info=True)
+            text = ""
         texts[i + 1] = text
         if len(text) < SCANNED_PAGE_MAX_CHARS:
             scanned.append(i + 1)

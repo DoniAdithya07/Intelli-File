@@ -46,6 +46,8 @@ def _content(path: Path) -> ET.Element:
                 raise ValueError("refused: its manifest is over 1 MB, which no real document has")
             if b"encryption-data" in archive.read("META-INF/manifest.xml"):
                 raise ValueError("this file is password-protected")
+        if "content.xml" not in archive.namelist():
+            raise ValueError("not a valid OpenDocument file")
         size = archive.getinfo("content.xml").file_size
         if size > MAX_CONTENT_XML_BYTES:
             raise ValueError(f"refused: its text part is {size // (1024 * 1024)} MB, over the {MAX_CONTENT_XML_BYTES // (1024 * 1024)} MB limit")
@@ -114,6 +116,8 @@ def extract_odt(path: Path) -> list[ExtractedBlock]:
                     section, heading = text, None
                 else:
                     heading = text
+                # Also a block: the indexer only searches block text.
+                blocks.append(ExtractedBlock(text=text, heading=heading, section=section))
             elif element.tag == _TEXT + "p":
                 text = _inline_text(element).strip()
                 if text:

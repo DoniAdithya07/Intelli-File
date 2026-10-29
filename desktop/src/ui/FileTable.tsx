@@ -94,7 +94,8 @@ export function FileTable<T>({ label, columns, items, rowHeight, sort, onSort, g
   }, [items, tops, rowHeight]);
 
   const pick = useCallback((i: number, mode: "one" | "extend" | "focus" | "toggle") => {
-    const r = rows[Math.max(0, Math.min(rows.length - 1, i))];
+    i = Math.max(0, Math.min(rows.length - 1, i));
+    const r = rows[i];
     if (!r) return;
     setFocusKey(r.key);
     if (mode === "one") { setSelected(new Set([r.key])); anchor.current = r.key; }

@@ -8,6 +8,9 @@ from ..transcription import Transcriber
 logger = logging.getLogger(__name__)
 
 
+RETRY_AFTER_S = 60  # a failed load is tried again after this long
+
+
 class SpeechModelUnavailable(RuntimeError):
     """The speech model could not be loaded: audio cannot be transcribed."""
 
@@ -19,21 +22,27 @@ class LazyTranscriber:
         self._model_dir = model_dir
         self._real = None
         self._failure: SpeechModelUnavailable | None = None
+        self._failed_at = 0.0
         self._lock = threading.Lock()
 
     def _get(self):
         with self._lock:
             # (2026-10-05) A load that failed is not retried for every audio
             # file (each try is slow and logged nothing): it is logged once
-            # and every audio file then fails with this one clear reason.
+            # and every audio file then fails with this one clear reason —
+            # until RETRY_AFTER_S has passed, so a fixed install recovers
+            # without a restart.
             if self._failure is not None:
-                raise self._failure
+                if time.monotonic() - self._failed_at < RETRY_AFTER_S:
+                    raise self._failure
+                self._failure = None
             if self._real is None:
                 t0 = time.perf_counter()
                 try:
                     self._real = Transcriber(self._model_dir)
                 except Exception as e:
                     logger.error("speech model %s could not be loaded", self._model_dir.name, exc_info=True)
+                    self._failed_at = time.monotonic()
                     self._failure = SpeechModelUnavailable(f"the speech model could not be loaded ({e}), so audio files cannot be transcribed")
                     raise self._failure from e
                 logger.info("speech model %s loaded on first use in %.1f s", self._model_dir.name, time.perf_counter() - t0)

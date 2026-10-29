@@ -118,6 +118,7 @@ class LiveIndexing:
         self._job_lock = threading.Lock()
         self._pending: list[str] = []
         self._force: set[str] = set()  # folders whose queued scan must re-embed everything
+        self._running: tuple[str, threading.Event] | None = None  # the scan in progress and its cancel flag (forget)
         self._runner: threading.Thread | None = None
         # Watched folders that were not reachable at startup (unplugged
         # drive, offline share): the watcher cannot watch them, but they are
@@ -295,26 +296,44 @@ class LiveIndexing:
         self.watcher.add_file(path)
         save_watched_files(self.config_dir, self.watcher.watched_files)
 
+    _single_file_lane = threading.Lock()  # one file hashed at a time, like the scan
+
     def index_single_file(self, path: str) -> None:
-        """Index one file now (background job), watching it for changes."""
+        """Index one file (background job), watching it for changes. The
+        full-file hash of a multi-GB video takes minutes, so it never runs on
+        the caller's thread (an HTTP request, or startup)."""
+        threading.Thread(target=self._index_single_file_now, args=(path,), daemon=True).start()
+
+    def _index_single_file_now(self, path: str) -> None:
+        with self._single_file_lane:
+            self._queue_single_file(path)
+
+    def _queue_single_file(self, path: str) -> None:
         if not self.indexing_allowed():
             return
         p = Path(path)
         if not p.is_file():
             return
-        from .files.identity import build_file_record, compute_file_hash
-
-        store = self.indexer.file_record_store
-        existing = store.get_by_path(str(p))
         try:
-            file_hash = compute_file_hash(p)
-        except OSError:
-            return
-        if existing is not None and existing.hash == file_hash and existing.indexed and not existing.deleted:
-            return
-        record = build_file_record(p, file_id=existing.file_id if existing else None, file_hash=file_hash, indexed=False)
-        store.upsert(record)
-        self.job_queue.submit(Job(kind="index", path=str(p), file_id=record.file_id))
+            if path not in self.watcher.watched_files:
+                return  # forgotten while this job was waiting for its hash
+            from .files.identity import build_file_record, compute_file_hash
+
+            store = self.indexer.file_record_store
+            existing = store.get_by_path(str(p))
+            try:
+                file_hash = compute_file_hash(p)
+            except OSError:
+                return
+            if path not in self.watcher.watched_files:
+                return  # forgotten while this job was being hashed
+            if existing is not None and existing.hash == file_hash and existing.indexed and not existing.deleted:
+                return
+            record = build_file_record(p, file_id=existing.file_id if existing else None, file_hash=file_hash, indexed=False)
+            store.upsert(record)
+            self.job_queue.submit(Job(kind="index", path=str(p), file_id=record.file_id))
+        except Exception:
+            logger.exception("single-file index job failed for %s", path)
 
     def forget_file(self, path: str) -> bool:
         self.watcher.remove_file(path)
@@ -363,7 +382,7 @@ class LiveIndexing:
                 return
             self._pending.append(folder)
             self.job.queued = list(self._pending)
-            if self._runner is None or not self._runner.is_alive():
+            if self._runner is None:  # _run_jobs clears it under this lock before it exits
                 self._runner = threading.Thread(target=self._run_jobs, daemon=True)
                 self._runner.start()
 
@@ -371,17 +390,25 @@ class LiveIndexing:
         while True:
             with self._job_lock:
                 if not self._pending:
+                    self._runner = None  # same lock as enqueue(): a job queued from now on starts a new runner
                     return
                 folder = self._pending.pop(0)
                 force = folder in self._force
                 self._force.discard(folder)
+                cancel = threading.Event()
+                self._running = (folder, cancel)
                 self.job = IndexJob(state="running", folder=folder, started_at=time.time(), queued=list(self._pending))
 
             def progress(done: int, total: int, current: str | None, failed: int) -> None:
                 self.job.done, self.job.total, self.job.current_file, self.job.failed = done, total, current, failed
 
             try:
-                index_folder(self.indexer, folder, visual_indexer=self.visual_indexer, progress=progress, force=force, lock=self.write_lock, gate=self.gate, throttle=self._throttle, video_speech=self.video_speech_wanted)
+                index_folder(self.indexer, folder, visual_indexer=self.visual_indexer, progress=progress, force=force, lock=self.write_lock, gate=self.gate, throttle=self._throttle, video_speech=self.video_speech_wanted, cancelled=cancel.is_set)
+                if cancel.is_set():
+                    self.job.state = "done"  # forgotten while it ran: nothing to announce
+                    self.job.finished_at = time.time()
+                    self.job.current_file = None
+                    continue
                 if folder in self.unreachable_roots and Path(folder).is_dir():
                     self.watch(folder)  # the drive is back: watch it from now on
                 self.job.state = "done"
@@ -417,6 +444,13 @@ class LiveIndexing:
         self.watcher.remove_root(folder)
         self.unreachable_roots.discard(folder)
         save_watched_folders(self.config_dir, self.roots())
+        with self._job_lock:  # a queued or running scan of this folder would re-index what is purged below
+            if folder in self._pending:
+                self._pending.remove(folder)
+                self.job.queued = list(self._pending)
+            self._force.discard(folder)
+            if self._running is not None and self._running[0] == folder:
+                self._running[1].set()
         prefix = inside_prefix(folder)
         # A watched folder inside this one keeps its files (2026-09-21).
         keep = [inside_prefix(r) for r in self.roots() if r.startswith(prefix)]
@@ -502,6 +536,9 @@ class LiveIndexing:
             return
         with self.write_lock:
             if job.kind == "delete":
+                current = self.indexer.file_record_store.get_by_file_id(job.file_id)
+                if current is not None and not current.deleted:
+                    return  # the file was re-created after this job was queued: its record is live again
                 self.indexer.delete_file(job.file_id)
                 if self.visual_indexer is not None:
                     self.visual_indexer.delete_file(job.file_id)

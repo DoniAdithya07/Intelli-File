@@ -42,15 +42,21 @@ MIN_SCAN_PIXELS = 300 * 300  # smaller images on a PDF page are decoration, not 
 # per PDF the rest are left unread (2026-10-04).
 MAX_OCR_PAGES = 100
 
-_lock = threading.Lock()
+_lock = threading.Lock()       # one OCR job at a time
+_init_lock = threading.Lock()  # engine creation only: language()/available() must not wait for a job
 _engine = None
 _checked = False
 
 
 def _load_engine():
+    with _init_lock:
+        if not _checked:
+            _create_engine()
+    return _engine
+
+
+def _create_engine():
     global _engine, _checked
-    if _checked:
-        return _engine
     _checked = True
     if sys.platform != "win32":
         return None
@@ -69,15 +75,13 @@ def _load_engine():
 
 
 def available() -> bool:
-    with _lock:
-        return _load_engine() is not None
+    return _load_engine() is not None
 
 
 def language() -> str | None:
     """The recognizer's language tag (e.g. en-US), or None when OCR is off."""
-    with _lock:
-        engine = _load_engine()
-        return engine.recognizer_language.language_tag if engine is not None else None
+    engine = _load_engine()
+    return engine.recognizer_language.language_tag if engine is not None else None
 
 
 def _recognize(engine, bitmap) -> str:

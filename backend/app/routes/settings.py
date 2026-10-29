@@ -44,6 +44,9 @@ def set_access_endpoint(body: AccessRequest, request: Request):
         for root in whole_computer_roots():
             live.watch(root)
             live.enqueue(root)
+    elif previous == "denied" and body.mode != "denied":
+        for folder in live.roots():  # watched folders were kept while access was off
+            live.enqueue(folder)
     elif previous == "all" and body.mode != "all":
         # Leaving "all": the whole-computer roots stop being watched
         # (their records stay unless remove_index asked otherwise).
@@ -92,8 +95,9 @@ def update_settings_endpoint(body: SettingsRequest, request: Request):
     if changes.get("import_windows_recent") is True and not before:
         import_windows_recent_async(state)
     elif changes.get("import_windows_recent") is False and before:
-        removed = state.usage_store.clear_source(windows_recent.SOURCE)
-        state.recent_import = {"state": "off", "last": None}
+        with state.recent_import_lock:  # waits for a running import, so it cannot re-add events after the clear
+            removed = state.usage_store.clear_source(windows_recent.SOURCE)
+            state.recent_import = {"state": "off", "last": None}
         logger.info("Windows recent items switched off: %d imported events removed", removed)
     return updated
 

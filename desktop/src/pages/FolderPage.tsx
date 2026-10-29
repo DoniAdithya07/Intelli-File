@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, browseList, BrowseEntry, forgetFolder, indexFolder, reindexFolder, StatusResponse } from "../backend";
 import { useActions, Notify } from "../lib/actions";
 import { baseName, dateText, isInside, naturalCompare, samePath, sizeText, typeName } from "../lib/format";
@@ -56,6 +56,7 @@ export function FolderPage({ path, status, nameFilter, notify, onNavigate, onInd
   const [indexedOnly, setIndexedOnly] = useState(false);
   const [selected, setSelected] = useState<BrowseEntry[]>([]);
   const [ctx, setCtx] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const resetKeyRef = useRef<string>("");
   const roots = useMemo(() => (status?.folders ?? []).map((f) => f.path), [status?.folders]);
   const actions = useActions(onNavigate, notify, roots, onIndexChanged);
 
@@ -69,7 +70,13 @@ export function FolderPage({ path, status, nameFilter, notify, onNavigate, onInd
   // Load the folder a page at a time, so rows appear as they arrive.
   useEffect(() => {
     const ctl = new AbortController();
-    setEntries(null); setError(null); setSelected([]);
+    // A finished index job (maybe an unrelated watched folder) only changes
+    // which files are indexed, not which folder we're looking at - keep the
+    // current listing and selection on screen while the fresh page loads.
+    const resetKey = `${path}|${refreshKey}|${tries}`;
+    const isNavigation = resetKeyRef.current !== resetKey;
+    resetKeyRef.current = resetKey;
+    if (isNavigation) { setEntries(null); setError(null); setSelected([]); }
     (async () => {
       let offset = 0, all: BrowseEntry[] = [];
       for (;;) {
@@ -87,7 +94,7 @@ export function FolderPage({ path, status, nameFilter, notify, onNavigate, onInd
       setError(e instanceof ApiError ? { status: e.status, message: e.detail } : { status: 0, message: "" });
     });
     return () => ctl.abort();
-  }, [path, refreshKey, tries]);
+  }, [path, refreshKey, tries, status?.job.finished_at]);  // a finished index job changes which files are indexed
 
   const now = Date.now() / 1000;
   const shown = useMemo(() => {
@@ -117,6 +124,7 @@ export function FolderPage({ path, status, nameFilter, notify, onNavigate, onInd
   };
 
   const total = entries?.length ?? 0;
+  useEffect(() => { if (shown.length === 0) setSelected((s) => (s.length ? [] : s)); }, [shown.length]);  // the table is gone, so is its selection
   const selSize = selected.reduce((n, e) => n + (e.size ?? 0), 0);
   const left = selected.length
     ? `${selected.length} item${selected.length === 1 ? "" : "s"} selected${selSize ? `  ${sizeText(selSize)}` : ""}`

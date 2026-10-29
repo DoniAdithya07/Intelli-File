@@ -166,6 +166,8 @@ export function Shell({ location, onNavigate, history, editSignal, backendStatus
                 onPointerDown={(e) => { drag.current = { x: e.clientX, w: left }; e.currentTarget.setPointerCapture(e.pointerId); }}
                 onPointerMove={(e) => { if (drag.current) setWidth(drag.current.w + e.clientX - drag.current.x); }}
                 onPointerUp={() => { drag.current = null; }}
+                onPointerCancel={() => { drag.current = null; }}
+                onLostPointerCapture={() => { drag.current = null; }}
                 onKeyDown={(e) => { if (e.key === "ArrowLeft") { e.preventDefault(); setWidth(left - 16); } else if (e.key === "ArrowRight") { e.preventDefault(); setWidth(left + 16); } }}
               />
             )}

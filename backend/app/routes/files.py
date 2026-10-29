@@ -77,7 +77,7 @@ def sample_folder_endpoint():
 
 
 def _is_indexed_file(state, file_path: Path) -> bool:
-    record = state.indexer.file_record_store.get_by_path(str(file_path))
+    record = state.indexer.file_record_store.get_by_path(str(file_path), ignore_case=True)
     return record is not None and not record.deleted and file_path.is_file()
 
 

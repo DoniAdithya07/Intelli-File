@@ -45,7 +45,8 @@ export function FileGrid<T>({ label, items, columns, gap = 12, renderTile, tileL
   }, [selKey]);
 
   const pick = (i: number, mode: "one" | "extend" | "focus" | "toggle") => {
-    const it = items[Math.max(0, Math.min(items.length - 1, i))];
+    i = Math.max(0, Math.min(items.length - 1, i));
+    const it = items[i];
     if (!it) return;
     setFocusKey(it.key);
     if (mode === "one") { setSelected(new Set([it.key])); anchor.current = it.key; }

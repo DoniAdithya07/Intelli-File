@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 from datetime import timedelta
 from typing import Any
 
@@ -28,17 +29,20 @@ class LanceDBVectorStore(VectorStore):
         # step opened one or two. This store is the only writer, and a handle
         # sees its own writes, so one handle per table is kept.
         self._tables: dict[str, Any] = {}
+        self._tables_lock = threading.Lock()  # a stale handle must not be re-cached while its table is dropped
 
     def _open(self, name: str):
-        tbl = self._tables.get(name)
-        if tbl is None:
-            tbl = self._tables[name] = self.db.open_table(name)
-        return tbl
+        with self._tables_lock:
+            tbl = self._tables.get(name)
+            if tbl is None:
+                tbl = self._tables[name] = self.db.open_table(name)
+            return tbl
 
     def drop_table(self, name: str) -> None:
-        self._tables.pop(name, None)
-        if name in self.db.table_names():
-            self.db.drop_table(name)
+        with self._tables_lock:
+            self._tables.pop(name, None)
+            if name in self.db.table_names():
+                self.db.drop_table(name)
 
     def create_table(self, name: str, dimension: int) -> None:
         if name in self.db.table_names():

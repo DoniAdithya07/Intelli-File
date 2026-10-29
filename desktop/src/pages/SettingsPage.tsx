@@ -240,7 +240,10 @@ export function SettingsPage({ status, appDataDir, onError, refresh, onOpen }: P
 /** Privacy policy or terms of use, readable in place (text from ../legal.ts). */
 function LegalDialog({ doc, onClose }: { doc: LegalDoc; onClose: () => void }) {
   const box = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;  // mount-only effect: re-running it would refocus the first button
   useEffect(() => {
+    const onClose = () => closeRef.current();
     const opener = document.activeElement as HTMLElement | null;  // the button that opened this, focused again on close
     box.current?.querySelector<HTMLElement>("button")?.focus();
     const onKey = (e: KeyboardEvent) => {
@@ -256,7 +259,7 @@ function LegalDialog({ doc, onClose }: { doc: LegalDoc; onClose: () => void }) {
     };
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("keydown", onKey); opener?.focus(); };
-  }, [onClose]);
+  }, []);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-6" onClick={onClose}>
       <div ref={box} role="dialog" aria-modal="true" aria-label={doc.title} className="anim-dialog panel flex max-h-full w-full max-w-[680px] flex-col shadow-palette" onClick={(e) => e.stopPropagation()}>

@@ -25,6 +25,14 @@ class NoThumbnail(Exception):
     answers "no thumbnail" quietly, the UI shows its audio icon."""
 
 
+def _to_rgb(image: Image.Image) -> Image.Image:
+    """RGB copy of `image`. 16-bit greyscale (PNG/TIFF) is scaled down to 8 bits
+    first: converting it directly clips every value above 255 to white."""
+    if image.mode in ("I", "I;16", "I;16L", "I;16B"):
+        image = image.point(lambda v: v * (1 / 256)).convert("L")
+    return image.convert("RGB")
+
+
 def generate_thumbnail(
     path: Path,
     timestamp_offset_seconds: float | None = None,
@@ -46,7 +54,7 @@ def generate_thumbnail(
         return buffer.getvalue()
     with Image.open(path) as opened:
         opened.draft("RGB", (max_size, max_size))  # JPEG: cheap reduced-scale decode of big phone photos
-        image = ImageOps.exif_transpose(opened).convert("RGB")
+        image = _to_rgb(ImageOps.exif_transpose(opened))
         image.thumbnail((max_size, max_size), Image.BICUBIC)
         buffer = io.BytesIO()
         image.save(buffer, format="JPEG", quality=JPEG_QUALITY)

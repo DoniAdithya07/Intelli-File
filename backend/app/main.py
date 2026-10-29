@@ -194,11 +194,16 @@ DEV_TOKEN_GENERATED = not os.environ.get("INTELLIFILE_API_TOKEN")
 API_TOKEN = os.environ.get("INTELLIFILE_API_TOKEN") or secrets.token_urlsafe(24)
 
 
+def _token_matches(provided: str) -> bool:
+    # Bytes, not str: compare_digest raises TypeError (HTTP 500) on a non-ASCII str.
+    return secrets.compare_digest(provided.encode(), API_TOKEN.encode())
+
+
 @app.middleware("http")
 async def require_api_token(request, call_next):
     if request.method != "OPTIONS" and request.url.path != "/health":
         provided = request.headers.get("x-intellifile-token")
-        if not provided or not secrets.compare_digest(provided, API_TOKEN):
+        if not provided or not _token_matches(provided):
             return JSONResponse({"error": "unauthorized: missing or wrong API token"}, status_code=401)
     return await call_next(request)
 
@@ -227,7 +232,7 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost
 def health(request: Request):
     """Open so the shell and the UI can poll for readiness; the data
     directory is only revealed to a caller that has the token."""
-    trusted = secrets.compare_digest(request.headers.get("x-intellifile-token", ""), API_TOKEN)
+    trusted = _token_matches(request.headers.get("x-intellifile-token", ""))
     return {"status": "ok", "app_data_dir": str(app.state.dirs["root"]) if trusted else None, "token_required": True}
 
 

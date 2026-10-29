@@ -45,7 +45,12 @@ def _exit_with_parent() -> None:
         return
 
     def watch() -> None:
-        while parent.is_running():
+        while True:
+            try:
+                if not parent.is_running():
+                    break
+            except psutil.Error:  # e.g. access denied: keep watching, do not let the thread die
+                pass
             time.sleep(2)
         print("[shutdown] desktop shell exited — stopping the backend", file=sys.stderr, flush=True)
         os._exit(0)

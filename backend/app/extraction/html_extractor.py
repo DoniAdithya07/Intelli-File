@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from .blocks import ExtractedBlock
+from .normalize import read_text_file
 
 _SKIPPED = {"script", "style", "noscript", "template", "svg", "head"}
 _BLOCK = {
@@ -59,9 +60,5 @@ def html_to_text(raw: str) -> str:
 
 
 def extract_html(path: Path) -> list[ExtractedBlock]:
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        raw = path.read_text(encoding="latin-1")
-    text = html_to_text(raw)
+    text = html_to_text(read_text_file(path))
     return [ExtractedBlock(text=text)] if text else []

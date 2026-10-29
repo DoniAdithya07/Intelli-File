@@ -94,12 +94,16 @@ export function NavTree({ location, onNavigate, pinned, drives, rail, footer }: 
     return n.loc.kind === location.kind;
   };
 
-  const toggle = (id: string, to?: boolean) => setOpen((s) => {
-    const n = new Set(s);
-    const want = to ?? !n.has(id);
-    if (want) n.add(id); else n.delete(id);
-    return n;
-  });
+  const toggle = (id: string, to?: boolean) => {
+    // A failed folder is forgotten when toggled, so opening it again retries.
+    if (id.startsWith("dir:")) setKids((k) => { const p = id.slice(4); if (k[p]?.state !== "error") return k; const { [p]: _, ...rest } = k; return rest; });
+    setOpen((s) => {
+      const n = new Set(s);
+      const want = to ?? !n.has(id);
+      if (want) n.add(id); else n.delete(id);
+      return n;
+    });
+  };
 
   const activate = (n: Node) => {
     setFocusId(n.id);

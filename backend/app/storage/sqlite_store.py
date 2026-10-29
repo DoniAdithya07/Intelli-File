@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS files (
     deleted INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
+CREATE INDEX IF NOT EXISTS idx_files_path_nocase ON files(path COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);
 CREATE TABLE IF NOT EXISTS deletions (
     path TEXT NOT NULL,
@@ -116,9 +117,16 @@ class FileRecordStore:
             rows = self._conn.execute("SELECT * FROM files WHERE deleted = 0 AND indexed = 0").fetchall()
         return [self._row_to_record(r) for r in rows]
 
-    def get_by_path(self, path: str) -> FileRecord | None:
+    def get_by_path(self, path: str, ignore_case: bool = False) -> FileRecord | None:
+        """ignore_case: Windows paths are case-insensitive, so a typed
+        address in another letter case must still find the indexed record. Only the
+        read-side lookups ask for it; the UNIQUE path itself stays exact."""
+        collate = " COLLATE NOCASE" if ignore_case else ""
+        # ORDER BY deleted: with ignore_case, two rows can differ only by
+        # letter case (not UNIQUE under NOCASE) - the live one must win.
+        order = " ORDER BY deleted" if ignore_case else ""
         with self._lock:
-            row = self._conn.execute("SELECT * FROM files WHERE path = ?", (path,)).fetchone()
+            row = self._conn.execute(f"SELECT * FROM files WHERE path = ?{collate}{order}", (path,)).fetchone()
         return self._row_to_record(row) if row else None
 
     def get_by_file_id(self, file_id: str) -> FileRecord | None:
@@ -127,16 +135,22 @@ class FileRecordStore:
         return self._row_to_record(row) if row else None
 
     def get_by_paths(self, paths: list[str]) -> dict[str, FileRecord]:
-        """Active records for these exact paths in a few queries, not one
-        per path (a folder listing asks for up to a thousand)."""
+        """Active records for these paths (case-insensitive, like Windows)
+        in a few queries, not one per path (a folder listing asks for up to
+        a thousand). Keyed by the path as the caller asked for it."""
         found: dict[str, FileRecord] = {}
         for start in range(0, len(paths), _PATHS_PER_QUERY):
             batch = paths[start:start + _PATHS_PER_QUERY]
             with self._lock:
                 rows = self._conn.execute(
-                    f"SELECT * FROM files WHERE deleted = 0 AND path IN ({', '.join('?' for _ in batch)})", batch
+                    f"SELECT * FROM files WHERE deleted = 0 AND path COLLATE NOCASE IN ({', '.join('?' for _ in batch)})", batch
                 ).fetchall()
-            found.update((r["path"], self._row_to_record(r)) for r in rows)
+            exact = {r["path"]: r for r in rows}
+            by_lower = {r["path"].lower(): r for r in rows}
+            for path in batch:
+                row = exact.get(path) or by_lower.get(path.lower())
+                if row is not None:
+                    found[path] = self._row_to_record(row)
         return found
 
     def upsert(self, record: FileRecord) -> None:
@@ -241,10 +255,11 @@ class FileRecordStore:
     def find_active_by_hash(self, file_hash: str, exclude_file_id: str | None = None) -> FileRecord | None:
         """Find another active file with identical content, so the indexer
         can reuse its chunks/embeddings instead of recomputing them (per
-        the PRD's Duplicate Files section)."""
+        the PRD's Duplicate Files section). A record still `indexed = 0` has
+        the new hash but possibly the old (or no) chunks, so it is no source."""
         with self._lock:
             row = self._conn.execute(
-                "SELECT * FROM files WHERE hash = ? AND deleted = 0 AND file_id != ? LIMIT 1",
+                "SELECT * FROM files WHERE hash = ? AND deleted = 0 AND indexed = 1 AND file_id != ? LIMIT 1",
                 (file_hash, exclude_file_id or ""),
             ).fetchone()
         return self._row_to_record(row) if row else None

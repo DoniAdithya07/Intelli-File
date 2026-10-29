@@ -100,14 +100,18 @@ export function Menu({ items, x, y, onClose, label }: { items: MenuItem[]; x: nu
     const r = el.getBoundingClientRect();
     setPos({ left: Math.max(4, Math.min(x, window.innerWidth - r.width - 4)), top: Math.max(4, Math.min(y, window.innerHeight - r.height - 4)) });
   }, [x, y]);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
     ref.current?.querySelector<HTMLElement>('[role^="menuitem"]')?.focus();
-    const down = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const close = () => closeRef.current();
+    // A press on the open trigger is left to its own click, which toggles the menu shut (else mousedown closes and click reopens).
+    const down = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node) && !(e.target as Element).closest?.('[aria-haspopup="menu"][aria-expanded="true"]')) close(); };
     document.addEventListener("mousedown", down, true);
-    window.addEventListener("blur", onClose);
-    return () => { document.removeEventListener("mousedown", down, true); window.removeEventListener("blur", onClose); opener?.focus?.(); };
-  }, [onClose]);
+    window.addEventListener("blur", close);
+    return () => { document.removeEventListener("mousedown", down, true); window.removeEventListener("blur", close); opener?.focus?.(); };
+  }, []);
   const onKey = (e: KeyboardEvent) => {
     const els = [...(ref.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])];
     const at = els.indexOf(document.activeElement as HTMLElement);

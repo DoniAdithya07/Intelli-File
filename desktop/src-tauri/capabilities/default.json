@@ -16,9 +16,6 @@
     "core:window:allow-set-theme",
     "core:event:default",
     "opener:allow-reveal-item-in-dir",
-    "dialog:default",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister",
-    "global-shortcut:allow-is-registered"
+    "dialog:default"
   ]
 }

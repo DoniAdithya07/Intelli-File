@@ -8,6 +8,7 @@ detection and tombstoning work identically regardless of file type.
 """
 
 import contextlib
+import dataclasses
 import json
 import logging
 import os
@@ -23,7 +24,7 @@ from ..files.discovery import (
     chunk_cap, discover_files, long_paths_enabled, permission_hint,
 )
 from ..files.identity import ONLINE_ONLY_REASON, OnlineOnlyFile, build_file_record, compute_file_hash
-from ..files.media import has_audio_stream, is_audio_only_media
+from ..files.media import audio_only_or_none, has_audio_stream
 from .cleanup import cleanup_tombstones
 from .indexer import Indexer
 
@@ -53,6 +54,15 @@ def _unchanged_by_stat(path: Path, record) -> bool:
     return stat.st_size == record.size and stat.st_mtime == record.modified_time
 
 
+def _remember_stat(path: Path, record, record_store) -> None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return
+    if stat.st_size != record.size or stat.st_mtime != record.modified_time:
+        record_store.upsert(dataclasses.replace(record, size=stat.st_size, modified_time=stat.st_mtime))
+
+
 # progress(done, total, current_path, failed) — called before each file and once at the end.
 ProgressCallback = Callable[[int, int, str | None, int], None]
 
@@ -67,6 +77,7 @@ def index_folder(
     gate: threading.Event | None = None,
     throttle: Callable[[], float] | None = None,
     video_speech: Callable[[], bool] | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> int:
     """Index every supported file under `folder` and reconcile the index
     with what's actually on disk: renamed files keep their vectors under
@@ -93,6 +104,10 @@ def index_folder(
     in videos": a video's soundtrack (first minutes) is then transcribed,
     after its pictures, in the video's turn, which already comes after every
     document, photo and audio file (see _scan_order).
+
+    `cancelled()` (the folder was forgotten while this scan ran): checked
+    under `lock` before each file, so nothing is indexed after the forget's
+    purge; a cancelled scan also skips its own purge and returns what it counted.
 
     `force` re-embeds every file even when its hash is unchanged (the
     Re-index button). It replaces an earlier approach that purged the
@@ -154,6 +169,8 @@ def index_folder(
         seen.add(str(path))
         before = count
         with guard:
+            if cancelled is not None and cancelled():
+                return count
             count, failed = _scan_one(indexer, visual_indexer, path, record_store, count, failed, force, skipped, video_speech)
         if throttle is not None and count > before:
             pause = throttle()
@@ -166,6 +183,8 @@ def index_folder(
     # can never come back as a dead search result. Not under a directory
     # the walk could not list: those files were not seen, not deleted.
     with guard:
+        if cancelled is not None and cancelled():
+            return count
         for record in record_store.list_active():
             if record.path.startswith(folder_prefix) and record.path not in seen and not record.path.startswith(tuple(unlistable)):
                 record_store.mark_deleted(record.path)
@@ -390,7 +409,9 @@ def uses_visual_pipeline(visual_indexer, path: Path, record, record_store) -> bo
         return True
     audio_only = record.audio_only
     if audio_only is None:
-        audio_only = is_audio_only_media(path)
+        audio_only = audio_only_or_none(path)
+        if audio_only is None:
+            return True  # unreadable right now: treat as a video, store nothing, look again next time
         record_store.set_audio_only(record.file_id, audio_only)
     return not audio_only
 
@@ -423,7 +444,9 @@ def _reclassify_legacy_video(visual_indexer, path: Path, existing, record_store)
     StopIteration, or were listed as videos with no thumbnail) is sent
     through the transcript pipeline once; any other video is just marked.
     Returns the record to continue with and whether it must be re-indexed."""
-    audio_only = is_audio_only_media(path)
+    audio_only = audio_only_or_none(path)
+    if audio_only is None:
+        return existing, False  # unreadable right now: leave it unprobed, the next scan tries again
     record_store.set_audio_only(existing.file_id, audio_only)
     if audio_only:
         visual_indexer.delete_file(existing.file_id)  # no keyframes can exist, but never leave stale vectors
@@ -468,6 +491,7 @@ def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, fai
         _note_failure(path, e)
         return count, failed + 1
     if existing is not None and not existing.deleted and existing.indexed and existing.hash == current_hash and not force:
+        _remember_stat(path, existing, record_store)  # touched, not changed: stop re-hashing it every scan
         if speech_pending(indexer, existing, path, video_speech):
             with reading(path, existing.hash):
                 index_video_speech(indexer, path, record_store, existing.file_id)

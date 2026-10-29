@@ -10,6 +10,7 @@ import dataclasses
 import os
 import re
 import time
+import unicodedata
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -43,7 +44,7 @@ RERANK_CONFIDENT_LOGIT = 0.0
 RERANK_PROMOTION_BASE = 1.0
 
 
-_KW_TOKEN_RE = re.compile(r"[a-z0-9']+")
+_KW_TOKEN_RE = re.compile(r"(?:[^\W_]|')+")  # letters of any script, digits, apostrophes ("Müller" is one word)
 # Words that carry no search intent of their own — the framing people put
 # around the thing they are actually looking for.
 _KW_FILLER = {
@@ -53,6 +54,17 @@ _KW_FILLER = {
     "thing", "stuff", "something", "wrote", "write", "put", "saved", "kept", "from", "by", "into", "our", "your", "his", "her", "their",
 }
 _FILTER_TOKEN_RE = re.compile(r"\b(?:type|ext|after|before|size|in):\S+", re.IGNORECASE)
+
+
+def _fold(word: str) -> str:
+    """Without accents, the way the keyword index stores words ("müller" -> "muller")."""
+    return "".join(c for c in unicodedata.normalize("NFD", word) if not unicodedata.combining(c))
+
+
+def _content_words(text: str) -> tuple[list[str], int]:
+    """(the words that carry intent, how many words the text has) for the relaxed keyword retry."""
+    words = [w for w in (t.strip("'") for t in _KW_TOKEN_RE.findall(text.lower())) if w]
+    return [w for w in words if w not in _KW_FILLER and len(w) > 1], len(words)
 
 
 def _tokens(text: str) -> set[str]:
@@ -230,8 +242,9 @@ class SearchService:
         if not candidates or any(c.isdigit() for w in candidates for c in w):
             return []
         for w in candidates:
-            if (w in vocabulary or w in self.dictionary.counts or w not in corrected_words or _plural_of_known(w, vocabulary)
-                    or (len(w) >= 4 and any(known.startswith(w) for known in vocabulary))):
+            plain = _fold(w)
+            if (w in vocabulary or plain in vocabulary or w in self.dictionary.counts or w not in corrected_words
+                    or _plural_of_known(plain, vocabulary) or (len(plain) >= 4 and any(known.startswith(plain) for known in vocabulary))):
                 return []
         return candidates
 
@@ -241,7 +254,7 @@ class SearchService:
         rows = self.vector_store.get_by_file_id(CHUNKS_TABLE, file_id)
         if not rows:
             return {}
-        payload = rows[0].get("payload", {})
+        payload = min(rows, key=lambda r: r.get("payload", {}).get("chunk_index") or 0).get("payload", {})
         return {"content": payload.get("content", ""), "page_number": payload.get("page_number")}
 
     def _active_records(self) -> list:
@@ -254,10 +267,10 @@ class SearchService:
         return self._active_cache[1]
 
     def _correction_vocabulary(self, active_records) -> dict[str, int]:
-        content_vocabulary = self.keyword_store.vocabulary()  # cached by the store until chunks change
-        key = (self.file_record_store.version, self.keyword_store.version)
+        key = (self.file_record_store.version, self.keyword_store.version)  # read first: a change during the build must not be cached under the newer key
         if self._vocabulary_cache is not None and self._vocabulary_cache[0] == key:
             return self._vocabulary_cache[1]
+        content_vocabulary = self.keyword_store.vocabulary()  # cached by the store until chunks change
         vocabulary = dict(content_vocabulary)  # copy: the store caches this dict
         for word, count in filename_vocabulary(active_records).items():
             vocabulary[word] = vocabulary.get(word, 0) + count
@@ -427,7 +440,7 @@ class SearchService:
 
     def _run_plan(self, plan: Plan, query_text: str, keyword_query_text: str, parsed, active_records, top_k: int, stages: list[dict]) -> list[dict]:
         allowed_file_ids = {r.file_id for r in active_records} if parsed.filters.any() else None
-        scope = allowed_file_ids if parsed.filters.folder else None  # only a folder scope looks deeper than the top 20
+        scope = allowed_file_ids  # any filter looks deeper than the global top 20 (type:pdf must not depend on 20 other files ranking first)
 
         keyword_hits: list[dict] = []
         if plan.keyword and keyword_query_text:
@@ -438,8 +451,8 @@ class SearchService:
                 # FTS5 ANDs every word, so the filler in "find my notes about
                 # horizontal scaling" left no row. Retry on the content words
                 # alone, requiring at least half of them (2026-09-21).
-                content_words = [w for w in _KW_TOKEN_RE.findall(keyword_query_text.lower()) if w not in _KW_FILLER and len(w) > 1]
-                if content_words and len(content_words) < len(_KW_TOKEN_RE.findall(keyword_query_text)):
+                content_words, word_count = _content_words(keyword_query_text)
+                if content_words and len(content_words) < word_count:
                     keyword_hits = _fetch_in_scope(lambda n: self.keyword_store.search_terms(content_words, top_k=n), scope)
                     relaxed = bool(keyword_hits)
             if allowed_file_ids is not None:
@@ -512,6 +525,7 @@ class SearchService:
         semantic_ranked_ids = [h["id"] for h in semantic_hits]
         ranked_lists = [keyword_ranked_ids, semantic_ranked_ids]
         fused_scores = reciprocal_rank_fusion(ranked_lists)
+        promoted_scores: dict[str, float] = {}  # chunks the reranker is sure about, filled below
 
         if plan.rerank and self.reranker is not None and chunk_info:
             # The cross-encoder re-reads the top fused candidates with the
@@ -529,12 +543,11 @@ class SearchService:
             t1 = time.perf_counter()
             candidates = [cid for cid, _ in sorted(fused_scores.items(), key=lambda kv: -kv[1])[:RERANK_TOP_N]]
             scores = self.reranker.score(query_text, [chunk_info[cid].get("content", "") for cid in candidates])
-            promoted = 0
             for cid, score in zip(candidates, scores):
                 chunk_info[cid]["reranker_score"] = score
                 if score > RERANK_CONFIDENT_LOGIT:
-                    fused_scores[cid] = RERANK_PROMOTION_BASE + score / 1000.0
-                    promoted += 1
+                    promoted_scores[cid] = RERANK_PROMOTION_BASE + score / 1000.0
+            promoted = len(promoted_scores)
             stages.append({"stage": "rerank", "ms": _ms(t1), "candidates": len(candidates), "relevant": promoted})
         elif plan.rerank:
             stages.append({"stage": "rerank", "skipped": True, "reason": "reranker model not installed"})
@@ -542,7 +555,7 @@ class SearchService:
             stages.append({"stage": "rerank", "skipped": True})
 
         chunk_id_to_file_id = {cid: info["file_id"] for cid, info in chunk_info.items()}
-        file_aggregates = aggregate_chunks_to_files(fused_scores, chunk_id_to_file_id)
+        file_aggregates = aggregate_chunks_to_files(fused_scores, chunk_id_to_file_id, promoted=promoted_scores)
         stages.append({"stage": "fusion", "ms": _ms(t0)})
 
         results = []

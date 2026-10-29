@@ -85,7 +85,7 @@ class VisualIndexer:
         if marker.exists():
             try:
                 previous = json.loads(marker.read_text()).get("model_id")
-            except (OSError, ValueError):
+            except (OSError, ValueError, AttributeError):  # AttributeError: valid JSON that is not an object
                 previous = None
         if previous == self.clip_model.model_id:
             return False
@@ -97,7 +97,10 @@ class VisualIndexer:
             self.vector_store.create_table(IMAGES_TABLE, dimension=self.clip_model.dimension)
             for record in self.file_record_store.list_active():
                 if Path(record.path).suffix.lower() in VISUAL_EXTENSIONS:
-                    self.file_record_store.remove(record.file_id)
+                    # Tombstoned, not removed: cleanup then also purges the OCR / speech
+                    # text chunks of the file, which a bare remove() left orphaned. The next
+                    # scan re-indexes the file under the same id.
+                    self.file_record_store.mark_deleted(record.path, log_as_deleted=False)
         marker.write_text(json.dumps({"model_id": self.clip_model.model_id, "dimension": self.clip_model.dimension}))
         return changed
 
@@ -137,11 +140,14 @@ class VisualIndexer:
             # operating system's errors (locked, permission, gone) carry one.
             if e.errno is not None:
                 raise
+            self.delete_file(file_id)  # no longer a picture: its old vector must not stay searchable
             return 0
         except (SyntaxError, ValueError, EOFError):
+            self.delete_file(file_id)
             return 0  # other ways Pillow's decoders say "damaged file"
         width, height = image.size
         if max(width, height) < MIN_IMAGE_LONGEST_SIDE:
+            self.delete_file(file_id)
             return 0
         vector = self.clip_model.embed_images([image])[0]
 
@@ -188,6 +194,7 @@ class VisualIndexer:
             # The frames between keyframes still show the content.
             frames = _usable_frames(extract_keyframes(path, every_seconds=FALLBACK_SAMPLE_SECONDS))
         if not frames:
+            self.delete_file(file_id)  # an edit left nothing usable: drop the old keyframes
             return 0
         captured_at = video_captured_at(path)
         vectors = self.clip_model.embed_images([f for _, f in frames])

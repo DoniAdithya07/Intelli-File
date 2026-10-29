@@ -115,7 +115,7 @@ export function OverlaySearch({ onError, onEscape }: Props) {
     <div className="flex h-full flex-col">
       <Omnibox
         value={query}
-        onChange={(v) => { setQuery(v); if (!v.trim()) { setResults(null); setAsking(null); setSelected(0); } }}
+        onChange={(v) => { setQuery(v); if (!v.trim()) { inflight.current?.abort(); inflight.current = null; setSearching(false); setResults(null); setAsking(null); setSelected(0); } }}
         onSubmit={submit}
         onEscape={onEscape}
         onArrow={move}

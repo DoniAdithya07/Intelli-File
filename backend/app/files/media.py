@@ -34,32 +34,35 @@ def _is_cover_art(stream) -> bool:
 
 
 @functools.lru_cache(maxsize=4096)
-def _cached_probe(path: str, size: int, mtime_ns: int) -> tuple[bool, bool] | None:
-    """None when the container cannot be opened (damaged file): the caller
-    keeps its extension-based guess. Keyed by size and mtime so an edited
-    file is probed again."""
-    try:
-        return _probe(Path(path))
-    except Exception:  # noqa: BLE001 — any decoder error means "unknown", never a failed scan
-        return None
+def _cached_probe(path: str, size: int, mtime_ns: int) -> tuple[bool, bool]:
+    """Keyed by size and mtime so an edited file is probed again. Raises when
+    the container cannot be opened: lru_cache does not remember exceptions,
+    so a file that was only locked for a moment is probed again next time
+    (until 2026-10-28 the failure itself was cached, for good)."""
+    return _probe(Path(path))
 
 
 def probe_media(path: Path) -> tuple[bool, bool] | None:
     """(has video, has audio) of a media file, or None when unreadable."""
     try:
         stat = path.stat()
-    except OSError:
+        return _cached_probe(str(path), stat.st_size, stat.st_mtime_ns)
+    except Exception:  # noqa: BLE001 — any decoder error means "unknown", never a failed scan
         return None
-    return _cached_probe(str(path), stat.st_size, stat.st_mtime_ns)
+
+
+def audio_only_or_none(path: Path) -> bool | None:
+    """True/False once the container could be read; None when it could not
+    (locked, damaged): callers keep their extension-based guess and must not
+    store it as an answer."""
+    probed = probe_media(path)
+    return None if probed is None else not probed[0] and probed[1]
 
 
 def is_audio_only_media(path: Path) -> bool:
     """True for a file with a video extension whose container has audio and
     no video stream. A damaged file (cannot be probed) stays a video."""
-    if path.suffix.lower() not in VIDEO_EXTENSIONS:
-        return False
-    probed = probe_media(path)
-    return probed is not None and not probed[0] and probed[1]
+    return path.suffix.lower() in VIDEO_EXTENSIONS and audio_only_or_none(path) is True
 
 
 def has_audio_stream(path: Path) -> bool:

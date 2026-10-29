@@ -89,14 +89,17 @@ function tabOf(r: SearchResult): Exclude<TabId, "all"> {
 
 function FiltersPopover({ tab, filters, onChange, onClose }: { tab: TabId; filters: Filters; onChange: (f: Filters) => void; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;  // the effect runs once; it must not refocus the Type select on every render
   useEffect(() => {
+    const onClose = () => closeRef.current();
     const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.parentElement?.contains(e.target as Node)) onClose(); };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey, true);
     ref.current?.querySelector<HTMLElement>("select, input")?.focus();
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey, true); };
-  }, [onClose]);
+  }, []);
   const types = tab === "all" ? [...TYPES.document, ...TYPES.image, ...TYPES.audio] : TYPES[tab];
   const set = (k: keyof Filters) => (e: { currentTarget: { value: string } }) => onChange({ ...filters, [k]: e.currentTarget.value });
   const field = "mt-1 h-8 w-full rounded border border-rule-strong bg-field px-2 text-[14px] text-ink";
@@ -360,6 +363,7 @@ export function SearchPage({ query, folder, run, engineReady, folderCount, fileC
     return out;
   }, [strong, weak, weakOpen]);
 
+  useEffect(() => { if (total === 0) setSelected((s) => (s.length ? [] : s)); }, [total]);  // the table is gone, so is its selection
   const current = selected[0] ?? null;
   const lastRecorded = useRef<string | null>(null);
   const onSelection = useCallback((rows: SearchResult[]) => {

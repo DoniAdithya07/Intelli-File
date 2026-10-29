@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 from .blocks import ExtractedBlock
+from .normalize import read_text_file
 
 # RTF is plain text wrapped in control words: {\rtf1\ansi ... \par Hello}.
 # A small regex pass is enough to leave the prose behind — no library,
@@ -15,7 +16,11 @@ _RTF_HEADER_GROUPS = {
     "colorschememapping", "latentstyles", "datastore", "xmlnstbl",
 }
 _RTF_GROUP_START = re.compile(r"\{\\(\*\\)?([a-zA-Z]+)")
-_RTF_HEX = re.compile(r"\\'[0-9a-fA-F]{2}")
+_RTF_HEX = re.compile(r"\\'([0-9a-fA-F]{2})")
+# \uN is a signed 16-bit code point followed by one fallback character
+# (\uc1, the default; a \'hh escape counts as one) for readers without Unicode.
+# ponytail: \ucN other than 1 is not honoured.
+_RTF_UNICODE = re.compile(r"\\u(-?\d+) ?(?:\\'[0-9a-fA-F]{2}|[^\\{}\r\n])?")
 _RTF_PARAGRAPH = re.compile(r"\\(?:par|line|tab)\b")
 _RTF_CONTROL = re.compile(r"\\[a-zA-Z]+-?\d* ?")
 
@@ -46,7 +51,9 @@ def _drop_rtf_groups(content: str) -> str:
 
 def _strip_rtf(content: str) -> str:
     content = _drop_rtf_groups(content)
-    content = _RTF_HEX.sub(" ", content)
+    content = _RTF_UNICODE.sub(lambda m: chr(int(m.group(1)) % 0x10000), content)
+    content = content.encode("utf-16", "surrogatepass").decode("utf-16", "replace")  # a surrogate pair of escapes -> one character
+    content = _RTF_HEX.sub(lambda m: bytes([int(m.group(1), 16)]).decode("cp1252", "replace"), content)
     content = _RTF_PARAGRAPH.sub("\n", content)
     content = _RTF_CONTROL.sub("", content)
     return content.replace("{", "").replace("}", "")
@@ -55,13 +62,11 @@ def _strip_rtf(content: str) -> str:
 def extract_text_file(path: Path) -> list[ExtractedBlock]:
     """Plain TXT/Markdown — and, since 2026-09-20, source code, config
     files and RTF: no page numbers or headings to preserve, so the whole
-    file is one block. Falls back to latin-1 if a file isn't valid UTF-8
-    rather than crashing the whole indexing job over one bad file.
+    file is one block. A byte-order mark picks UTF-16/32, and a file that
+    isn't valid UTF-8 falls back to Windows-1252 rather than crashing the
+    whole indexing job over one bad file.
     """
-    try:
-        content = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        content = path.read_text(encoding="latin-1")
+    content = read_text_file(path)
 
     if path.suffix.lower() == ".rtf":
         content = _strip_rtf(content)

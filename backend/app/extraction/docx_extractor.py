@@ -62,13 +62,13 @@ def extract_docx(path: Path) -> list[ExtractedBlock]:
             continue
 
         style_name = (item.style.name if item.style else "") or ""
+        # The heading's own text is also a block: the indexer only searches
+        # block text, so a heading kept as a tag alone could never be found.
         if style_name == "Heading 1" or style_name == "Title":
             current_section = text
             current_heading = None
-            continue
-        if style_name.startswith("Heading"):
+        elif style_name.startswith("Heading"):
             current_heading = text
-            continue
 
         blocks.append(
             ExtractedBlock(text=text, page_number=None, heading=current_heading, section=current_section)

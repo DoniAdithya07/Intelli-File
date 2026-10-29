@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { describeError, formatTimestamp, searchVisual, suggestVisual, VisualKind, VisualSearchResult } from "../backend";
 import { Notify, useActions } from "../lib/actions";
 import { useStatusBar } from "../shell/ctx";
@@ -59,7 +59,7 @@ export function PhotosPage({ query, run, engineReady, photoCount, videoCount, av
   // Another query, Enter, or another kind cancels the search in flight; its reply is ignored.
   useEffect(() => {
     if (!text) { setResults(null); setSearching(false); return; }
-    if (!available || !engineReady) return;
+    if (!available || !engineReady) { setSearching(false); return; }
     const ctl = new AbortController();
     setSearching(true);
     onError(null);
@@ -85,6 +85,10 @@ export function PhotosPage({ query, run, engineReady, photoCount, videoCount, av
     return { strong: order(shown.filter((r) => r.confidence !== "weak")), weak: order(shown.filter((r) => r.confidence === "weak")) };
   }, [results, kind, by]);
   const total = strong.length + weak.length;
+  useEffect(() => { if (total === 0) setSelected((s) => (s.length ? [] : s)); }, [total]);  // the grids are gone, so is their selection
+  // Each grid keeps its own selection: picking in one resets the other (a new key remounts it empty).
+  const [gridKeys, setGridKeys] = useState({ strong: 0, weak: 0 });
+  const activeGrid = useRef<"strong" | "weak">("strong");
   const px = SIZES[size];
 
   useStatusBar({ left: searching ? "Searching..." : results ? `${total} result${total === 1 ? "" : "s"}${elapsed !== null ? ` in ${Math.round(elapsed)} ms` : ""}${selected.length ? `   ${selected.length} selected` : ""}` : `${photoCount.toLocaleString()} photos and ${videoCount.toLocaleString()} videos indexed`, busy: searching });
@@ -106,10 +110,14 @@ export function PhotosPage({ query, run, engineReady, photoCount, videoCount, av
     </div>
   );
   const grid = (list: VisualSearchResult[], isWeak: boolean, label: string) => (
-    <FileGrid label={label} items={list.map((r) => ({ key: `${r.file_id}:${r.timestamp_offset_seconds ?? ""}`, data: r }))} columns={`repeat(auto-fill, ${px + 8}px)`} gap={8}
+    <FileGrid key={isWeak ? gridKeys.weak : gridKeys.strong} label={label} items={list.map((r) => ({ key: `${r.file_id}:${r.timestamp_offset_seconds ?? ""}`, data: r }))} columns={`repeat(auto-fill, ${px + 8}px)`} gap={8}
       tileLabel={(r) => `${r.filename}, ${dateOf(r)}${isWeak ? ", possible match" : ""}`} getName={(r) => r.filename}
       onOpen={(r) => openResult(r.path, (m) => onError(m), r.file_id)} onReveal={(r) => revealResult(r.path, (m) => onError(m), r.file_id)}
-      onCopyPaths={(rows) => actions.copyPaths(rows.map(entry))} onContext={onContext} onSelection={setSelected} renderTile={(r) => tile(r, isWeak)} />
+      onCopyPaths={(rows) => actions.copyPaths(rows.map(entry))} onContext={onContext} onSelection={(rows) => {
+        setSelected(rows);
+        const me = isWeak ? "weak" : "strong";
+        if (rows.length && activeGrid.current !== me) { activeGrid.current = me; setGridKeys((k) => (isWeak ? { ...k, strong: k.strong + 1 } : { ...k, weak: k.weak + 1 })); }
+      }} renderTile={(r) => tile(r, isWeak)} />
   );
 
   const one = selected.length === 1 ? selected[0] : null;

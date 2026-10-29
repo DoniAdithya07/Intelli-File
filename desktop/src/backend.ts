@@ -40,7 +40,9 @@ export function setEngineStopped(stopped: boolean): void {
 }
 
 /** True when a request failed because the engine could not be reached at all: the sidebar already says so. */
-export const engineUnreachable = (e: unknown) => e instanceof TypeError && /fetch|network/i.test(e.message); // not a programming TypeError
+export const engineUnreachable = (e: unknown) =>
+  (e instanceof TypeError && /fetch|network/i.test(e.message)) // not a programming TypeError
+  || (e instanceof DOMException && e.name === "TimeoutError"); // a poll that got no answer in time
 
 /** A connection failure (engine not up yet, or gone) reads as a sentence, not "TypeError: Failed to fetch". */
 export function describeError(e: unknown, path = ""): string {
@@ -84,7 +86,7 @@ export interface HealthResponse {
   status: string;
   app_data_dir: string;
 }
-export const checkBackendHealth = () => getJson<HealthResponse>("/health");
+export const checkBackendHealth = () => getJson<HealthResponse>("/health", undefined, AbortSignal.timeout(5000));
 
 // ---- search ----
 export type SearchMode = "auto" | "smart" | "exact" | "keyword";
@@ -281,7 +283,7 @@ export interface StatusResponse {
   // Problems found while the engine started, as sentences for the user.
   startup_problems?: string[];
 }
-export const getStatus = () => getJson<StatusResponse>("/status");
+export const getStatus = () => getJson<StatusResponse>("/status", undefined, AbortSignal.timeout(5000));
 
 // Whether voice works does not change while the engine runs: asked once, on first use.
 let voiceReady: Promise<boolean> | null = null;

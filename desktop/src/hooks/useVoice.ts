@@ -11,6 +11,7 @@ export function useVoice(onText: (text: string, heard?: string | null, suggestio
   const [level, setLevel] = useState(0);
   const recorderRef = useRef<Recorder | null>(null);
   const mounted = useRef(true);
+  const starting = useRef(false);  // a second click during the availability check or warm-up must not start a second recorder
 
   // Leaving the page (or the overlay being hidden) must turn the microphone off.
   useEffect(() => {
@@ -31,6 +32,9 @@ export function useVoice(onText: (text: string, heard?: string | null, suggestio
 
   const toggle = useCallback(async () => {
     if (state === "idle") {
+      if (starting.current) return;
+      starting.current = true;
+      try {
       if (!(await voiceAvailable())) { onError(VOICE_MISSING); return; }
       setState("warming");
       try {
@@ -44,6 +48,7 @@ export function useVoice(onText: (text: string, heard?: string | null, suggestio
         setState("idle");
         onError(e instanceof Error ? `Couldn't access the microphone: ${e.message}` : "Couldn't access the microphone.");
       }
+      } finally { starting.current = false; }
       return;
     }
     if (state === "recording" && recorderRef.current) {
