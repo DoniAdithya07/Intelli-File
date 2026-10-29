@@ -1,8 +1,10 @@
 import logging
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Request, Response
 
+from ..files.browsing import covered_by
 from ..indexing import CHUNKS_TABLE
 from ..paths import sample_folder
 from ..services.missing_files import explain_missing
@@ -78,7 +80,13 @@ def sample_folder_endpoint():
 
 def _is_indexed_file(state, file_path: Path) -> bool:
     record = state.indexer.file_record_store.get_by_path(str(file_path), ignore_case=True)
-    return record is not None and not record.deleted and file_path.is_file()
+    if record is None or record.deleted or not file_path.is_file():
+        return False
+    # A symlink inside a watched folder must not expose a file outside every
+    # watched root (browsing.py's check_browse_path already guards junctions
+    # the same way; file-serving had no equivalent check — 2026-10-29 review).
+    roots = [os.path.normcase(os.path.normpath(r)) for r in state.live_indexing.roots()]
+    return covered_by(os.path.realpath(file_path), roots)
 
 
 @router.get("/is-indexed")

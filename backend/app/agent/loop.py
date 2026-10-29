@@ -51,6 +51,24 @@ def says_no_answer(answer: str) -> bool:
     """True when the answer's opening sentence says the sources hold no answer."""
     opening = re.split(r"(?<=[.!?])\s", answer.strip(), maxsplit=1)[0]
     return _NO_ANSWER_RE.search(opening) is not None or re.search(r"\b(?:cannot|can't|can not) be (?:determined|answered|found) from\b", opening, re.I) is not None
+
+
+# A small model sometimes writes the sentence shape but leaves the value itself
+# out, e.g. "The date VMBox was added to the laptop is ." (found in use
+# 2026-10-29, asking a date no retrieved source actually states). Citations and
+# number-checks both pass: nothing numeric was even claimed, so there is
+# nothing to verify against the sources. Caught instead by the sentence's own
+# shape: its last word, ignoring trailing punctuation, is a linking verb,
+# article or preposition with nothing after it to link to — a real answer
+# never ends there.
+_INCOMPLETE_RE = re.compile(r"\b(?:is|was|are|were|the|a|an|of|on|at|in|to|for|by|from)[\s.!?]*$", re.I)
+
+
+def _answer_incomplete(answer: str) -> bool:
+    """True when the answer's last word is a linking verb, article or
+    preposition with nothing after it — the model wrote the shape of a
+    sentence and left the actual value blank."""
+    return bool(_INCOMPLETE_RE.search(answer.strip()))
 from .tools import Toolbox
 
 logger = logging.getLogger(__name__)
@@ -455,7 +473,12 @@ class Agent:
         if no_answer:
             yield {"type": "thought", "text": "the model said the sources do not answer the question, so no answer is given", "system": True}
             valid = []
-        not_found = "couldn't find that" in text.lower() or len(body.split()) < 3 or no_answer
+        # A short body ("No .", "250 euros.") is only a sign of a degenerate,
+        # answerless output when nothing actually grounds it — a terse but
+        # correctly-cited answer must not be forced ungrounded by word count
+        # alone (found in review 2026-10-29: "No [1]." -> body "No ." -> 2
+        # "words" -> wrongly marked not_found despite a valid citation).
+        not_found = "couldn't find that" in text.lower() or (len(body.split()) < 3 and not valid) or no_answer or _answer_incomplete(body)
         inferred = False
         if not valid and not not_found and supported:
             valid = supported

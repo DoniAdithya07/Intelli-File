@@ -34,4 +34,13 @@ def extract_captured_at(path: Path) -> str:
     except Exception:
         # (2026-10-05) Was silent: the reason is now in the debug log.
         logger.debug("No EXIF capture date in %s; using the file's date", path, exc_info=True)
-    return datetime.fromtimestamp(path.stat().st_mtime).isoformat()
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime).isoformat()
+    except OSError:
+        # The file vanished or moved between discovery and this read (the
+        # live watcher runs concurrently with scans; a cloud-only file can
+        # also be evicted mid-scan) -- this function is documented to never
+        # raise, so the fallback must have its own fallback (found in review
+        # 2026-10-29).
+        logger.debug("%s is gone by the time its date was read; using now", path, exc_info=True)
+        return datetime.now().isoformat()

@@ -29,6 +29,39 @@ struct BackendProblem(Mutex<Option<String>>);
 /// Whether Ctrl+Space was registered; the sidebar hides its hint when not.
 struct ShortcutOk(AtomicBool);
 
+/// A release build has no console (windows_subsystem = "windows" in main.rs)
+/// and the default panic hook's stderr write lands nowhere, so a panic before
+/// (or during) `Builder::build()` — no AppHandle exists yet, so shell_log
+/// can't be used — was completely invisible: the process just exits, "nothing
+/// happens when I double-click IntelliFile.exe," with no diagnostic trail
+/// (found in review 2026-10-29). Resolves the log path the same way
+/// logs_dir() does, but from the environment directly since no AppHandle may
+/// exist.
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        default_hook(info); // still useful in a dev build, which does have a console
+        let Ok(local) = std::env::var("LOCALAPPDATA") else { return };
+        let dir = std::path::Path::new(&local).join("IntelliFile").join("logs");
+        if std::fs::create_dir_all(&dir).is_err() {
+            return;
+        }
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("shell.log")) {
+            let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            let _ = writeln!(f, "{ts} PANIC: {info}");
+        }
+    }));
+}
+
+/// Recovers a poisoned lock instead of propagating the panic further: best
+/// effort cleanup (especially killing the backend process on exit) must not
+/// itself be blocked just because some unrelated code panicked while
+/// holding this same mutex (found in review 2026-10-29 — every call site
+/// used `.lock().unwrap()`, which would instead panic again here).
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn new_token() -> String {
     // 128 bits straight from the operating system's random generator.
     let mut bytes = [0u8; 16];
@@ -134,7 +167,7 @@ async fn open_indexed_path(app: tauri::AppHandle, state: tauri::State<'_, ApiTok
         return Err("IntelliFile only opens documents, images, audio and video.".into());
     }
     // Port 8756 belongs to some other program: never hand it the token.
-    if app.state::<BackendProblem>().0.lock().unwrap().as_deref() == Some(PORT_TAKEN) {
+    if lock(&app.state::<BackendProblem>().0).as_deref() == Some(PORT_TAKEN) {
         return Err(PORT_TAKEN.into());
     }
     // The check is a blocking TCP call: run it on a worker thread, not the main one.
@@ -152,7 +185,7 @@ async fn open_indexed_path(app: tauri::AppHandle, state: tauri::State<'_, ApiTok
 #[tauri::command]
 fn api_token(state: tauri::State<ApiToken>, problem: tauri::State<BackendProblem>) -> String {
     // With the port held by another program, the web view sends it no token.
-    if problem.0.lock().unwrap().as_deref() == Some(PORT_TAKEN) {
+    if lock(&problem.0).as_deref() == Some(PORT_TAKEN) {
         return String::new();
     }
     state.0.clone()
@@ -160,7 +193,7 @@ fn api_token(state: tauri::State<ApiToken>, problem: tauri::State<BackendProblem
 
 #[tauri::command]
 fn backend_problem(state: tauri::State<BackendProblem>) -> Option<String> {
-    state.0.lock().unwrap().clone()
+    lock(&state.0).clone()
 }
 
 #[tauri::command]
@@ -172,7 +205,7 @@ const PORT_TAKEN: &str = "Port 8756 is used by another program. Close it (or res
 
 fn set_problem(app: &tauri::AppHandle, problem: String) {
     shell_log(app, &problem);
-    *app.state::<BackendProblem>().0.lock().unwrap() = Some(problem);
+    *lock(&app.state::<BackendProblem>().0) = Some(problem);
 }
 
 /// The last few non-empty lines of backend-console.log, read from its last 4 KB.
@@ -201,7 +234,7 @@ fn watch_backend(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
         let state = app.state::<Backend>();
-        let mut guard = state.0.lock().unwrap();
+        let mut guard = lock(&state.0);
         let Some(child) = guard.as_mut() else { return };
         match child.try_wait() {
             Ok(None) => {}
@@ -259,6 +292,14 @@ fn spawn_backend(app: &tauri::AppHandle, token: &str) -> Option<Child> {
     let exe = resources.join("backend").join(exe_name);
     if !exe.exists() {
         shell_log(app, &format!("no bundled backend at {} — assuming a dev server on port {}", exe.display(), BACKEND_PORT));
+        // In a dev build this is normal (the developer runs uvicorn by hand);
+        // in a release build there is no dev server to fall back on, so a
+        // missing exe must surface as a real problem, not silent "all is
+        // well" (found in review 2026-10-29 — unlike the two sibling
+        // branches below, this one never called set_problem).
+        if !cfg!(debug_assertions) {
+            set_problem(app, format!("The search engine is missing from this install ({}). Extract IntelliFile-windows.zip again.", exe.display()));
+        }
         return None;
     }
     // A program already listening on 8756 would get every request and the
@@ -282,13 +323,27 @@ fn spawn_backend(app: &tauri::AppHandle, token: &str) -> Option<Child> {
         }
     }
     // The backend's console output (uvicorn, tracebacks) goes to a file too.
+    // Stdio::inherit() used to be the fallback when the log file couldn't be
+    // opened (e.g. antivirus briefly locking it mid-scan — the exact "another
+    // program is using this file" failure this app has hit live). A release
+    // build has no console (windows_subsystem = "windows" in main.rs), so
+    // "inherit" means invalid/absent handles, and writing to those can crash
+    // the bundled backend on its first print — exactly when the one file that
+    // would explain why couldn't be opened either. Discard instead (found in
+    // review 2026-10-29).
     let (out, err) = match logs_dir(app).and_then(|d| std::fs::OpenOptions::new().create(true).append(true).open(d.join("backend-console.log")).ok()) {
         // Both streams: tracebacks go to stderr.
         Some(f) => match f.try_clone() {
             Ok(dup) => (Stdio::from(dup), Stdio::from(f)),
-            Err(_) => (Stdio::from(f), Stdio::inherit()),
+            Err(e) => {
+                shell_log(app, &format!("could not duplicate the backend log handle: {e}; stderr output this run is not captured"));
+                (Stdio::from(f), Stdio::null())
+            }
         },
-        None => (Stdio::inherit(), Stdio::inherit()),
+        None => {
+            shell_log(app, "could not open backend-console.log for this run (locked by another process?); backend output is not being captured");
+            (Stdio::null(), Stdio::null())
+        }
     };
     let mut cmd = Command::new(&exe);
     cmd.arg("--port")
@@ -323,6 +378,7 @@ fn spawn_backend(app: &tauri::AppHandle, token: &str) -> Option<Child> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    install_panic_hook();
     // A dev shell can share the token of a backend started by hand.
     #[cfg(debug_assertions)]
     let token = std::env::var("INTELLIFILE_API_TOKEN").ok().filter(|t| !t.is_empty()).unwrap_or_else(new_token);
@@ -397,7 +453,7 @@ pub fn run() {
             let token = app.state::<ApiToken>().0.clone();
             let child = spawn_backend(app.handle(), &token);
             let spawned = child.is_some();
-            *app.state::<Backend>().0.lock().unwrap() = child;
+            *lock(&app.state::<Backend>().0) = child;
             if spawned {
                 watch_backend(app.handle().clone());
             }
@@ -410,7 +466,7 @@ pub fn run() {
         if let RunEvent::Exit = event {
             // Take the backend down with the window; a stray server on
             // port 8756 would block the next launch.
-            if let Some(mut child) = app.state::<Backend>().0.lock().unwrap().take() {
+            if let Some(mut child) = lock(&app.state::<Backend>().0).take() {
                 let _ = child.kill();
                 let _ = child.wait();
             }

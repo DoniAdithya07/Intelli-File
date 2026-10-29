@@ -11,18 +11,20 @@ import { FileIcon } from "../ui/kit";
 
 // ---- kinds of file, filters and sort ----
 
-type TabId = "all" | "document" | "image" | "audio";
+type TabId = "all" | "document" | "image" | "audio" | "video";
 const TABS: { id: TabId; label: string }[] = [
   { id: "all", label: "All" },
   { id: "document", label: "Documents" },
   { id: "image", label: "Images" },
   { id: "audio", label: "Audio" },
+  { id: "video", label: "Videos" },
 ];
 // File types offered in Filter > Type, per tab.
 const TYPES: Record<Exclude<TabId, "all">, string[]> = {
   document: ["pdf", "docx", "pptx", "xlsx", "csv", "txt", "md", "html"],
   image: ["png", "jpg", "jpeg", "webp"],
   audio: ["mp3", "m4a", "wav", "flac"],
+  video: ["mp4", "mov", "mkv", "avi", "webm"],
 };
 const SIZES: { id: string; label: string; tokens: string[] }[] = [
   { id: "", label: "Any size", tokens: [] },
@@ -82,7 +84,7 @@ function reasonOf(r: SearchResult): { why: string; personal: string | null } {
 }
 function tabOf(r: SearchResult): Exclude<TabId, "all"> {
   const g = fileKind(r.filename).group;
-  return g === "image" ? "image" : g === "audio" ? "audio" : "document";
+  return g === "image" ? "image" : g === "audio" ? "audio" : g === "video" ? "video" : "document";
 }
 
 // ---- Filter popover ----
@@ -100,7 +102,7 @@ function FiltersPopover({ tab, filters, onChange, onClose }: { tab: TabId; filte
     ref.current?.querySelector<HTMLElement>("select, input")?.focus();
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey, true); };
   }, []);
-  const types = tab === "all" ? [...TYPES.document, ...TYPES.image, ...TYPES.audio] : TYPES[tab];
+  const types = tab === "all" ? [...TYPES.document, ...TYPES.image, ...TYPES.audio, ...TYPES.video] : TYPES[tab];
   const set = (k: keyof Filters) => (e: { currentTarget: { value: string } }) => onChange({ ...filters, [k]: e.currentTarget.value });
   const field = "mt-1 h-8 w-full rounded border border-rule-strong bg-field px-2 text-[14px] text-ink";
   return (
@@ -347,7 +349,7 @@ export function SearchPage({ query, folder, run, engineReady, folderCount, fileC
   const total = strong.length + weak.length;
 
   const counts = useMemo(() => {
-    const c = { document: 0, image: 0, audio: 0 };
+    const c = { document: 0, image: 0, audio: 0, video: 0 };
     (results ?? []).forEach((r) => { c[tabOf(r)]++; });
     return c;
   }, [results]);

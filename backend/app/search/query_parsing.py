@@ -143,6 +143,15 @@ def _parse_size(value: str) -> tuple[int | None, int | None]:
         return None, None
     op, number, unit = m.group(1) or ">", float(m.group(2)), (m.group(3) or "b").lower()
     n = int(number * _UNIT[unit])
+    # matches() below excludes an exact size_min/size_max match (it only knows
+    # strict > / <, matching bare `>`/`<`). `>=`/`<=` must still include the
+    # boundary itself, so shift it by the one byte that makes the strict
+    # check equivalent (found in review 2026-10-29: `size:>=10mb` excluded a
+    # file of exactly 10 MB).
+    if op == ">=":
+        n -= 1
+    elif op == "<=":
+        n += 1
     return (None, n) if op.startswith("<") else (n, None)
 
 

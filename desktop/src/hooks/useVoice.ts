@@ -35,7 +35,10 @@ export function useVoice(onText: (text: string, heard?: string | null, suggestio
       if (starting.current) return;
       starting.current = true;
       try {
-      if (!(await voiceAvailable())) { onError(VOICE_MISSING); return; }
+      if (!(await voiceAvailable())) { if (mounted.current) onError(VOICE_MISSING); return; }
+      // Unmounted (overlay closed, page changed) while the availability check was
+      // in flight: starting the mic now would have no UI to show it was ever on.
+      if (!mounted.current) return;
       setState("warming");
       try {
         const recorder = new Recorder();
@@ -45,8 +48,10 @@ export function useVoice(onText: (text: string, heard?: string | null, suggestio
         recorderRef.current = recorder;
         setState("recording");
       } catch (e) {
-        setState("idle");
-        onError(e instanceof Error ? `Couldn't access the microphone: ${e.message}` : "Couldn't access the microphone.");
+        if (mounted.current) {
+          setState("idle");
+          onError(e instanceof Error ? `Couldn't access the microphone: ${e.message}` : "Couldn't access the microphone.");
+        }
       }
       } finally { starting.current = false; }
       return;

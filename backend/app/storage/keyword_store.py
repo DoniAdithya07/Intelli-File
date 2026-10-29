@@ -132,7 +132,11 @@ class KeywordStore:
         if not terms:
             return []
         require = require or max(1, (len(terms) + 1) // 2)
-        expression = " OR ".join(f'"{t}"' for t in terms)
+        # A `"` in a term breaks FTS5's quoted-string syntax; escaped the same
+        # way _build_match_expression already does for the main query path
+        # (found in review 2026-10-29 -- this helper's only caller today
+        # can't produce one, but it is latent for any future caller).
+        expression = " OR ".join('"{}"'.format(t.replace('"', '""')) for t in terms)
         with self._lock:
             rows = self._conn.execute(
                 """

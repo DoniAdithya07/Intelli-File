@@ -154,8 +154,14 @@ class FileRecordStore:
         return found
 
     def upsert(self, record: FileRecord) -> None:
-        self._vacate_path(record.path, record.file_id)
+        # Vacating the path and inserting must happen under ONE lock hold:
+        # releasing the lock between them let two threads (the live watcher
+        # reconciling a brand-new file and a folder scan walking the same
+        # new folder) both see "nothing to vacate" for the same path and
+        # both INSERT, the second hitting the UNIQUE(path) constraint
+        # (IntegrityError, uncaught — found in review 2026-10-29).
         with self._lock:
+            self._vacate_path_locked(record.path, record.file_id)
             self._conn.execute(
                 """
                 INSERT INTO files (file_id, path, size, modified_time, hash, deleted, indexed, audio_only, speech_indexed)
@@ -186,22 +192,29 @@ class FileRecordStore:
             self.version += 1
 
     def _vacate_path(self, path: str, keep_file_id: str) -> None:
-        """Make `path` free for `keep_file_id`. `path` is UNIQUE, and a
-        tombstoned row keeps its path until cleanup purges it — so renaming
-        notes2.txt over a deleted notes.txt raised IntegrityError (found
-        2026-09-21; the exception then killed the watchdog thread and every
-        watched folder went quiet until restart). The row in the way is
-        tombstoned (it is not on disk under that path any more, whatever
+        """Public entry point for `rename()`: acquires the lock itself. See
+        `_vacate_path_locked` for what this does and why."""
+        with self._lock:
+            self._vacate_path_locked(path, keep_file_id)
+
+    def _vacate_path_locked(self, path: str, keep_file_id: str) -> None:
+        """Make `path` free for `keep_file_id`. Caller must already hold
+        `self._lock` (so this can be composed with other locked work, e.g.
+        the INSERT in `upsert`, as one atomic operation). `path` is UNIQUE,
+        and a tombstoned row keeps its path until cleanup purges it — so
+        renaming notes2.txt over a deleted notes.txt raised IntegrityError
+        (found 2026-09-21; the exception then killed the watchdog thread and
+        every watched folder went quiet until restart). The row in the way
+        is tombstoned (it is not on disk under that path any more, whatever
         its state) and parked under a path no real file can have, so
         cleanup still finds it by file_id and purges its chunks."""
-        with self._lock:
-            row = self._conn.execute("SELECT file_id FROM files WHERE path = ?", (path,)).fetchone()
-            if row is None or row["file_id"] == keep_file_id:
-                return
-            parked = f"{path}\x00{row['file_id']}"
-            self._conn.execute("UPDATE files SET path = ?, deleted = 1 WHERE file_id = ?", (parked, row["file_id"]))
-            self._conn.commit()
-            self.version += 1
+        row = self._conn.execute("SELECT file_id FROM files WHERE path = ?", (path,)).fetchone()
+        if row is None or row["file_id"] == keep_file_id:
+            return
+        parked = f"{path}\x00{row['file_id']}"
+        self._conn.execute("UPDATE files SET path = ?, deleted = 1 WHERE file_id = ?", (parked, row["file_id"]))
+        self._conn.commit()
+        self.version += 1
 
     def rename(self, old_path: str, new_path: str) -> FileRecord | None:
         """Update the path for the record at old_path (used for RENAME/MOVED

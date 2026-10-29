@@ -10,6 +10,7 @@ is a sourdough recipe inside).
 """
 
 import re
+import unicodedata
 from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,14 @@ from .spelling import _levenshtein
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _TYPED_EXTENSION_RE = re.compile(r"[a-z0-9]\.([a-z0-9]{1,5})(?![a-z0-9])")
+
+
+def _fold(text: str) -> str:
+    """Without accents, matching how search/service.py folds the content
+    index ("café" -> "cafe") — otherwise the regex below splits "café" into
+    "caf" and a query for "cafe resume" never finds "Café résumé...".
+    """
+    return "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
 
 # Words that carry no filename signal in a spoken/typed request:
 # "open the abhisek plan file" should match on "abhisek" and "plan" only.
@@ -41,7 +50,7 @@ _GENERIC_NAME_WORDS = {
 
 
 def _tokens(text: str) -> list[str]:
-    return _TOKEN_RE.findall(text.lower())
+    return _TOKEN_RE.findall(_fold(text).lower())
 
 
 @lru_cache(maxsize=262144)

@@ -329,6 +329,8 @@ class LiveIndexing:
                 return  # forgotten while this job was being hashed
             if existing is not None and existing.hash == file_hash and existing.indexed and not existing.deleted:
                 return
+            if path not in self.watcher.watched_files:
+                return  # forgotten between the hash check above and the write below (found in review 2026-10-29)
             record = build_file_record(p, file_id=existing.file_id if existing else None, file_hash=file_hash, indexed=False)
             store.upsert(record)
             self.job_queue.submit(Job(kind="index", path=str(p), file_id=record.file_id))
