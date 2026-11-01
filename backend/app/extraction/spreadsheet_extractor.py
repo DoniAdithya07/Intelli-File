@@ -11,6 +11,7 @@ input) — openpyxl's data_only=True returns the values Excel last cached.
 """
 
 import csv
+import io
 from pathlib import Path
 
 from .blocks import ExtractedBlock
@@ -61,7 +62,13 @@ def extract_delimited(path: Path) -> list[ExtractedBlock]:
         except csv.Error:
             delimiter = ","
 
-    reader = csv.reader(raw.splitlines(), delimiter=delimiter)
+    # DEFECT-003 fix (2026-11-02): csv.reader needs the raw multi-line text
+    # as one stream to reassemble a quoted field's embedded newline — fed
+    # a pre-split list of lines (str.splitlines()), it silently lost the
+    # newline and tore a multiline cell across two "rows" instead. io.StringIO
+    # gives it the real file structure, the way the stdlib docs expect it
+    # to be used (an open file object or equivalent).
+    reader = csv.reader(io.StringIO(raw), delimiter=delimiter)
     text = _rows_to_text(reader)
     return [ExtractedBlock(text=text)] if text else []
 

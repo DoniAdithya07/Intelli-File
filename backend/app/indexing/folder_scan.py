@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from ..files.discovery import (
-    AUDIO_EXTENSIONS, DATA_CODE_CHUNK_CAP, IMAGE_EXTENSIONS, LONG_PATH_REASON, MAX_PATH, SUPPORTED_EXTENSIONS, VIDEO_EXTENSIONS, VISUAL_EXTENSIONS,
-    chunk_cap, discover_files, long_paths_enabled, permission_hint,
+    AUDIO_EXTENSIONS, DATA_CODE_CHUNK_CAP, IMAGE_EXTENSIONS, LONG_PATH_REASON, MAX_DOCUMENT_FILE_BYTES, MAX_PATH, SUPPORTED_EXTENSIONS, VIDEO_EXTENSIONS,
+    VISUAL_EXTENSIONS, chunk_cap, discover_files, long_paths_enabled, permission_hint,
 )
 from ..files.identity import ONLINE_ONLY_REASON, OnlineOnlyFile, build_file_record, compute_file_hash
 from ..files.media import audio_only_or_none, has_audio_stream
@@ -121,6 +121,7 @@ def index_folder(
     record_store = indexer.file_record_store
     folder_prefix = inside_prefix(folder)  # same form discover_files yields
     skipped = SKIPPED[folder] = Counter()  # live: the Status screen reads it while the scan runs
+    stats = SCAN_STATS[folder] = Counter()  # live: new/modified/renamed/unchanged found this scan
 
     # An unplugged drive or an offline network share (2026-10-04): with the
     # folder missing the walk saw nothing, and the purge below deleted every
@@ -171,7 +172,7 @@ def index_folder(
         with guard:
             if cancelled is not None and cancelled():
                 return count
-            count, failed = _scan_one(indexer, visual_indexer, path, record_store, count, failed, force, skipped, video_speech)
+            count, failed = _scan_one(indexer, visual_indexer, path, record_store, count, failed, force, skipped, video_speech, stats)
         if throttle is not None and count > before:
             pause = throttle()
             if pause > 0:
@@ -189,6 +190,7 @@ def index_folder(
             if record.path.startswith(folder_prefix) and record.path not in seen and not record.path.startswith(tuple(unlistable)):
                 record_store.mark_deleted(record.path)
                 note_removal(record.path)
+                stats["deleted"] += 1
         cleanup_tombstones(indexer, visual_indexer=visual_indexer)
     if skipped:
         logger.info("scan of %s skipped %s", folder, dict(skipped))
@@ -200,6 +202,16 @@ def index_folder(
 # The last few failures with their reason, for the Status screen (Phase 11).
 RECENT_FAILURES: list[dict] = []
 MAX_RECENT_FAILURES = 20
+# DEFECT-002 fix (2026-11-02): compute_file_hash() and the extraction read
+# inside indexer.index_file()/visual_indexer.index_visual_file() are two
+# separate reads of the file, not one atomic read — if the file's bytes
+# change between them, the hash recorded for it would describe content
+# different from what was actually extracted and indexed, and the
+# mismatch never self-heals. _scan_one() re-hashes after extraction and
+# retries with the fresh hash up to this many times before giving up and
+# leaving the file for the next scan, rather than ever commit a hash that
+# doesn't match what was indexed.
+MAX_RACE_RETRIES = 3
 # Content hashes that failed extraction in this process: a corrupt PDF is
 # still corrupt on the next scan, so it is counted again but not re-parsed
 # (and not re-logged) until its bytes change or a forced re-index.
@@ -210,6 +222,11 @@ FAILED_HASHES: dict[str, str] = {}
 # files than it holds says why (2026-10-04).
 SKIPPED: dict[str, Counter] = {}
 SKIP_KINDS = ("too_large", "online_only", "path_too_long")
+# What changed on disk since the last scan of this folder, for the Status
+# screen's "fresh scan" summary (new/modified/renamed files found, files
+# gone, and how many were already up to date) — not failures, see SKIPPED.
+SCAN_STATS: dict[str, Counter] = {}
+SCAN_STAT_KINDS = ("new", "modified", "renamed", "unchanged", "deleted")
 # The last few skipped files with their reason, scan and watcher alike. Kept
 # out of RECENT_FAILURES (2026-10-05): ten skipped videos pushed every real
 # failure off the Status screen's list.
@@ -453,10 +470,10 @@ def _reclassify_legacy_video(visual_indexer, path: Path, existing, record_store)
     return record_store.get_by_path(str(path)), audio_only
 
 
-def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, failed: int, force: bool, skipped: Counter | None = None, video_speech: Callable[[], bool] | None = None) -> tuple[int, int]:
+def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, failed: int, force: bool, skipped: Counter | None = None, video_speech: Callable[[], bool] | None = None, stats: Counter | None = None) -> tuple[int, int]:
     """One file of the scan: skip if unchanged, detect a rename, otherwise
     (re-)index. Returns the updated (count, failed); files left alone on
-    purpose are counted in `skipped`."""
+    purpose are counted in `skipped`, and new/modified/renamed/unchanged in `stats`."""
     existing = record_store.get_by_path(str(path))
     if not path.exists():
         # Vanished between the walk and now (deleted or moved mid-index).
@@ -467,15 +484,39 @@ def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, fai
             and existing.audio_only is None and path.suffix.lower() in VIDEO_EXTENSIONS):
         existing, force_audio = _reclassify_legacy_video(visual_indexer, path, existing, record_store)
         force = force or force_audio
-    # Fast path (2026-09-21): a file whose size and mtime both match its
-    # record has not changed — skip reading it. Before this every launch
-    # re-hashed every byte of every watched file (a folder of videos =
-    # gigabytes read just to confirm nothing happened). The hash is
-    # still computed for anything new, touched or forced.
-    if existing is not None and not existing.deleted and existing.indexed and not force and _unchanged_by_stat(path, existing):
+    # Fast path (2026-09-21, narrowed 2026-11-02 — DEFECT-001): for a file
+    # above MAX_DOCUMENT_FILE_BYTES (audio/video, uncapped — can be
+    # gigabytes), size+mtime both matching its record is trusted as
+    # unchanged without reading it, same as before this fix. Before the
+    # 2026-09-21 change, every launch re-hashed every byte of every watched
+    # file (a folder of videos = gigabytes read just to confirm nothing
+    # happened).
+    #
+    # Bounded-size files (<= MAX_DOCUMENT_FILE_BYTES, i.e. everything that
+    # isn't audio/video) are cheap to hash outright, so they skip this
+    # shortcut and always fall through to the hash comparison below
+    # instead. DEFECT-001 (2026-11-02, found in QA): stat alone cannot
+    # distinguish "truly unchanged" from "different bytes, same size and
+    # mtime" — a same-length edit followed by a tool that restores the
+    # original mtime (cp -p, robocopy /COPYALL, some backup/restore and
+    # sync tools) was silently never re-indexed, serving stale search
+    # results with no error anywhere. Hashing a file up to the document
+    # cap costs milliseconds, so always doing it closes the gap for every
+    # file type that could plausibly trigger it.
+    #
+    # ponytail: audio/video files above the cap still trust stat alone, so
+    # a same-size-same-mtime content swap on a multi-GB video would still
+    # be missed. Upgrading that case (e.g. a sampled/rolling hash) would
+    # cost real I/O on every scan of a large media library; not worth it
+    # until it's a real report, since the realistic triggers (file sync/
+    # backup tools) apply just as much to documents, which this fix covers.
+    if (existing is not None and not existing.deleted and existing.indexed and not force
+            and existing.size > MAX_DOCUMENT_FILE_BYTES and _unchanged_by_stat(path, existing)):
         if speech_pending(indexer, existing, path, video_speech):
             with reading(path, existing.hash):
                 index_video_speech(indexer, path, record_store, existing.file_id)
+        if stats is not None:
+            stats["unchanged"] += 1
         return count + 1, failed
     try:
         current_hash = compute_file_hash(path)
@@ -495,6 +536,8 @@ def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, fai
         if speech_pending(indexer, existing, path, video_speech):
             with reading(path, existing.hash):
                 index_video_speech(indexer, path, record_store, existing.file_id)
+        if stats is not None:
+            stats["unchanged"] += 1
         return count + 1, failed
     if current_hash in POISONED and not force:
         # The app died reading these bytes: normal scans skip them. Re-index
@@ -518,40 +561,74 @@ def _scan_one(indexer, visual_indexer, path: Path, record_store, count: int, fai
         if twin is not None and not Path(twin.path).exists():
             record_store.rename(twin.path, str(path))
             note_removal(twin.path, moved_to=str(path))
+            if stats is not None:
+                stats["renamed"] += 1
             return count + 1, failed
 
-    try:
-        record = build_file_record(path, file_id=existing.file_id if existing else None, file_hash=current_hash, indexed=False)
-    except OSError as e:
-        _note_failure(path, e)
-        return count, failed + 1
-    record_store.upsert(record)
-    try:
-        with reading(path, record.hash):
-            if uses_visual_pipeline(visual_indexer, path, record, record_store):
-                visual_indexer.index_visual_file(path, record.file_id, record.hash)
-                _index_image_text(indexer, path, record.file_id)
-                if speech_wanted(indexer, path, video_speech):
-                    index_video_speech(indexer, path, record_store, record.file_id)
+    is_new = existing is None
+    attempt_hash = current_hash
+    record = None
+    for attempt in range(MAX_RACE_RETRIES):
+        try:
+            record = build_file_record(path, file_id=existing.file_id if existing else None, file_hash=attempt_hash, indexed=False)
+        except OSError as e:
+            _note_failure(path, e)
+            return count, failed + 1
+        record_store.upsert(record)
+        try:
+            with reading(path, record.hash):
+                if uses_visual_pipeline(visual_indexer, path, record, record_store):
+                    visual_indexer.index_visual_file(path, record.file_id, record.hash)
+                    _index_image_text(indexer, path, record.file_id)
+                    if speech_wanted(indexer, path, video_speech):
+                        index_video_speech(indexer, path, record_store, record.file_id)
+                else:
+                    indexer.index_file(path, record.file_id, record.hash, replace=existing is not None)
+            # DEFECT-002 fix (2026-11-02): confirm the bytes extraction
+            # actually read still match the hash just stored. If the file
+            # changed again during the read, the stored hash would
+            # otherwise describe content that was never really indexed,
+            # and nothing would catch it later — re-hash and try again
+            # with the fresh value instead.
+            post_hash = compute_file_hash(path)
+        except Exception as e:
+            # One unreadable file (password-protected PDF, truncated audio)
+            # must not abort the whole folder; it is counted and shown on
+            # the Status screen as "failed / skipped". Its record must not
+            # keep the NEW hash, or the next scan would see "unchanged" and
+            # never retry (2026-09-21): restore the previous record (its old
+            # chunks are still there — the indexer no longer deletes them
+            # before extraction succeeds) or drop a never-indexed file.
+            logger.exception("Failed to index %s", path)
+            _note_failure(path, e, attempt_hash)
+            failed += 1
+            if existing is not None:
+                record_store.upsert(existing)
             else:
-                indexer.index_file(path, record.file_id, record.hash, replace=existing is not None)
-        record_store.mark_indexed(record.file_id)
-    except Exception as e:
-        # One unreadable file (password-protected PDF, truncated audio)
-        # must not abort the whole folder; it is counted and shown on
-        # the Status screen as "failed / skipped". Its record must not
-        # keep the NEW hash, or the next scan would see "unchanged" and
-        # never retry (2026-09-21): restore the previous record (its old
-        # chunks are still there — the indexer no longer deletes them
-        # before extraction succeeds) or drop a never-indexed file.
-        logger.exception("Failed to index %s", path)
-        _note_failure(path, e, current_hash)
-        failed += 1
-        if existing is not None:
-            record_store.upsert(existing)
-        else:
-            # Never successfully indexed, so this is bookkeeping (drop the
-            # half-written record), not a real deletion of an existing file.
-            record_store.mark_deleted(record.path, log_as_deleted=False)
+                # Never successfully indexed, so this is bookkeeping (drop the
+                # half-written record), not a real deletion of an existing file.
+                record_store.mark_deleted(record.path, log_as_deleted=False)
+            return count + 1, failed
+        if post_hash == record.hash:
+            record_store.mark_indexed(record.file_id)
+            if stats is not None:
+                stats["new" if is_new else "modified"] += 1
+            return count + 1, failed
+        logger.warning("%s changed again while being indexed (attempt %d/%d); re-reading", path, attempt + 1, MAX_RACE_RETRIES)
+        attempt_hash = post_hash
+
+    # The file would not hold still for MAX_RACE_RETRIES attempts: leave it
+    # as it was (or never-indexed) rather than commit a hash/content
+    # mismatch. A file changing this rapidly is unusual and, unlike a
+    # genuinely damaged file, transient — settled content should be tried
+    # again fresh next time, so content_hash is deliberately omitted here
+    # (unlike the extraction-failure branch above) to keep this latest
+    # hash out of FAILED_HASHES.
+    _note_failure(path, RuntimeError(f"{path.name} kept changing while being indexed; it will be retried"))
+    failed += 1
+    if existing is not None:
+        record_store.upsert(existing)
+    else:
+        record_store.mark_deleted(record.path, log_as_deleted=False)
     return count + 1, failed
 

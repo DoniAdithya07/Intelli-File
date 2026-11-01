@@ -188,7 +188,17 @@ def main():
         semi_path = workdir / "euro.csv"
         semi_path.write_text("name;city\nMarta;Lisbon\n")
         assert "Marta Lisbon" in extract_document(semi_path)[0].text, "semicolon delimiter should be sniffed"
-        print("11. CSV extraction (header kept, rows intact, delimiter sniffed): OK")
+        # DEFECT-003 (2026-11-02): a quoted cell with an embedded newline
+        # (Excel "Wrap Text" exports, multi-line notes/addresses) used to be
+        # torn across two rows with its newline silently dropped, because
+        # csv.reader was fed a pre-split list of lines instead of the raw
+        # text stream it needs to reassemble a quoted multiline field.
+        multiline_path = workdir / "notes.csv"
+        multiline_path.write_text('Name,Note\nAlice,"Line one\nLine two"\nBob,ok\n')
+        multiline_text = extract_document(multiline_path)[0].text
+        assert "Line one\nLine two" in multiline_text or "Line one Line two" in multiline_text, f"multiline cell content lost or mangled: {multiline_text!r}"
+        assert "Bob ok" in multiline_text, f"the row after a multiline cell must stay intact: {multiline_text!r}"
+        print("11. CSV extraction (header kept, rows intact, delimiter sniffed, multiline quoted cells preserved): OK")
 
         from openpyxl import Workbook
 

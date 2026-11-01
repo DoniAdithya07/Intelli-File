@@ -6,6 +6,7 @@ import { baseName, parentOf } from "./lib/format";
 import { useFavs } from "./lib/favorites";
 import { Location, sameLocation } from "./lib/nav";
 import { ActivityPage } from "./pages/ActivityPage";
+import { AgentManagerPage } from "./pages/AgentManagerPage";
 import { AskPage } from "./pages/AskPage";
 import { FolderPage } from "./pages/FolderPage";
 import { ForYouPage } from "./pages/ForYouPage";
@@ -290,11 +291,12 @@ function App() {
             available={status?.features?.photos_videos !== false} notify={notify} onError={onError} onRunQuery={runQuery} preview={resultPreview} onPreview={setResultPreview} />
         </div>
       )}
-      {(location.kind === "foryou" || location.kind === "activity" || location.kind === "index" || location.kind === "settings" || location.kind === "help") && (
+      {(location.kind === "foryou" || location.kind === "activity" || location.kind === "index" || location.kind === "agents" || location.kind === "settings" || location.kind === "help") && (
         <div key={location.kind} className="anim-page min-h-0 flex-1 overflow-hidden px-6 py-5">
           {location.kind === "foryou" && <ForYouPage onError={onError} onSettings={() => navigate({ kind: "settings" })} />}
           {location.kind === "activity" && <ActivityPage onError={onError} />}
           {location.kind === "index" && <IndexPage status={status} onError={onError} refresh={refresh} />}
+          {location.kind === "agents" && <AgentManagerPage onError={onError} />}
           {location.kind === "settings" && <SettingsPage status={status} appDataDir={appDataDir} onError={onError} refresh={refresh} onOpen={(p) => navigate({ kind: p })} />}
           {location.kind === "help" && <HelpPage />}
         </div>

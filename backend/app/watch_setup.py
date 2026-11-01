@@ -21,7 +21,7 @@ from .files.jobs import Job, JobQueue
 from .files.service import FileWatchService
 from .indexing import Indexer, VisualIndexer, cleanup_tombstones, index_folder
 from .indexing import folder_scan
-from .indexing.folder_scan import POISONED, inside_prefix, RECENT_FAILURES, RECENT_SKIPS, SKIP_KINDS, SKIPPED, _index_image_text, _note_failure as note_failure, _note_skip as note_skip
+from .indexing.folder_scan import POISONED, inside_prefix, RECENT_FAILURES, RECENT_SKIPS, SCAN_STAT_KINDS, SCAN_STATS, SKIP_KINDS, SKIPPED, _index_image_text, _note_failure as note_failure, _note_skip as note_skip
 from .power import PowerMonitor, resource_mode
 
 logger = logging.getLogger(__name__)
@@ -436,6 +436,9 @@ class LiveIndexing:
         snapshot["skipped"] = {kind: counts.get(kind, 0) for kind in SKIP_KINDS}
         snapshot["recent_skips"] = [{"path": s["path"], "reason": s["reason"]} for s in RECENT_SKIPS[-10:]]
         snapshot["recovered_at_start"] = getattr(self, "recovered_at_start", 0)
+        # The fresh-scan summary: what changed on disk since the last launch.
+        scan_counts = SCAN_STATS.get(self.job.folder) or {}
+        snapshot["scan_stats"] = {kind: scan_counts.get(kind, 0) for kind in SCAN_STAT_KINDS}
         return snapshot
 
     # ----- folder management -----
