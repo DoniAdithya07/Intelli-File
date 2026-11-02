@@ -379,6 +379,26 @@ fn spawn_backend(app: &tauri::AppHandle, token: &str) -> Option<Child> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     install_panic_hook();
+    // Post-incident fix (2026-11-02, POST_INCIDENT_REMEDIATION_REPORT.md,
+    // section H #3): without this, every launch's WebView2 shares one
+    // profile folder (%LOCALAPPDATA%\com.intellifile.app\EBWebView),
+    // fixed by the Tauri app identifier alone — independent of
+    // INTELLIFILE_APP_DATA_DIR, which only ever isolates the *backend's*
+    // storage. Two incidents that day involved an app-data-isolated
+    // instance still reading real files; the exact trigger was never
+    // conclusively proven, but this shared WebView2 profile was a
+    // confirmed, real structural gap in the isolation story regardless
+    // of whether it was the specific cause. WebView2 reads
+    // WEBVIEW2_USER_DATA_FOLDER once, before its first window is
+    // created, so it must be set here, before tauri::Builder runs.
+    // Only takes effect when INTELLIFILE_APP_DATA_DIR is set (a real
+    // packaged app never sets this itself), so normal end-user launches
+    // keep today's exact profile location and behavior.
+    if let Ok(app_data_dir) = std::env::var("INTELLIFILE_APP_DATA_DIR") {
+        if !app_data_dir.is_empty() {
+            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", PathBuf::from(&app_data_dir).join("webview2"));
+        }
+    }
     // A dev shell can share the token of a backend started by hand.
     #[cfg(debug_assertions)]
     let token = std::env::var("INTELLIFILE_API_TOKEN").ok().filter(|t| !t.is_empty()).unwrap_or_else(new_token);

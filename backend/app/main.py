@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
     if DEV_TOKEN_GENERATED:
         # Printed to the console only, never to the log file.
         print(f"IntelliFile dev API token (send as X-IntelliFile-Token): {API_TOKEN}", flush=True)
-    logger.info("IntelliFile backend starting; log file %s; models %s; data %s", log_path, models_dir(), data_dir())
+    logger.info("IntelliFile backend starting; app-data dir %s; log file %s; models %s; data %s", dirs["root"], log_path, models_dir(), data_dir())
     if offline_guard.wanted():
         offline_guard.install()
         logger.warning("Offline guard ON: every non-loopback connection or DNS lookup will be refused and counted (/offline-guard).")
@@ -75,8 +75,19 @@ async def lifespan(app: FastAPI):
 
     # Visual search degrades gracefully, same as voice: with no CLIP model
     # installed the app still runs, just text-only — photos aren't
-    # discovered and /search-visual reports what's missing.
-    clip_model = ClipModel(CLIP_MODEL_DIR) if (CLIP_MODEL_DIR / "onnx").exists() else None
+    # discovered and /search-visual reports what's missing. The try/except
+    # (2026-11-02, DEFECT-010: found in failure-injection QA) covers a
+    # *present but corrupt* model file too, not just a missing one — a
+    # partial/corrupt extraction, antivirus quarantine, or disk error on
+    # just this one weight file used to take the whole backend down at
+    # startup (an unguarded onnxruntime parse failure), contradicting this
+    # very comment's own promise that the app still runs without it.
+    clip_model = None
+    if (CLIP_MODEL_DIR / "onnx").exists():
+        try:
+            clip_model = ClipModel(CLIP_MODEL_DIR)
+        except Exception:
+            logger.warning("CLIP model failed to load (corrupt or incompatible files?) — photo/video search is unavailable this run.", exc_info=True)
     visual_indexer = VisualIndexer(clip_model, vector_store, file_record_store) if clip_model else None
     if visual_indexer is not None and visual_indexer.reset_if_model_changed(dirs["config"]):
         logger.warning("Visual search model changed — photo index cleared; watched folders will be re-indexed.")
@@ -84,7 +95,12 @@ async def lifespan(app: FastAPI):
     app.state.indexer = indexer
     app.state.search_service = SearchService(model, vector_store, keyword_store, file_record_store)
     if (RERANKER_MODEL_DIR / "model.onnx").exists():
-        app.state.search_service.reranker = Reranker(RERANKER_MODEL_DIR)
+        # Same DEFECT-010 fix as CLIP above: a corrupt (not just missing)
+        # reranker file must not take down text search and Ask mode too.
+        try:
+            app.state.search_service.reranker = Reranker(RERANKER_MODEL_DIR)
+        except Exception:
+            logger.warning("Reranker model failed to load (corrupt or incompatible files?) — the hybrid+rerank tier runs without it.", exc_info=True)
     else:
         logger.warning("Reranker model not found (scripts/download_reranker_model.py) — the hybrid+rerank tier runs without it.")
     app.state.transcriber = transcriber
@@ -107,6 +123,15 @@ async def lifespan(app: FastAPI):
     # Live watching of every folder the user has indexed, resumed across
     # launches — see watch_setup.py for why this exists.
     live = LiveIndexing(indexer, visual_indexer, dirs["config"])
+    # DEFECT-007 follow-up (2026-11-02): wires the same realpath-containment
+    # check routes/files.py already had into search itself — found missing
+    # by independent security QA after the junction-escape fix. live.covers()
+    # is called fresh on every search (not snapshotted here), so adding or
+    # forgetting a folder or single file takes effect immediately, same as
+    # everywhere else that calls it.
+    app.state.search_service.is_covered_provider = live.covers
+    if app.state.visual_search_service is not None:
+        app.state.visual_search_service.is_covered_provider = live.covers
     # Phase 12: the file-access policy decided on first run. Nothing is
     # scanned while it is unset or denied; "all" adds the whole-computer
     # roots (with system folders pruned) on top of any picked folders.
@@ -139,6 +164,7 @@ async def lifespan(app: FastAPI):
         for root in whole_computer_roots():
             live.watch(root)
             live.enqueue(root)
+    logger.info("access mode: %s; watched roots at startup: %s", access.mode, live.roots())
 
     # Phase 17: the profile built from those events, feeding search
     # ranking and the recommendations. Honours the "personalize" setting.

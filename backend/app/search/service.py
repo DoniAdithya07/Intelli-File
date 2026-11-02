@@ -12,7 +12,7 @@ import re
 import time
 import unicodedata
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from ..embeddings.model import EmbeddingModel
 from ..indexing import CHUNKS_TABLE
@@ -222,6 +222,17 @@ class SearchService:
         # The bundled English list (None when missing): a common word is never
         # "corrected", and a query with no known word at all is not searched.
         self.dictionary = shared_dictionary()
+        # Set by the app once LiveIndexing exists (main.py). DEFECT-007
+        # follow-up (2026-11-02, found in independent security QA): a
+        # junction planted inside a watched folder could no longer get
+        # NEW content past the fixed folder scan, but search itself had no
+        # containment check at all — any record whose real path ever ended
+        # up outside every watched root (a pre-fix leftover, a future
+        # regression, a file-level symlink the scan doesn't check) was
+        # still fully searchable, with real content, through every tier.
+        # None here (e.g. in a script that builds a SearchService by hand)
+        # means no containment filtering — the same as before this fix.
+        self.is_covered_provider: Callable[[str], bool] | None = None
 
     def _is_word(self, word: str) -> bool:
         return self.dictionary is not None and self.dictionary.is_word(word)
@@ -258,13 +269,27 @@ class SearchService:
         return {"content": payload.get("content", ""), "page_number": payload.get("page_number")}
 
     def _active_records(self) -> list:
-        """Every active file record, reloaded only after the store changed.
-        Until 2026-09-21 each search re-read the whole table twice and
-        rebuilt the filename vocabulary from it."""
+        """Every active file record that is still covered by a watched
+        folder or an individually watched file. The record list itself is
+        cached, reloaded only after the store changed (until 2026-09-21
+        each search re-read the whole table twice and rebuilt the
+        filename vocabulary from it) — but the containment filter
+        (2026-11-02, DEFECT-007 follow-up) is applied fresh on every call,
+        not baked into the cached list: what's watched can change (a
+        folder or single file added or forgotten) without
+        `file_record_store.version` changing, so caching the filtered
+        result under that version alone would serve a stale containment
+        decision. This is the single place every tier that reads
+        `active_records` — metadata filter, filename matching, typo
+        vocabulary, routing — gets it from, so filtering here covers all
+        of them at once."""
         version = self.file_record_store.version
         if self._active_cache is None or self._active_cache[0] != version:
             self._active_cache = (version, self.file_record_store.list_active())
-        return self._active_cache[1]
+        records = self._active_cache[1]
+        if self.is_covered_provider is not None:
+            records = [r for r in records if self.is_covered_provider(r.path)]
+        return records
 
     def _correction_vocabulary(self, active_records) -> dict[str, int]:
         key = (self.file_record_store.version, self.keyword_store.version)  # read first: a change during the build must not be cached under the newer key
@@ -441,6 +466,15 @@ class SearchService:
     def _run_plan(self, plan: Plan, query_text: str, keyword_query_text: str, parsed, active_records, top_k: int, stages: list[dict]) -> list[dict]:
         allowed_file_ids = {r.file_id for r in active_records} if parsed.filters.any() else None
         scope = allowed_file_ids  # any filter looks deeper than the global top 20 (type:pdf must not depend on 20 other files ranking first)
+        # DEFECT-007 follow-up (2026-11-02): keyword_store.search()/vector_store.query()
+        # read their own tables directly, not through active_records — so without this,
+        # a record outside every watched root (see _active_records()) would still be
+        # fully searchable whenever the user's query had no explicit type:/in: filter
+        # (the common case, where `allowed_file_ids` above is None). Always applying
+        # this containment set — independent of `scope`/`allowed_file_ids`, which exist
+        # for folder-scoping performance, not security — closes that without touching
+        # the scope-expansion behaviour for an ordinary unscoped search.
+        covered_file_ids = {r.file_id for r in active_records}
 
         keyword_hits: list[dict] = []
         if plan.keyword and keyword_query_text:
@@ -455,6 +489,7 @@ class SearchService:
                 if content_words and len(content_words) < word_count:
                     keyword_hits = _fetch_in_scope(lambda n: self.keyword_store.search_terms(content_words, top_k=n), scope)
                     relaxed = bool(keyword_hits)
+            keyword_hits = [h for h in keyword_hits if h["file_id"] in covered_file_ids]
             if allowed_file_ids is not None:
                 keyword_hits = [h for h in keyword_hits if h["file_id"] in allowed_file_ids]
             stages.append({"stage": "keyword", "ms": _ms(t0), "hits": len(keyword_hits), **({"relaxed": True} if relaxed else {})})
@@ -467,6 +502,7 @@ class SearchService:
             query_vector = self.model.embed_queries([keyword_query_text])[0].tolist()
             raw_semantic = _fetch_in_scope(lambda n: self.vector_store.query(CHUNKS_TABLE, query_vector, top_k=n), scope)
             semantic_hits = [r for r in raw_semantic if r["score"] <= self.model.thresholds["relevance_cutoff"]]
+            semantic_hits = [h for h in semantic_hits if h["file_id"] in covered_file_ids]
             if allowed_file_ids is not None:
                 semantic_hits = [h for h in semantic_hits if h["file_id"] in allowed_file_ids]
             stages.append({"stage": "semantic", "ms": _ms(t0), "hits": len(semantic_hits)})

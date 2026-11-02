@@ -11,17 +11,19 @@ watch resumes on the next launch without the user re-picking anything.
 
 import json
 import logging
+import os
 import threading
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .files.browsing import covered_by
 from .files.discovery import IMAGE_EXTENSIONS, SUPPORTED_EXTENSIONS, VIDEO_EXTENSIONS, VISUAL_EXTENSIONS
 from .files.jobs import Job, JobQueue
 from .files.service import FileWatchService
 from .indexing import Indexer, VisualIndexer, cleanup_tombstones, index_folder
 from .indexing import folder_scan
-from .indexing.folder_scan import POISONED, inside_prefix, RECENT_FAILURES, RECENT_SKIPS, SKIP_KINDS, SKIPPED, _index_image_text, _note_failure as note_failure, _note_skip as note_skip
+from .indexing.folder_scan import POISONED, inside_prefix, RECENT_FAILURES, RECENT_SKIPS, SCAN_STAT_KINDS, SCAN_STATS, SKIP_KINDS, SKIPPED, _index_image_text, _note_failure as note_failure, _note_skip as note_skip
 from .power import PowerMonitor, resource_mode
 
 logger = logging.getLogger(__name__)
@@ -279,6 +281,22 @@ class LiveIndexing:
         """Every watched folder, reachable or not — what is saved and shown."""
         return sorted(set(self.watcher.watched_roots) | self.unreachable_roots)
 
+    def covers(self, path: str) -> bool:
+        """True if `path` resolves (after symlinks/junctions) inside a
+        watched folder, OR is itself one of the individually watched single
+        files ("limited" access can index one file without its folder,
+        watch_file()/index_single_file() above). Security QA (2026-11-02)
+        found serving/search code checking only `roots()` would wrongly
+        treat a legitimately indexed single file as an escaped record —
+        this is the one place that check belongs, instead of duplicated
+        root-matching logic in every caller."""
+        real = os.path.realpath(path)
+        folder_roots = [os.path.normcase(os.path.normpath(r)) for r in self.roots()]
+        if covered_by(real, folder_roots):
+            return True
+        watched_file_reals = {os.path.normcase(os.path.realpath(f)) for f in self.watcher.watched_files}
+        return os.path.normcase(real) in watched_file_reals
+
     def watch(self, folder: str) -> None:
         if not Path(folder).is_absolute():
             return
@@ -436,6 +454,9 @@ class LiveIndexing:
         snapshot["skipped"] = {kind: counts.get(kind, 0) for kind in SKIP_KINDS}
         snapshot["recent_skips"] = [{"path": s["path"], "reason": s["reason"]} for s in RECENT_SKIPS[-10:]]
         snapshot["recovered_at_start"] = getattr(self, "recovered_at_start", 0)
+        # The fresh-scan summary: what changed on disk since the last launch.
+        scan_counts = SCAN_STATS.get(self.job.folder) or {}
+        snapshot["scan_stats"] = {kind: scan_counts.get(kind, 0) for kind in SCAN_STAT_KINDS}
         return snapshot
 
     # ----- folder management -----

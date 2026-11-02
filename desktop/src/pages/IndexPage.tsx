@@ -116,6 +116,14 @@ export function IndexPage({ status, onError, refresh }: Props) {
     [sk.path_too_long, "path too long"],
   ] as const).filter(([n]) => n).map(([n, why]) => `${n!.toLocaleString()} ${why}`).join(", ");
   const skips = job.recent_skips ?? [];
+  // Fresh-scan summary: what changed on disk since the app was last open.
+  const ss = job.scan_stats ?? {};
+  const scanStatsLine = ([
+    [ss.new, "new"],
+    [ss.modified, "modified"],
+    [ss.renamed, "renamed"],
+    [ss.deleted, "deleted"],
+  ] as const).filter(([n]) => n).map(([n, why]) => `${n!.toLocaleString()} ${why}`).join(", ");
 
   const searches = (stats?.routes ?? []).filter((r) => r.route !== "agent");
   const searchTotal = searches.reduce((n, r) => n + r.queries, 0);
@@ -165,6 +173,7 @@ export function IndexPage({ status, onError, refresh }: Props) {
             {running && job.current_file ? <>Reading <span className="mono">{job.current_file.split(/[\\/]/).pop()}</span></> : job.finished_at ? `Finished ${formatAgo(job.finished_at)}` : "No scan has finished since IntelliFile started."}
             {scanNote && <> {scanNote}</>}
           </div>
+          {scanStatsLine && <div className="mt-0.5 text-[12px] text-ink/70">Found: {scanStatsLine}.</div>}
           {skippedLine && <div className="mt-0.5 text-[12px] text-ink/70">Skipped: {skippedLine}.</div>}
           {running && job.total > 0 && <div className="progress mt-2"><i style={{ width: `${(job.done / job.total) * 100}%` }} /></div>}
         </div>

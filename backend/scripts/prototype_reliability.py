@@ -143,14 +143,29 @@ def main() -> None:
         hashed = []
         real_hash = folder_scan.compute_file_hash
         folder_scan.compute_file_hash = lambda p: (hashed.append(p.name), real_hash(p))[1]
+        embedded_calls = []
+        real_embed = model.embed_texts
+        model.embed_texts = lambda texts: (embedded_calls.append(len(texts)), real_embed(texts))[1]
         try:
             index_folder(indexer, str(folder))
         finally:
             folder_scan.compute_file_hash = real_hash
-        assert "good_two.md" in hashed and "good_one.txt" not in hashed, f"only the unfinished file should be re-read: {hashed}"
+            model.embed_texts = real_embed
+        assert "good_two.md" in hashed, f"the unfinished file must be re-read: {hashed}"
+        # DEFECT-001 fix (2026-11-02): bounded-size files (<= MAX_DOCUMENT_FILE_BYTES)
+        # are now always hashed rather than trusted by stat alone, closing a real
+        # stale-index gap where a same-size edit with its mtime restored was never
+        # re-indexed (see INDEXING_VALIDATION_REPORT.md, DEFECT-001). So good_one.txt
+        # and good_three.txt now appear in `hashed` too — that's intentional and
+        # cheap (hashing a small file costs microseconds). What actually matters for
+        # performance, and what this now checks instead, is that genuinely unchanged
+        # files are never RE-EMBEDDED (the expensive step) — only the one file whose
+        # chunks were actually missing should have triggered embedding.
+        assert embedded_calls, "the unfinished file's content should have been (re-)embedded"
+        assert len(embedded_calls) <= 2, f"only the unfinished file should have been re-embedded, not every unchanged file: {embedded_calls}"
         assert record_store.list_unfinished() == []
         assert search.search("sourdough cold ferment", top_k=3)[0]["filename"] == "good_two.md"
-        print("4. Crash mid-index repaired by the next scan: only the unfinished file was re-read, the rest skipped on size+mtime: OK")
+        print("4. Crash mid-index repaired by the next scan: the unfinished file was re-read and re-embedded; other bounded-size files were cheaply re-hashed (DEFECT-001 fix) but not re-embedded: OK")
 
         # --- 5. An unplugged drive / offline share (2026-10-04). Its folder
         # is missing at scan time: before, every record under it was purged,

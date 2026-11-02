@@ -219,6 +219,8 @@ export interface IndexJob {
   skipped?: { too_large?: number; online_only?: number; path_too_long?: number };
   recent_skips?: { path: string; reason: string }[];
   recovered_at_start?: number; // Phase 11: files re-indexed after a crash mid-index
+  // Fresh-scan summary: what changed on disk since the app was last open.
+  scan_stats?: { new?: number; modified?: number; renamed?: number; unchanged?: number; deleted?: number };
 }
 export type ResourceMode = "balanced" | "performance" | "battery_saver";
 export interface PowerSnapshot {
@@ -284,6 +286,26 @@ export interface StatusResponse {
   startup_problems?: string[];
 }
 export const getStatus = () => getJson<StatusResponse>("/status", undefined, AbortSignal.timeout(5000));
+
+export interface AgentEntry {
+  id: string;
+  name: string;
+  status: string; // "running" | "idle" | "degraded" | "failed" | "not configured"
+  issue: string | null;
+  recovery: string | null;
+  score: number | null;
+  breakdown: Record<string, number>;
+  missing: string[];
+  n: number | null;
+  note: string | null;
+}
+export interface AgentManagerStatus {
+  agents: AgentEntry[];
+  issues: { agent: string; name: string; issue: string; recovery: string | null }[];
+  overall_score: number | null;
+  startup_problems: string[];
+}
+export const getAgentManager = () => getJson<AgentManagerStatus>("/agent-manager", undefined, AbortSignal.timeout(5000));
 
 // Whether voice works does not change while the engine runs: asked once, on first use.
 let voiceReady: Promise<boolean> | null = null;

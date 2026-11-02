@@ -189,6 +189,23 @@ EXCLUDED_FILE_PREFIXES = (".", "~$")
 EXCLUDED_PATHS: set[str] = set()
 
 
+def _escapes_watched_root(dir_path: str, root_real: str) -> bool:
+    """True when `dir_path`'s real (reparse-point-resolved) location is
+    outside `root_real`. Security QA (2026-11-02): os.walk's own
+    followlinks=False guard never fires for an NTFS junction, because
+    os.path.islink() checks specifically for IO_REPARSE_TAG_SYMLINK and
+    junctions use IO_REPARSE_TAG_MOUNT_POINT instead — a different reparse
+    tag the walker's link-guard doesn't recognize. A junction (no admin
+    privilege needed to create one) planted inside a watched folder could
+    therefore point outside every root the user ever consented to index,
+    and the scan would walk straight through it and index that content
+    as if it belonged to the watched folder. This closes that at the
+    walk itself; routes/files.py has an independent realpath check as a
+    second backstop for serving content by file_id."""
+    real = os.path.normcase(os.path.realpath(dir_path))
+    return not (real == root_real or real.startswith(root_real.rstrip("\\/") + os.sep))
+
+
 def discover_files(root_paths: list[str | Path], extensions: set[str] | None = None, on_error=None, on_skip=None) -> Iterator[Path]:
     """Recursively walk each root path, yielding files whose extension is
     supported. Silently skips paths that don't exist rather than raising,
@@ -198,14 +215,17 @@ def discover_files(root_paths: list[str | Path], extensions: set[str] | None = N
     just filtering their files out after the fact, so a huge node_modules
     or venv tree doesn't get walked at all. Also skips individual known
     non-document filenames (see EXCLUDED_FILE_NAMES) that can appear
-    outside any excluded directory. `on_skip(path, reason)` hears about
-    supported files left out for their size or a path too long for Windows.
+    outside any excluded directory, and any subdirectory that turns out to
+    be a junction pointing outside this root (see _escapes_watched_root).
+    `on_skip(path, reason)` hears about supported files left out for their
+    size or a path too long for Windows.
     """
     allowed = extensions if extensions is not None else SUPPORTED_EXTENSIONS
     for root in root_paths:
         root_path = Path(root)
         if not root_path.exists():
             continue
+        root_real = os.path.normcase(os.path.realpath(root_path))
         # A directory the OS refuses to list (macOS Privacy & Security for
         # Desktop/Documents/Downloads and external drives, Windows ACLs) is
         # reported to the caller instead of being skipped in silence — a
@@ -215,7 +235,12 @@ def discover_files(root_paths: list[str | Path], extensions: set[str] | None = N
             if Path(dirpath) != root_path and is_software_install(dirpath, dirnames, filenames):
                 dirnames[:] = []  # an installed program or toolchain: none of its tree is the user's
                 continue
-            dirnames[:] = [d for d in dirnames if not is_excluded_directory_name(d) and os.path.join(dirpath, d) not in EXCLUDED_PATHS]
+            dirnames[:] = [
+                d for d in dirnames
+                if not is_excluded_directory_name(d)
+                and os.path.join(dirpath, d) not in EXCLUDED_PATHS
+                and not _escapes_watched_root(os.path.join(dirpath, d), root_real)
+            ]
             for filename in filenames:
                 path = Path(dirpath) / filename
                 if is_indexable(path, allowed, on_skip=on_skip):

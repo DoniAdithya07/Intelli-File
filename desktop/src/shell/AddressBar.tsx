@@ -4,7 +4,7 @@ import { pathSegments } from "../lib/format";
 import { Location, PAGE_TITLES } from "../lib/nav";
 import { Fi, G } from "../ui/controls";
 
-const PAGE_ICON: Record<string, string> = { home: G.home, thispc: G.thispc, search: G.search, photos: G.picture, ask: G.chat, foryou: G.person, activity: G.history, index: G.folder, settings: G.settings, help: G.help };
+const PAGE_ICON: Record<string, string> = { home: G.home, thispc: G.thispc, search: G.search, photos: G.picture, ask: G.chat, foryou: G.person, activity: G.history, index: G.folder, agents: G.info, settings: G.settings, help: G.help };
 
 interface Props {
   location: Location;

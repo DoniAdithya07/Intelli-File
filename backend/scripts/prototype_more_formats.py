@@ -938,11 +938,12 @@ def check_thumbnail_log(work: Path) -> None:
     broken.write_bytes(b"\x89PNG not really")
     # get_by_path's real signature takes ignore_case (stale mock found in
     # review 2026-10-29); _is_indexed_file also now re-checks the real path
-    # against the watched roots (symlink guard, same review), so the mock
-    # needs a live_indexing.roots() too, covering `work` itself.
+    # against the watched roots (symlink guard, same review; folded into
+    # one covers() check in review 2026-11-02), so the mock needs a
+    # live_indexing.covers() too, covering `work` itself.
     state = SimpleNamespace(
         indexer=SimpleNamespace(file_record_store=SimpleNamespace(get_by_path=lambda p, ignore_case=False: SimpleNamespace(deleted=False))),
-        live_indexing=SimpleNamespace(roots=lambda: [str(work)]),
+        live_indexing=SimpleNamespace(covers=lambda p: str(Path(p).resolve()).startswith(str(work.resolve()))),
     )
     records = []
     handler = logging.Handler(logging.WARNING)

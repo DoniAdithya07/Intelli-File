@@ -11,6 +11,7 @@ several threads writing the same path concurrently; exits non-zero if any
 upsert() raises or the row count ends up wrong."""
 
 import os
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -53,6 +54,42 @@ def main() -> None:
     assert len(rows) == 1 and rows[0].path == path, rows
 
     print(f"check_upsert_race: OK ({THREADS * UPSERTS_PER_THREAD} concurrent upserts, no IntegrityError)")
+
+    check_vacate_insert_atomicity()
+
+
+def check_vacate_insert_atomicity() -> None:
+    """DEFECT-006 (2026-11-02, found in QA): upsert()'s vacate-then-insert
+    used to commit as two separate SQLite transactions, not one -- a crash
+    between them could leave a path with zero active owners. Fixed by
+    having _vacate_path_locked() never commit on its own; upsert() commits
+    once after both statements. Verifies an external connection never
+    observes the in-between state: either the old owner still has the
+    path, or the new owner does -- never neither."""
+    work = Path(tempfile.mkdtemp())
+    db_path = work / "atomic.db"
+    store = FileRecordStore(db_path)
+    path = r"C:\watched\atomic.txt"
+    store.upsert(FileRecord(file_id="A", path=path, size=1, modified_time=1.0, hash="a" * 64))
+
+    external = sqlite3.connect(str(db_path), timeout=1.0)
+    try:
+        with store._lock:
+            vacated = store._vacate_path_locked(path, "B")
+            assert vacated is True
+            row = external.execute("SELECT file_id FROM files WHERE path = ?", (path,)).fetchone()
+            assert row is not None and row[0] == "A", f"an external reader observed an uncommitted half-done vacate: {row}"
+        store._conn.rollback()  # undo the incomplete call above, as a crash would leave it
+        row = external.execute("SELECT file_id FROM files WHERE path = ?", (path,)).fetchone()
+        assert row is not None and row[0] == "A", f"rollback should restore the pre-vacate state exactly: {row}"
+
+        store.upsert(FileRecord(file_id="B", path=path, size=2, modified_time=2.0, hash="b" * 64))
+        row = external.execute("SELECT file_id FROM files WHERE path = ?", (path,)).fetchone()
+        assert row is not None and row[0] == "B", f"a completed upsert() must leave the new owner visible: {row}"
+    finally:
+        external.close()
+
+    print("check_vacate_insert_atomicity: OK (vacate+insert is one transaction; no half-done state observable or left behind by a rollback)")
 
 
 if __name__ == "__main__":

@@ -192,29 +192,38 @@ class FileRecordStore:
             self.version += 1
 
     def _vacate_path(self, path: str, keep_file_id: str) -> None:
-        """Public entry point for `rename()`: acquires the lock itself. See
-        `_vacate_path_locked` for what this does and why."""
+        """Public entry point for `rename()`: acquires the lock itself and
+        commits on its own, since here it is the only operation in the lock
+        hold. See `_vacate_path_locked` for what this does and why."""
         with self._lock:
-            self._vacate_path_locked(path, keep_file_id)
+            if self._vacate_path_locked(path, keep_file_id):
+                self._conn.commit()
+                self.version += 1
 
-    def _vacate_path_locked(self, path: str, keep_file_id: str) -> None:
+    def _vacate_path_locked(self, path: str, keep_file_id: str) -> bool:
         """Make `path` free for `keep_file_id`. Caller must already hold
-        `self._lock` (so this can be composed with other locked work, e.g.
-        the INSERT in `upsert`, as one atomic operation). `path` is UNIQUE,
-        and a tombstoned row keeps its path until cleanup purges it — so
-        renaming notes2.txt over a deleted notes.txt raised IntegrityError
-        (found 2026-09-21; the exception then killed the watchdog thread and
-        every watched folder went quiet until restart). The row in the way
-        is tombstoned (it is not on disk under that path any more, whatever
-        its state) and parked under a path no real file can have, so
-        cleanup still finds it by file_id and purges its chunks."""
+        `self._lock`, and must commit afterward itself — this method never
+        commits, so composing it with other locked work (e.g. the INSERT in
+        `upsert`) is one real atomic transaction, not two (2026-11-02,
+        DEFECT-006: this used to commit on its own, so a crash between this
+        UPDATE and upsert's INSERT could leave `path` with zero active
+        owners until the next write to it — narrow and self-healing, but a
+        real gap; found in QA). `path` is UNIQUE, and a tombstoned row keeps
+        its path until cleanup purges it — so renaming notes2.txt over a
+        deleted notes.txt raised IntegrityError (found 2026-09-21; the
+        exception then killed the watchdog thread and every watched folder
+        went quiet until restart). The row in the way is tombstoned (it is
+        not on disk under that path any more, whatever its state) and
+        parked under a path no real file can have, so cleanup still finds
+        it by file_id and purges its chunks. Returns whether a row was
+        actually vacated, so a caller that commits conditionally (like
+        `_vacate_path`) can skip an empty commit."""
         row = self._conn.execute("SELECT file_id FROM files WHERE path = ?", (path,)).fetchone()
         if row is None or row["file_id"] == keep_file_id:
-            return
+            return False
         parked = f"{path}\x00{row['file_id']}"
         self._conn.execute("UPDATE files SET path = ?, deleted = 1 WHERE file_id = ?", (parked, row["file_id"]))
-        self._conn.commit()
-        self.version += 1
+        return True
 
     def rename(self, old_path: str, new_path: str) -> FileRecord | None:
         """Update the path for the record at old_path (used for RENAME/MOVED

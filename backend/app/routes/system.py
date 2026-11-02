@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request
 from .. import offline_guard
 from ..extraction import ocr
 from ..model_locations import CLIP_MODEL_DIR, RERANKER_MODEL_DIR, WHISPER_MODEL_DIR
+from ..services.agent_manager import agent_manager_status
 
 router = APIRouter()
 
@@ -14,6 +15,13 @@ def offline_guard_endpoint():
     """Whether the offline guard is on and how many network attempts it
     has refused since startup — zero is the number the live test wants."""
     return offline_guard.status()
+
+
+@router.get("/agent-manager")
+def agent_manager_endpoint(request: Request):
+    """One status/score per real local component (Ask, search, visual,
+    voice) for the Agent Manager page — see services/agent_manager.py."""
+    return agent_manager_status(request.app.state)
 
 
 def _dir_size(path) -> int:

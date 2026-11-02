@@ -14,9 +14,12 @@ answers. Downgrading (all → limited/denied) can also drop the index.
 """
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 ACCESS_FILE = "access.json"
 MODES = ("all", "limited", "denied")
@@ -33,7 +36,38 @@ def home() -> Path:
 
 
 def whole_computer_roots() -> list[str]:
-    """What "Allow all" indexes."""
+    """What "Allow all" indexes: the real home directory and real drives,
+    always — there is no isolation override for this (see home(), which
+    calls Path.home() directly), because a real user choosing "whole
+    computer" must get their actual computer, not a sandboxed stand-in.
+
+    Guard (2026-11-02, post-incident): that same fact makes "all" mode
+    unsafe to ever reach on a machine running an isolated/test instance
+    (INTELLIFILE_APP_DATA_DIR set) — two incidents on 2026-11-02 did
+    exactly that, once via a real app resuming a pre-existing "all"
+    config at startup, once via a still-unexplained "all" selection in a
+    supposedly isolated instance. Both actually read real personal files
+    because this function doesn't know or care that it was running
+    somewhere "isolated" was only ever true for the app's OWN storage.
+    So: when INTELLIFILE_APP_DATA_DIR is set (a real packaged app never
+    sets this itself — only a developer, tester or script deliberately
+    does), whole-computer enumeration additionally requires
+    INTELLIFILE_ALLOW_WHOLE_COMPUTER=1. Refusing returns an empty list
+    (fail safe: callers already treat an empty root list as "nothing to
+    watch", never as an error) rather than raising, so a backend that
+    inherited a stale "all" config from a shared real app-data directory
+    still starts up cleanly with zero folders watched, not a crash.
+    A real, unmodified end-user install is unaffected: it never sets
+    INTELLIFILE_APP_DATA_DIR, so this check never applies to it.
+    """
+    if os.environ.get("INTELLIFILE_APP_DATA_DIR") and os.environ.get("INTELLIFILE_ALLOW_WHOLE_COMPUTER") != "1":
+        logger.warning(
+            "whole-computer access ('all' mode) refused: INTELLIFILE_APP_DATA_DIR is set (an isolated/test "
+            "instance) without INTELLIFILE_ALLOW_WHOLE_COMPUTER=1. Returning zero roots instead of the real "
+            "home directory and drives. Set INTELLIFILE_ALLOW_WHOLE_COMPUTER=1 if this instance genuinely "
+            "needs to test whole-computer access against a disposable test profile."
+        )
+        return []
     roots = [str(home())]
     if sys.platform == "darwin":
         volumes = Path("/Volumes")

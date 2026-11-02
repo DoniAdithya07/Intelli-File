@@ -1,10 +1,8 @@
 import logging
-import os
 from pathlib import Path
 
 from fastapi import APIRouter, Request, Response
 
-from ..files.browsing import covered_by
 from ..indexing import CHUNKS_TABLE
 from ..paths import sample_folder
 from ..services.missing_files import explain_missing
@@ -17,6 +15,18 @@ logger = logging.getLogger(__name__)
 # The preview pane shows real indexed text only (docs/UI_DESIGN.md section 2).
 MAX_PASSAGE_CHARS = 2000
 MAX_FILE_TEXT_CHARS = 20_000
+
+
+def _covered_by_watched_roots(state, path) -> bool:
+    """True if `path` resolves (after symlinks/junctions) inside a folder,
+    or is itself an individually watched file, the user actually chose to
+    index. Security QA (2026-11-02) found the scan walker didn't skip
+    junctions pointing outside a watched folder (fixed in
+    files/discovery.py), so this is a second, independent backstop: even
+    if a record somehow exists for a path whose real location was never
+    consented to, these serving routes must not return its content. Same
+    pattern already used by _is_indexed_file."""
+    return state.live_indexing.covers(str(path))
 
 
 def _file_chunks(state, file_id: str) -> list[dict]:
@@ -43,7 +53,7 @@ def passages_endpoint(file_id: str, request: Request, chunk_id: str | None = Non
     match. A file that is no longer indexed says so instead of guessing."""
     state = request.app.state
     record = state.indexer.file_record_store.get_by_file_id(file_id)
-    if record is None or record.deleted:
+    if record is None or record.deleted or not _covered_by_watched_roots(state, record.path):
         return {"error": "not_indexed", "match": None, "previous": None, "next": None, "total": 0}
     rows = _file_chunks(state, file_id)
     if not rows:
@@ -65,7 +75,7 @@ def file_text_endpoint(file_id: str, request: Request):
     Empty when the file has none (a photo without words)."""
     state = request.app.state
     record = state.indexer.file_record_store.get_by_file_id(file_id)
-    if record is None or record.deleted:
+    if record is None or record.deleted or not _covered_by_watched_roots(state, record.path):
         return {"error": "not_indexed", "text": "", "truncated": False}
     text = "\n\n".join((r["payload"].get("content") or "") for r in _file_chunks(state, file_id)).strip()
     return {"path": record.path, "text": text[:MAX_FILE_TEXT_CHARS], "truncated": len(text) > MAX_FILE_TEXT_CHARS}
@@ -85,8 +95,7 @@ def _is_indexed_file(state, file_path: Path) -> bool:
     # A symlink inside a watched folder must not expose a file outside every
     # watched root (browsing.py's check_browse_path already guards junctions
     # the same way; file-serving had no equivalent check — 2026-10-29 review).
-    roots = [os.path.normcase(os.path.normpath(r)) for r in state.live_indexing.roots()]
-    return covered_by(os.path.realpath(file_path), roots)
+    return _covered_by_watched_roots(state, file_path)
 
 
 @router.get("/is-indexed")

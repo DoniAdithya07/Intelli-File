@@ -30,7 +30,7 @@ interface Props {
 }
 
 const PAGES: { id: Location["kind"]; icon: string }[] = [
-  { id: "search", icon: G.search }, { id: "ask", icon: G.chat }, { id: "foryou", icon: G.person }, { id: "activity", icon: G.history }, { id: "index", icon: G.folder }, { id: "settings", icon: G.settings }, { id: "help", icon: G.help },
+  { id: "search", icon: G.search }, { id: "ask", icon: G.chat }, { id: "foryou", icon: G.person }, { id: "activity", icon: G.history }, { id: "index", icon: G.folder }, { id: "agents", icon: G.info }, { id: "settings", icon: G.settings }, { id: "help", icon: G.help },
 ];
 
 type Kids = { state: "loading" } | { state: "error" } | { state: "ready"; dirs: { name: string; path: string }[] };

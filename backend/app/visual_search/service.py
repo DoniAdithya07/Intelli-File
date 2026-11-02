@@ -12,8 +12,10 @@ almost every step, so this is a plain vector lookup instead.
 
 import json
 import math
+import os
 import time
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 
@@ -318,6 +320,13 @@ class VisualSearchService:
         self.dictionary = dictionary
         self.keyword_store = keyword_store
         self._size_cache: dict[str, tuple[float, int]] = {}
+        # Set by the app once LiveIndexing exists (main.py) — same
+        # DEFECT-007 follow-up fix as search/service.py's SearchService
+        # (2026-11-02, found in independent security QA): photo/video
+        # search had no containment check at all, so a record whose real
+        # path ended up outside every watched root was still fully
+        # findable and servable (thumbnail, moments) through /search-visual.
+        self.is_covered_provider: Callable[[str], bool] | None = None
 
     def check_query(self, raw_query: str) -> QueryCheck:
         """Spelling check against the English word list plus the user's own
@@ -446,6 +455,8 @@ class VisualSearchService:
             # as the text path: a photo that's no longer on disk is
             # tombstoned and skipped rather than shown as a dead result.
             if record is None or record.deleted or hide_if_missing(self.file_record_store, record.path):
+                return None
+            if self.is_covered_provider is not None and not self.is_covered_provider(record.path):
                 return None
             payload = hit["payload"]
             return {

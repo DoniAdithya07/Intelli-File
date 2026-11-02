@@ -67,3 +67,9 @@ credentials*.json
 
 # Claude Code project settings and agents (kept locally, not published)
 .claude/
+
+# Post-incident dry-run script (2026-11-02): hardcodes the real machine's
+# username and real personal screenshot filenames/paths as test data for
+# the removal-procedure dry run against the incident backup copy. Keep
+# local; never publish. See POST_INCIDENT_REMEDIATION_REPORT.md.
+backend/scripts/check_incident_removal.py

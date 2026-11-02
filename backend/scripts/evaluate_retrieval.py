@@ -180,7 +180,12 @@ def main() -> None:
             report["retrieval"][label] = m
             print(f"| {label} | {pct(m['recall@5'])} | {pct(m['recall@10'])} | {m['MRR']:.3f} | {m['NDCG@5']:.3f} | {m['p50_ms']:.1f} | {m['p95_ms']:.1f} |")
         hybrid = report["retrieval"]["+ filename matching (shipped hybrid)"]
-        print(f"\nPRD targets: P50 < 300 ms → **{hybrid['p50_ms']:.1f} ms**; P95 < 1 s → **{hybrid['p95_ms']:.1f} ms** (shipped hybrid).")
+        # DEFECT-004 fix (2026-11-02): "->" instead of the U+2192 arrow, so
+        # this prints cleanly on a plain (non-UTF-8) Windows console too —
+        # run_all_phases.py already sets PYTHONIOENCODING=utf-8 for every
+        # phase it runs, which is why this never crashed there, but running
+        # this script directly from an ordinary terminal did.
+        print(f"\nPRD targets: P50 < 300 ms -> **{hybrid['p50_ms']:.1f} ms**; P95 < 1 s -> **{hybrid['p95_ms']:.1f} ms** (shipped hybrid).")
         rss_peak = process.memory_info().rss / 1e6
         report["resources"] = {"rss_after_models_mb": round(rss_after_load), "rss_after_benchmark_mb": round(rss_peak), "cpu_count": psutil.cpu_count()}
         print(f"Process RSS: {rss_after_load:.0f} MB after loading MiniLM + reranker + index, {rss_peak:.0f} MB after the benchmark (CPU only, {psutil.cpu_count()} cores).")

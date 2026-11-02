@@ -311,9 +311,10 @@ def check_pipelines(work: Path, transcriber: Transcriber) -> None:
     app.include_router(files_routes.router)
     app.state.indexer = SimpleNamespace(file_record_store=record_store)
     # The real app always sets this during startup (main.py) before serving
-    # a request; _is_indexed_file's symlink guard (review 2026-10-29) reads
-    # it on every /thumbnail call, so this minimal test app needs it too.
-    app.state.live_indexing = SimpleNamespace(roots=lambda: [str(media)])
+    # a request; _is_indexed_file's symlink guard (review 2026-10-29, folded
+    # into one covers() check in review 2026-11-02) reads it on every
+    # /thumbnail call, so this minimal test app needs it too.
+    app.state.live_indexing = SimpleNamespace(covers=lambda p: str(Path(p).resolve()).startswith(str(media.resolve())))
     log_records: list[logging.LogRecord] = []
     handler = logging.Handler(logging.WARNING)
     handler.emit = log_records.append
